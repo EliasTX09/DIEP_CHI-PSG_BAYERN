@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rached TV - Live Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        .container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .title {
+            position: absolute;
+            top: 15px;
+            left: 20px;
+            color: white;
+            font-size: 18px;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 15px;
+            border-radius: 5px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="title">Rached TV Live</div>
+
+    <div class="container">
+        <video id="video" controls autoplay muted>
+            <source src="http://ipc.proipciptv.com:8000/Rachedtvtv0506/H65Ts6Zrch/46184" type="video/mp4">
+            Dein Browser unterstützt keine Video-Wiedergabe.
+        </video>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        
+        // Automatisches Vollbild bei Doppelklick
+        video.addEventListener('dblclick', () => {
+            if (video.requestFullscreen) {
+                video.requestFullscreen();
+            } else if (video.webkitRequestFullscreen) {
+                video.webkitRequestFullscreen();
+            } else if (video.msRequestFullscreen) {
+                video.msRequestFullscreen();
+            }
+        });
+
+        // Falls der Stream HLS (m3u8) ist, kannst du später hls.js einbinden
+        video.play().catch(e => {
+            console.log("Autoplay wurde blockiert:", e);
+        });
+    </script>
+
+</body>
+</html>
