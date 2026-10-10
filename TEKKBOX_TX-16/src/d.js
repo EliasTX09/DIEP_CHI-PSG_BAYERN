@@ -34,7 +34,7 @@ const SCR={
     const on=P.fx.map((f,k)=>f.on?k:-1).filter(k=>k>=0),m=ui.mfx[0];
     L(g,'IFX '+(on.length?on.length+' ON: '+NUM.fxType(P.fx[on[0]].type).slice(0,14):'OFF'),102,46);
     L(g,'EG '+(P.egOn?'ON':'OFF > GATE')+(P.send?'':' · NO MFX'),102,55);
-    L(g,(ui.padMode===1?'ARP '+NUM.arp(cur.gateArp||0):ui.padMode===2?'T.SCALE '+SCALES[cur.scale]:'MFX '+NUM.mfx(m.type)).slice(0,22)+(ui.rec?' >P'+pad2(ui.part+1):''),102,64);L(g,'ROLL '+NUM.roll(ui.rollType),102,73);
+    L(g,(ui.padMode===1?'ARP '+NUM.arp(cur.gateArp||0):ui.padMode===2?'TOUCH SCALE '+SCALES[cur.scale]:'MFX '+NUM.mfx(m.type)).slice(0,22)+(ui.rec?' >P'+pad2(ui.part+1):''),102,64);L(g,'ROLL '+NUM.roll(ui.rollType),102,73);
     const bar=curBar(),page=ui.pageSel,s=ui.dispStep%16;
     if(ui.part>=NSEQ)L(g,'LIVE PART · PADS 17-24 · NO STEPS',3,87);else for(let i=0;i<16;i++){const x=3+i*12,st=page*16+i,on2=cur.steps[ui.part][st];if(on2)g.fillRect(x,86,10,8);else box(g,x,86,10,8);if(ui.playing&&page===bar&&i===s)g.fillRect(x,96,10,2);}
     L(g,'B'+(page+1)+'/'+(cur.last/16),LW-3,87,8,'right');
@@ -145,7 +145,7 @@ function eqResponse(P){if(!ctx)return null;if(!eqAna)eqAna=[biqN('lowshelf',100)
   const tot=new Float32Array(eqFr.length).fill(1);eqAna.forEach(b=>{b.getFrequencyResponse(eqFr,eqMag,eqPh);for(let i=0;i<tot.length;i++)tot[i]*=eqMag[i];});return tot;}
 function eqHandles(P){return[['LOW',eqX(eqLHz(P.eqLF??.434)),eqY(eqDb(P.eqL))],['MID',eqX(eqFHz(P.eqF)),eqY(eqDb(P.eqM))],['HIGH',eqX(eqHHz(P.eqHF??.593)),eqY(eqDb(P.eqH))],
   ['LOW CUT',eqX(lcHz(P.lc)),EQG.bot],['HIGH CUT',eqX(hcHz(P.hc??1)),EQG.bot]];}
-SCR.eqedit=function(g){const P=cur.parts[ui.part],sel=ui.eqSel??1,G2=EQG;hdr(g,'PARAMETRIC EQ · PART '+pad2(ui.part+1),null,ui.bw?'BW = Q':'GAIN');
+SCR.eqedit=function(g){const P=cur.parts[ui.part],sel=ui.eqSel??1,G2=EQG;hdr(g,'PARAMETRIC EQ · PART '+pad2(ui.part+1),null,ui.bw?'BANDWIDTH':'GAIN');
   for(const db of[-12,-6,0,6,12]){const y=Math.round(eqY(db));for(let x=G2.x0;x<=G2.x1;x+=db?4:2)g.fillRect(x,y,1,1);}
   for(const f of[50,100,200,500,1000,2000,5000,10000]){const x=Math.round(eqX(f));for(let y=G2.top;y<G2.bot;y+=4)g.fillRect(x,y,1,1);}
   L(g,'100',eqX(100),G2.bot+1,8,'center');L(g,'1K',eqX(1000),G2.bot+1,8,'center');L(g,'10K',eqX(10000),G2.bot+1,8,'center');
@@ -153,7 +153,7 @@ SCR.eqedit=function(g){const P=cur.parts[ui.part],sel=ui.eqSel??1,G2=EQG;hdr(g,'
   eqHandles(P).forEach(([n,x,y],k)=>{const X=Math.round(x),Yy=Math.round(clamp(y,G2.top,G2.bot));if(k===sel)g.fillRect(X-3,Yy-3,7,7);else box(g,X-2,Yy-2,5,5);});
   const nm=['LOW','MID','HIGH','LOW CUT','HIGH CUT'][sel],info=sel<3?eqStr(P,EQK.f[sel]).replace(/^(LOW|MID|HIGH) /,'')+' '+eqStr(P,EQK.g[sel])+' '+eqStr(P,EQK.q[sel]):eqStr(P,sel===3?'lc':'hc');
   g.fillRect(0,96,LW,13);inv(g,()=>{L(g,nm,3,99);L(g,info,LW-3,99,8,'right');});
-  L(g,'PRESET: '+(P.eqPre!=null?EQ_PRESETS[P.eqPre][0]:'EDIT'),3,113);L(g,ui.bw?'[BW ON]':'[BW OFF]',LW-3,113,8,'right');};
+  L(g,'PRESET: '+(P.eqPre!=null?EQ_PRESETS[P.eqPre][0]:'EDIT'),3,113);if(ui.bw)L(g,'BANDWIDTH ON',LW-3,113,8,'right');};
 function eqLcd(x,y,first){const P=cur.parts[ui.part];
   if(first){if(y>=111){if(x>LW-60){ui.bw=!ui.bw;setLed(CTRL.bw,ui.bw);}else eqPresetNext();popup('eqedit',{},600000);return;}
     const H=eqHandles(P);let best=-1,bd=1e9;H.forEach(([,hx,hy],k)=>{const d=Math.hypot(hx-x,clamp(hy,EQG.top,EQG.bot)-y);if(d<bd){bd=d;best=k;}});if(best<0||bd>30){ui.eqDrag=false;return;}
@@ -240,7 +240,6 @@ SECTS.forEach(s=>{at('frame'+(s.cls?' '+s.cls:''),s.x0,s.z0,s.x1-s.x0,s.z1-s.z0,
 REAR.forEach(r=>txt('▲ '+r.l,r.x,PT+.3,.14,P2,'center',.06));
 /* Röhren: 3 × ECC82 stehend unter einer Haube mit Lüftungsschlitzen (Plan) */
 at('hood',(WIN.x0+WIN.x1)/2,WIN.z0-.55,WIN.x1-WIN.x0,.7);
-txt('BELÜFTUNG · HAUBE',(WIN.x0+WIN.x1)/2,WIN.z0-1.25,.15,'#5d606b','center',.12);
 const win=at('win',(WIN.x0+WIN.x1)/2,(WIN.z0+WIN.z1)/2,WIN.x1-WIN.x0,WIN.z1-WIN.z0);
 [14,39,64].forEach(l=>{const t=document.createElement('div');t.className='tube up';t.style.left=l+'%';t.innerHTML='<i></i>';win.appendChild(t);});
 txt('3 × ECC82 / 12AU7 · 30 S WARM-UP',WIN.x0,WIN.z1+.45,.17,P2,'left',.08);
@@ -251,7 +250,6 @@ txt('T',METERS.x0-.45,METERS.z[0],.15,P2);txt('O',METERS.x0-.45,METERS.z[1],.15,
 at('bezel',LCD.x,LCD.z,LCD.w+.6,LCD.d+.6);const lcdCanvas=at('',LCD.x,LCD.z,LCD.w,LCD.d,true,'canvas');lcdCanvas.width=LW*LS;lcdCanvas.height=LH*LS;
 const segCanvas=null;
 lcdCanvas.classList.add('lcdt');lcdCanvas.setAttribute('aria-label','7-Zoll-Touch-Display');
-txt('7" TOUCH · 800 × 480',LCD.x+LCD.w/2,LCD.z+LCD.d/2+.55,.14,'#5d606b','right',.1);
 const oledCanvas=[],xyCanvas=[];
 function buildMFX(i,o,p){at('bezel',o.x,o.z,o.w,o.d);const c=at('',o.x,o.z,o.w-.2,o.d-.2,true,'canvas');c.width=OW*OS;c.height=OH*OS;oledCanvas[i]=c;
   at('bezel',p.x,p.z,p.w+.3,p.d+.3);const x=at('xy',p.x,p.z,p.w-.1,p.d-.1,true,'canvas');x.width=512;x.height=496;x.setAttribute('aria-label','Master FX '+(i+1)+' X/Y-Pad');xyCanvas[i]=x;}
@@ -268,10 +266,10 @@ function buildKnob(d){
   if(d.endless){d.rot=add('g',{});add('circle',{cx:0,cy:-d.r*.52,r:d.r*.14,fill:'#121216',stroke:'#5a5c64','stroke-width':d.r*.025},d.rot);}
   /* EMX-Oszillator: 16 Beschriftungen + LED rundherum wie bei der Korg EMX */
   if(d.emxRing){d.typeLeds=[];for(let k=0;k<16;k++){const a=oscAng(k),lx=d.x+Math.sin(a)*OSCT.lr,lz=d.z-Math.cos(a)*OSCT.lr,dx=d.x+Math.sin(a)*(d.r+.32),dz=d.z-Math.cos(a)*(d.r+.32);
-      d.typeLeds.push(at('oled16',dx,dz,.16,.16));const s=Math.sin(a),al=Math.abs(s)<.25?'center':s<0?'right':'left';txt(OSCS[k+1],lx+(al==='center'?0:s*.05),lz,.17,'#dfe9ff',al,.02,'olbl');}
-    txt('TYPE',d.x,d.z+d.r+.55,.2,'#dfe9ff');}
+      d.typeLeds.push(at('oled16',dx,dz,.16,.16));const s=Math.sin(a),al=Math.abs(s)<.25?'center':s<0?'right':'left';txt(OSCS[k+1],lx+(al==='center'?0:s*.05),lz,.19,'#dfe9ff',al,.02,'olbl');}
+    txt('TYPE',d.x,d.z+d.r+.55,.24,'#dfe9ff');}
   else if(d.id==='value')txt('VALUE / PATTERN',d.x,d.z+d.r+.72,.26,'#e6e8ee');
-  else txt(d.label,d.x,d.z+d.r+.73,d.r>=.9?.27:.24,d.emx?'#dfe9ff':d.det&&d.det!=='center'?V.accent2:'#e6e8ee');
+  else txt(d.label,d.x,d.z+d.r+.73,.24,d.emx?'#dfe9ff':d.det&&d.det!=='center'?V.accent2:'#e6e8ee');
   if(d.sh)txt(d.sh,d.x+d.r+.45,d.z-d.r-.3,.17,V.accent2,'center',.05);
 }
 function refreshKnob(d,keep){if(!d||!d.el)return;
@@ -284,27 +282,17 @@ function refreshKnob(d,keep){if(!d||!d.el)return;
 const isCen=d=>d.det==='center'||(d.id==='cutoff'&&cur.parts[ui.part].ftrack)||((d.id==='edit2')&&cur.parts[ui.part].osc&&['pm','v'].includes((EMX[cur.parts[ui.part].osc]||{}).m2));
 const refreshKnobs=()=>K.forEach(d=>refreshKnob(d));
 const LEDC={A:V.accent,B:V.accent2,red:'#ff2a2a',green:'#2bff6a',tube:'#ff8a20',white:'#f2f4ff'};
-const SYM={rec:'<svg viewBox="-1 -1 2 2" width="42%" height="60%"><circle r=".72" fill="none" stroke="currentColor" stroke-width=".2"/></svg>',
-  stop:'<svg viewBox="-1 -1 2 2" width="42%" height="60%"><rect x="-.66" y="-.66" width="1.32" height="1.32" fill="none" stroke="currentColor" stroke-width=".2"/></svg>',
-  play:'<svg viewBox="-1.3 -1 2.6 2" width="52%" height="60%"><path d="M-1 -.8 L.45 0 L-1 .8 Z" fill="none" stroke="currentColor" stroke-width=".18"/><rect x=".72" y="-.8" width=".38" height="1.6" fill="none" stroke="currentColor" stroke-width=".16"/></svg>'};
 function buildButton(d){const e=at('btn'+(d.latch?' latch':''),d.x,d.z,d.w,d.d);e.tabIndex=0;e.setAttribute('role','button');e.setAttribute('aria-label',d.aria||(d.label.startsWith('<')?d.label.slice(1)+' zurück':d.label.endsWith('>')?d.label.slice(0,-1)+' weiter':d.label));e.style.setProperty('--led',LEDC[d.led]||'#9aa6bd');d.el=e;
-  if(d.noLbl||d.sym||d.tall||d.label==='<'||d.label==='>'){e.style.display='flex';e.style.alignItems='center';e.style.justifyContent='center';e.style.fontWeight='700';e.style.color='#e6e8ee';
-    if(d.sym){e.innerHTML=SYM[d.sym];d.lblEl=txt(d.label,d.x,d.z+d.d/2+.33,.21,'#e6e8ee');}
-    else if(d.tall){e.style.flexDirection='column';e.style.fontSize=U(.32);e.style.lineHeight='1.05';e.innerHTML=d.label.split('').map(c=>'<span>'+esc(c)+'</span>').join('');}
-    else if(d.label==='<'||d.label==='>'){e.innerHTML='<svg viewBox="-1 -1 2 2" width="55%" height="70%"><path d="'+(d.label==='<'?'M.7 -.8 L-.8 0 L.7 .8 Z':'M-.7 -.8 L.8 0 L-.7 .8 Z')+'" fill="none" stroke="currentColor" stroke-width=".16"/><text x="'+(d.label==='<'?'.12':'-.12')+'" y=".22" font-size=".7" text-anchor="middle" fill="currentColor">'+(d.label==='<'?'−':'+')+'</text></svg>';}
-    else{e.style.fontSize=U(.42);e.textContent=d.label==='-'?'−':'+';}}
-  else d.lblEl=txt(d.label,d.x,d.z+d.d/2+.33,d.fn?.25:.23,d.id==='save'?V.accent:'#e6e8ee');
-  if(d.sh)txt(d.sh,d.x,d.z-d.d/2-.27,.17,V.accent2,'center',.05);}
+  /* keine Symbole/Schrift auf der Taste – Beschriftung wie bei Korg darunter aufs Panel gedruckt, SHIFT-Funktion darüber */
+  d.lblEl=txt(d.label,d.x,d.z+d.d/2+.33,.23,d.id==='save'?V.accent:'#e6e8ee');
+  if(d.sh)txt(d.sh,d.x,d.z-d.d/2-.27,.18,V.accent2,'center',.05);}
 function setLed(d,on,dim){if(!d||!d.el)return;d.on=on;d.el.classList.toggle('on',!!on&&!dim);d.el.classList.toggle('dim',!!on&&!!dim);}
 K.forEach(buildKnob);BT.forEach(buildButton);
-const ifxPageEl=txt('SELECT · IFX 1',(IFXON_X(0)+IFXON_X(4))/2,.8,.17,P2);
-txt('+ SHIFT = Y-ACHSE (PEGEL)',-20.4,4.25,.16,'#5d606b','center',.08);
-txt('BW = BANDBREITE',-13.2,-6.42,.13,'#5d606b','center',.04);
+const ifxPageEl=txt('EDIT · FX 1',IFXROW_X(3),4.7,.19,P2);
 /* Bars (blau) + Oktave des aktuellen Parts (rot) */
-txt('BARS',BARLED_X(0)-.55,BARLED_Z,.15,V.accent2,'right',.1);txt('OKT',BARLED_X(0)-.55,OCTLED_Z,.15,'#ff5a5a','right',.1);
+txt('BAR',BARLED_X(0)-.5,BARLED_Z,.17,V.accent2,'right',.1);txt('OCTAVE',BARLED_X(0)-.5,OCTLED_Z,.17,'#ff5a5a','right',.1);
 const barEls=Array.from({length:8},(_,k)=>at('bled',BARLED_X(k),BARLED_Z,.34,.34));
 const octEls=Array.from({length:8},(_,k)=>{const e=at('bled',BARLED_X(k),OCTLED_Z,.34,.34);return e;});
-txt('-4',BARLED_X(0),OCTLED_Z+.42,.12,'#5d606b');txt('+3',BARLED_X(7),OCTLED_Z+.42,.12,'#5d606b');
 /* Anzeige im EMX-Block: Typ + Welle – zeigt sofort, was TYPE und WAVE gerade eingestellt haben */
 at('bezel',OSCLCD.x,OSCLCD.z,OSCLCD.w+.3,OSCLCD.d+.3);const oscLcd=at('osclcd',OSCLCD.x,OSCLCD.z,OSCLCD.w,OSCLCD.d);oscLcd.setAttribute('aria-live','polite');
 oscLcd.innerHTML='<div class="l1"><b></b><i></i></div><div class="l2"><b></b><i></i></div>';const OL=[...oscLcd.querySelectorAll('b,i')];let oscLcdSig='';
@@ -318,7 +306,7 @@ const padEls=[],padTxt=[];for(let i=0;i<24;i++){const e=at('pad',PADX(i),PADZI(i
   const r1=document.createElement('span'),r2=document.createElement('span'),a=document.createElement('i'),b=document.createElement('i'),c=document.createElement('i');[a,b,c].forEach(x=>x.style.fontStyle='normal');
   r1.append(a,b);r2.append(c);e.append(r1,r2);padEls.push(e);padTxt.push([a,b,c]);}
 {txt('TX-16',29.4,20.45,.46,'#e6e8ee','right');const b=txt('TEKKBOX',25.6,20.4,.66,V.accent,'right',.02);b.style.fontStyle='italic';}
-txt('TUBE HYBRID GROOVE SAMPLER  ·  16 PARTS  ·  8 BARS  ·  16 EMX OSC TYPES  ·  '+FILTERS.length+' FILTERS',-19.2,20.45,.2,P2,'left',.12);
+txt('TUBE HYBRID GROOVE SAMPLER  ·  16 PARTS  ·  8 BARS  ·  '+EMX_ALL.length+' EMX OSCILLATORS  ·  '+FILTERS.length+' FILTERS',-19.2,20.45,.2,P2,'left',.12);
 txt('▼ PHONES 6,3 + 3,5',-24.6,20.45,.16,P2,'center',.08);
 {const e=txt('◀ ADD-ON DOCK · MFX PAD 2',-29.55,-2,.17,P2,'center',.08);e.style.transform='translate(-50%,-50%) rotate(-90deg)';}
 let padSig='';

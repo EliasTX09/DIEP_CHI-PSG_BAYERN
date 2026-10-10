@@ -93,24 +93,27 @@ Nach jeder Änderung testen (Abschnitt 6), dann App bauen und das Artifact aktua
 - Alle Listen zeigen Nummern groß vorne (Nutzer will wissen, auf welcher Nummer er ist).
 - Pads ohne Velocity (außer TRG.PAD VELOCITY im Menü).
 
-### Layout Rev 2.0 (Plan vom 2026-10-10, gilt vor älteren Angaben oben)
+### Layout Rev 2.3 (Plan vom 2026-10-10 + Nutzer-Feedback, gilt vor älteren Angaben oben)
 
-- Display oben links, darunter PARAMETRIC EQ (LOW MID HIGH · FREQ MIX · BW), FILTER, AMP EG (ADSR, SHIFT = Pegel).
-- Mitte: VALUE/PATTERN + Menütasten, darunter SYNTH OSCILLATOR (blauer EMX-Block: Anzeige Typ + Welle, TYPE-Ring, OSC EDIT 1/2).
-  Rechts daneben oben **OSC WAVE** (eigenes Rad = das zweite Rad/Dial der EMX), darunter **SAMPLE · PITCH**.
+- **Panel-Regeln:** keine Schrift/Symbole AUF Tasten (kein Weiß auf den Tasten) – Beschriftung wie bei Korg darunter aufs Panel,
+  SHIFT-Funktion in Blau darüber. **Keine Abkürzungen** auf dem Panel (SEQUENCER, KEYBOARD, SUSTAIN, TOUCH SCALE, TEMPO LOCK,
+  TUBE MIX, DRIVE A/B, MASTER FX, OCTAVE, BANDWIDTH, EG INTENSITY …). Ausnahme: EMX-Namen am Oszillator bleiben 1:1 (OSC EDIT, PCM+WS …).
+  **Symmetrie:** Reihen mittig im Block, gleiche Größen pro Reihe, Blockkanten bündig (Ränder ±28,6, Unterkante über den Pads 8,6).
+- Oben: Display · VALUE/PATTERN + 6 Menütasten (mittig dazwischen) · **TUBE** (TUBE ON, TUBE MIX, DRIVE A, DRIVE B) · **OUTPUT** (MASTER, PHONES) · Röhrenhaube.
+- Links unter dem Display: PARAMETRIC EQ (LOW MID HIGH FREQUENCY MIX + BANDWIDTH gleichmäßig), FILTER und AMP EG in denselben 4 Spalten,
+  darunter die **Spiel-Reihe**: TAP · REC · STOP · PLAY/PAUSE · SHIFT · ROLL · SOLO · TEMPO LOCK (gleich groß).
+- Mitte: SYNTH OSCILLATOR (blau, bis 8,6: Anzeige, TYPE-Ring, OSC EDIT 1/2), rechts daneben OSC WAVE (Rad) und SAMPLE · PITCH.
+- Rechts: MODULATION (2 × 2, START POINT mittig darunter), AMP (LEVEL, PAN, MONO/POLY mittig darunter),
+  MIX (SIDECHAIN, GLUE DRIVE; darunter BASS GLUE · MASTER FX SEND · ROLL SEND · OCTAVE SEND), INSERT FX (TYPE, EDIT; darunter ◀ SELECT · 1–5 · SELECT ▶).
+- Pads: Funktionsreihe bündig über dem linken Block (◀ PART, PART ▶, MUTE, ERASE, TRIGGER, SEQUENCER, KEYBOARD, CHORD, STEP JUMP),
+  rechts über den 4 Spalten ◀ BAR · OCTAVE − · OCTAVE + · BAR ▶, darüber mittig die LEDs BAR (blau) und OCTAVE (rot).
+  OCTAVE − / + = Oktave des aktuellen Parts (KEYBOARD/CHORD = Tastatur, SOLO/OCTAVE SEND halten = deren Parts, SHIFT = Halbton).
+- Spiel-Regler (silberne Kappe, `hero:true`) vs. Auswahl-Regler (dunkel). Zwischen allen Reglern mind. 1,5 cm (Kappe zu Kappe) – nachprüfen.
 - **EMX-Oszillator 1:1:** 16 Typen, zusammen **258 Kombinationen** (wie EMX-1 laut Sound On Sound; Liste `EMX` + `EMXPCM` in a.html, `EMX_ALL`).
   Das WAVE-Rad läuft am Stück durch alle 258 (`waveAdj` in c.js), TYPE springt nach Typ. PCM+COMB / PCM+WS = die **76 Wellen der
   EMX-1 Synth PCM List** (Handbuch S. 40: PIANO … RAVEHIT6, 66-72 Chord Sets, 73-76 Drum Sets). Die Klänge sind nachgebaut (`PCM_GEN` in b.js,
   in JS gerechnet, erst bei Bedarf, Warteschlange, eine nach der anderen), keine Korg-Samples. Chord Sets: Oktave wählt den Akkord,
   Drum Sets: Ton wählt den Sound aus den TX-Drums. Pegel per RMS angeglichen, Schleifen überblendet (gemessen: Naht ≤ normale Sample-Sprünge).
-- Raster Rev 2.1: Blöcke 0,3 cm Abstand, Ränder ±28,6, mittleres Band -12,6 … -2, unteres Band -1,6 … 5,4. FILTER und ADSR in denselben 4 Spalten.
-  **Silberne Kappe (`hero:true`) = Spiel-Regler**, dunkle Kappe = Auswahl-Regler (TYPE, SAMPLE, EQ, Röhre).
-- Rechts oben: TUBE · OUTPUT (T.MIX, A, B, MASTER, PHONES, T.ON), Röhrenhaube mit 3 Röhren, MODULATION, AMP (MONO/POLY, LEVEL, PAN).
-- MIX: SIDECHAIN, GLUE DRIVE, BASS GLUE / MFX SEND / ROLL SEND, darunter **OKT. SEND** (Plan). INSERT FX: TYPE + EDIT nebeneinander, −/+, 1–5.
-- Unten links: TAP, REC/STOP/PLAY, ROLL + SHIFT, TEMP. LOCK, SOLO. Touchpad mit GATE ARP / T.SCALE / MFX / HOLD.
-- Pads: Funktionsreihe <P P> MUTE ERASE TRIGGER SEQU. KEYB. CHORD STEP JUMP. Rechts ◁ ▷ (Bars, blaue LEDs), rote LEDs = Oktave des Parts,
-  **OKT − / OKT +** über dem rechten Pad-Block (= Oktave des aktuellen Parts, KEYB./CHORD = Tastatur, SOLO/OKT. SEND halten = deren Parts, SHIFT = Halbton).
-- Zwischen allen Reglern mind. 1,5 cm (Kappe zu Kappe) – nach jeder Layoutänderung nachprüfen.
 
 ## 6. Testen (Claude kann nicht hören – messen!)
 
@@ -123,7 +126,7 @@ Nach jeder Änderung testen (Abschnitt 6), dann App bauen und das Artifact aktua
    alle Menüpunkte (adj + enter, außer Dateidialoge/Factory Reset), Touch-Display.
 4. Klang messen: Pegel/RMS/Peak, Limiter-Reduktion (`E.limiter.reduction`), Frequenzbänder per FFT, Hüllkurven, Obertöne.
    Aufnahme mit AudioWorklet (ScriptProcessor verliert Blöcke).
-5. Aria-Labels der Tasten: `<PAGE` = „PAGE zurück“, `PAGE>` = „PAGE weiter“, `<PART` = „PART zurück“ usw.
+5. Aria-Labels der Tasten: „PAGE zurück/weiter“, „PART zurück/weiter“, „BAR zurück/weiter“, „OCTAVE minus/plus“, „OCTAVE SEND“, „MFX SEND“, „BW“, „OSC WAVE“, „OSC TYPE“, sonst die Beschriftung.
 
 ## 7. Artifacts (claude.ai, privat, gleicher Account)
 
@@ -162,3 +165,5 @@ Nach jeder Änderung testen (Abschnitt 6), dann App bauen und das Artifact aktua
   Panel auf sauberes Raster gebracht, Spiel-Regler silbern, IFX EDIT normal groß neben TYPE, Transport auf einer Grundlinie.
 - **Rev 2.2 (2026-10-10):** EMX-Oszillator komplett: 76 EMX-PCM-Wellen (nachgebaut) für PCM+COMB/PCM+WS → 258 Kombinationen wie die EMX-1,
   WAVE-Rad läuft am Stück durch alle 258, 7"-Seite mit Liste, Pattern-Format 1.4.
+- **Rev 2.3 (2026-10-10):** Panel aufgeräumt nach Feedback („unklar, Weiß auf den Tasten, Abkürzungen, unsymmetrisch“): keine Schrift auf Tasten,
+  alles ausgeschrieben, Spiel-Reihe unten links, TUBE/OUTPUT getrennt, MIX/INSERT FX in zwei Reihen, Pad-Reihen bündig und mittig.

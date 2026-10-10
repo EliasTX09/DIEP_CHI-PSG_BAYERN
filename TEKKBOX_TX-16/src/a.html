@@ -53,7 +53,7 @@ button:focus-visible,label:focus-visible,[tabindex]:focus-visible{outline:2px so
   box-shadow:0 calc(var(--u)*.09) 0 #08080a,inset 0 1px 0 rgba(255,255,255,.09),0 0 calc(var(--u)*.25) color-mix(in srgb,var(--led) calc(var(--dimlv)*.8),transparent)}
 .btn.on{background:linear-gradient(180deg,color-mix(in srgb,var(--led) 92%,#fff),var(--led));box-shadow:0 0 calc(var(--u)*.55) color-mix(in srgb,var(--led) 70%,transparent),0 calc(var(--u)*.09) 0 #08080a}
 .btn.dim{background:linear-gradient(180deg,color-mix(in srgb,var(--led) 48%,#2d2e34),color-mix(in srgb,var(--led) 38%,#1f2025))}
-.btn.sel{outline:calc(var(--u)*.08) solid #fff;outline-offset:calc(var(--u)*.06)}
+.btn.sel{outline:calc(var(--u)*.06) solid var(--accent2);outline-offset:calc(var(--u)*.08)}
 .btn.latch{border-radius:calc(var(--u)*.12);box-shadow:0 calc(var(--u)*.16) 0 #08080a,inset 0 1px 0 rgba(255,255,255,.12)}
 .btn.latch.on{translate:0 calc(var(--u)*.1);box-shadow:0 calc(var(--u)*.06) 0 #08080a,0 0 calc(var(--u)*.55) color-mix(in srgb,var(--led) 70%,transparent)}
 .btn.press,.pad.press{translate:0 calc(var(--u)*.07)}
@@ -115,30 +115,30 @@ canvas.a{display:block}
   <div><h2>Rev 2.0 · Panel nach dem Plan</h2><ul>
     <li>Panel <b>60 × 42 cm</b> mit echten Bauteilgrößen (7"-Display 15,4 × 9,2 cm, Pads 3,6 × 3,3 cm, Touchpad 8,6 × 7,9 cm). Zwischen allen Reglern mind. <b>1,5 cm</b>.</li>
     <li><b>VALUE / PATTERN</b>: im Normalzustand Pattern wechseln (SHIFT = 10er), in Menüs und Display-Seiten = Wert. <b>Menüs gehen nicht von selbst weg</b> – EXIT drücken.</li>
-    <li><b>BPM</b> im Menü: <b>SHIFT + TAP</b> öffnet es. <b>SHIFT + REC</b> = Resample. <b>SHIFT + MFX</b> = MFX-Typ, <b>SHIFT + ROLL</b> = Roll-Typ (jeweils VALUE).</li>
+    <li><b>BPM</b> im Menü: <b>SHIFT + TAP</b> öffnet es. <b>SHIFT + REC</b> = Resample. <b>SHIFT + MASTER FX</b> = Master-FX-Typ, <b>SHIFT + ROLL</b> = Roll-Typ (jeweils VALUE).</li>
+    <li>Unten links in einer Reihe: TAP, REC, STOP, PLAY/PAUSE, SHIFT, ROLL, SOLO, TEMPO LOCK. Alle Beschriftungen stehen unter der Taste, die SHIFT-Funktion (blau) darüber.</li>
     <li><b>SHIFT + &lt;PAGE</b> = UNDO, <b>SHIFT + PAGE&gt;</b> = REDO (60 Schritte).</li></ul></div>
-  <div><h2>Pads · Bars · Solo · Okt. Send</h2><ul>
-    <li>Funktionsreihe: <b>&lt;P P&gt;</b> (Part), MUTE, ERASE, TRIGGER, SEQU., KEYB., CHORD, STEP JUMP. <b>SHIFT + SEQU.</b> = FILL, <b>SHIFT + &lt;P</b> = COPY (Pad = einfügen), SHIFT + ERASE = Pattern leeren.</li>
+  <div><h2>Pads · Bars · Solo · Octave Send</h2><ul>
+    <li>Funktionsreihe: <b>◀ PART / PART ▶</b>, MUTE, ERASE, TRIGGER, SEQUENCER, KEYBOARD, CHORD, STEP JUMP. <b>SHIFT + SEQUENCER</b> = FILL, <b>SHIFT + ◀ PART</b> = COPY (Pad = einfügen), SHIFT + ERASE = Pattern leeren.</li>
     <li>Pad im TRIGGER-Modus = Part spielen, das Display zeigt die <b>Welle</b>. Pad halten während PLAY = Sequenz des Parts pausiert.</li>
-    <li><b>◁ − / ▷ +</b>: Takt wählen (blaue LEDs = Bars). SHIFT = Länge.</li>
-    <li><b>OKT − / OKT +</b> (über den rechten Pads): Oktave des aktuellen Parts (rote LEDs). In KEYB./CHORD = Tastatur-Oktave. SHIFT = Halbton.</li>
-    <li><b>SOLO</b> gedrückt halten + Pads = nur diese Parts (auch wenn gemutet). Dabei OKT −/+ = Oktave der Solo-Parts. Loslassen = alles wie vorher. <b>SHIFT + SOLO</b> = DROP.</li>
-    <li><b>OKT. SEND</b> (im MIX-Block) tippen = aktueller Part an/aus, halten + Pads = mehrere Parts. <b>OKT. SEND halten + OKT −/+</b> (oder ◁ ▷) = Oktave aller Send-Parts runter/hoch. Parts mit CUTOFF 0, LEVEL 0 oder MUTE werden nicht gepitcht.</li></ul></div>
+    <li>Rechts über den Pads: <b>◀ BAR · OCTAVE − · OCTAVE + · BAR ▶</b>. BAR = Takt wählen (blaue LEDs), SHIFT = Länge. OCTAVE = Oktave des aktuellen Parts (rote LEDs), in KEYBOARD/CHORD = Tastatur-Oktave, SHIFT = Halbton.</li>
+    <li><b>SOLO</b> gedrückt halten + Pads = nur diese Parts (auch wenn gemutet). Dabei OCTAVE −/+ = Oktave der Solo-Parts. Loslassen = alles wie vorher. <b>SHIFT + SOLO</b> = DROP.</li>
+    <li><b>OCTAVE SEND</b> (im MIX-Block) tippen = aktueller Part an/aus, halten + Pads = mehrere Parts. <b>OCTAVE SEND halten + OCTAVE −/+</b> (oder BAR) = Oktave aller Send-Parts runter/hoch. Parts mit CUTOFF 0, LEVEL 0 oder MUTE werden nicht gepitcht.</li></ul></div>
   <div><h2>Sound</h2><ul>
     <li><b>SYNTH OSCILLATOR</b> 1:1 wie Korg EMX-1: 16 Typen mit zusammen <b>258 Oszillator-Kombinationen</b>. <b>TYPE</b> springt direkt zu einem Typ (WAVEFORM, DUAL OSC, CHORD, UNISON, RING MOD, OSC SYNC, CROSS MOD, VPM, WS, ADDITIVE, COMB, FORMANT, NOISE, PCM+COMB, PCM+WS, AUDIO IN+COMB). Das <b>WAVE-Rad</b> dreht am Stück durch alle 258 und wechselt dabei von selbst in den nächsten Typ: SAW … SIN, DUAL OSC SAW+SAW … SIN+NS, UNISON 3SAW … 6SIN, VPM, ADDITIVE … bis zu den <b>76 PCM-Wellen der EMX</b> (PIANO, E.PIANO, CLAV, M1-ORGAN … STRINGS, GITARREN, BÄSSE, SYNSIN, DIGI, RAVEHIT1-6, Chord Sets, Drum Sets – nachgebaut, gleiche Namen und Reihenfolge wie im EMX-Handbuch). SHIFT = 10er-Schritte. Die blaue Anzeige zeigt Typ, Position (z. B. 165/258) und Welle, das 7"-Display die Liste davor/danach. <b>Chord Sets</b> (CH-…): die Oktave wählt den Akkord (Dur, Moll, Maj7, min7). <b>Drum Sets</b> (DR-…): jeder Ton ist ein anderer Drum-Sound. <b>OSC EDIT 1 + 2</b> = die zwei Parameter des Typs. SHIFT + OSC EDIT 1 = DRUCK.</li>
     <li><b>Silberne Regler</b> = Spiel-Regler (CUTOFF, RESONANCE, EG INT, ADSR, PITCH, OSC EDIT, SPEED, DEPTH, LEVEL, PAN, IFX EDIT). <b>Dunkle Regler</b> = Auswahl (TYPE, SAMPLE, EQ, Röhre).</li>
     <li><b>SAMPLE</b>-Regler (der zuletzt gedrehte von SAMPLE/TYPE spielt), <b>PITCH</b> (SHIFT = GLIDE), <b>START POINT</b> = Sample-Start.</li>
-    <li><b>AMP EG · ADSR</b>: ATTACK, DECAY, SUST., RELEASE = X-Achse (Zeit), <b>mit SHIFT = Y-Achse</b>: Attack-Pegel, Decay-Pegel, Sustain-Pegel, Release-Kurve. SUST. ohne SHIFT = Zeit vom Decay- zum Sustain-Pegel. Drehen öffnet <b>EG EDIT</b> im Display (9 Punkte zum Ziehen inkl. Delay, Hold, Kurven).</li>
-    <li><b>FILTER</b>: TYPE, RESONANCE, EG INT, CUTOFF (SHIFT + TYPE = TRACK). <b>MODULATION</b>: TYPE, SPEED, <b>EG TIME</b> (Zeit der EG-Typen), DEPTH.</li>
-    <li><b>PARAMETRIC EQ</b>: LOW, MID, HIGH (Gain), FREQ (Frequenz des gewählten Bands), MIX. <b>BW</b> an = die Regler stellen die Bandbreite ein, bis BW wieder gedrückt wird (LOW/HIGH ganz links = Shelf). Drehen öffnet die EQ-Seite im Display – dort Punkte ziehen, Preset und BW antippen. <b>SHIFT + BW</b> = Preset: 30 Hz + 18 kHz Cut, 40 Hz + 18 kHz Cut, Old Telephone, Kick.</li>
-    <li><b>TUBE · OUTPUT</b>: T.MIX, A, B (Röhren-Drive), T.ON (SHIFT = alle), MASTER, PHONES. 3 × ECC82 unter der Haube.</li>
-    <li><b>MIX</b>: SIDECHAIN (SHIFT = Quelle), GLUE DRIVE, BASS GLUE, MFX SEND, ROLL SEND. <b>INSERT FX</b>: TYPE, EDIT, − / +, 1–5.</li></ul></div>
+    <li><b>AMP EG · ADSR</b>: ATTACK, DECAY, SUSTAIN, RELEASE = X-Achse (Zeit), <b>mit SHIFT = Y-Achse</b>: Attack-Pegel, Decay-Pegel, Sustain-Pegel, Release-Kurve. SUSTAIN ohne SHIFT = Zeit vom Decay- zum Sustain-Pegel. Drehen öffnet <b>EG EDIT</b> im Display (9 Punkte zum Ziehen inkl. Delay, Hold, Kurven).</li>
+    <li><b>FILTER</b>: TYPE, RESONANCE, EG INTENSITY, CUTOFF (SHIFT + TYPE = TRACK). <b>MODULATION</b>: TYPE, SPEED, <b>EG TIME</b> (Zeit der EG-Typen), DEPTH.</li>
+    <li><b>PARAMETRIC EQ</b>: LOW, MID, HIGH (Gain), FREQUENCY (Frequenz des gewählten Bands), MIX. <b>BANDWIDTH</b> an = die Regler stellen die Bandbreite ein, bis BANDWIDTH wieder gedrückt wird (LOW/HIGH ganz links = Shelf). Drehen öffnet die EQ-Seite im Display – dort Punkte ziehen, Preset und BW antippen. <b>SHIFT + BANDWIDTH</b> = Preset: 30 Hz + 18 kHz Cut, 40 Hz + 18 kHz Cut, Old Telephone, Kick.</li>
+    <li><b>TUBE</b> (pro Part): TUBE ON (SHIFT = alle Parts), TUBE MIX, DRIVE A, DRIVE B. <b>OUTPUT</b>: MASTER, PHONES. 3 × ECC82 unter der Haube.</li>
+    <li><b>MIX</b>: SIDECHAIN (SHIFT = Quelle), GLUE DRIVE, darunter BASS GLUE, MASTER FX SEND, ROLL SEND, OCTAVE SEND. <b>INSERT FX</b>: TYPE, EDIT, darunter ◀ SELECT, 1–5 (an/aus), SELECT ▶.</li></ul></div>
   <div><h2>Im Menü (kein Platz auf dem Panel)</h2><ul>
     <li><b>PATTERN SET</b>: BPM, MFX TYPE, ROLL TYPE, MOTION PLAY, ACCENT, Swing, Length, Beat, Key, Scale, Chord Set, Gate Arp, Chain …</li>
-    <li><b>PART EDIT</b>: WAVE, AMP EG an/aus, SUSTAIN, RELEASE, EG DELAY, EG HOLD, DRUCK, OKT. SEND, EQ PRESET, EQ DRIVE, HIGH CUT, LOW CUT, <b>STRETCH LENGTH in Steps</b>, Loop Every, Glide, Oktave …</li>
+    <li><b>PART EDIT</b>: WAVE, AMP EG an/aus, SUSTAIN, RELEASE, EG DELAY, EG HOLD, DRUCK, OCTAVE SEND, EQ PRESET, EQ DRIVE, HIGH CUT, LOW CUT, <b>STRETCH LENGTH in Steps</b>, Loop Every, Glide, Oktave …</li>
     <li><b>STEP EDIT</b> (ganz im Menü), <b>SAMPLE EDIT</b> (Start, End, Loop, Level, Tune, Reverse, Punch), <b>PART UTILITY</b> (Copy, Clear, Fill All Parts …), INPUT (Audio-In, Sample 1 Bar), GLOBAL (Metronom, TX Character …).</li></ul></div>
   <div><h2>Touchpad &amp; Sync</h2><ul>
-    <li>Touchpad mit 4 Tasten: <b>GATE ARP</b>, <b>T.SCALE</b>, <b>MFX</b>, <b>HOLD</b>. MIDI, Clock, Audio-In über die Leiste oben.</li></ul></div>
+    <li>Touchpad mit 4 Tasten: <b>GATE ARP</b>, <b>TOUCH SCALE</b>, <b>MASTER FX</b>, <b>HOLD</b>. MIDI, Clock, Audio-In über die Leiste oben.</li></ul></div>
 </section>
 <div class="drop" id="drop" hidden>Samples loslassen = auf den gewählten Part laden</div>
 
@@ -313,7 +313,7 @@ const MODE_DESC={TRIGGER:'HOLD TRIGGER + PAD = SELECT ONLY',SEQUENCER:'PADS 1-16
   'STEP JUMP':'PAD JUMPS TO STEP · 17-24 = BARS',MUTE:'HOLD MUTE + PAD = SOLO',ERASE:'PAD ERASES PART · SHIFT = CLEAR'};
 /* Funktionsreihe über den Pads wie im Plan: <P P> (Part), dann die Modi */
 const FUNCS=['MUTE','ERASE','TRIGGER','SEQUENCER','KEYBOARD','CHORD','STEP JUMP'];
-const FUNC_LBL={SEQUENCER:'SEQU.',KEYBOARD:'KEYB.'};
+const FUNC_LBL={};
 const PATNAMES=['HARDTEKK ROLLER','TEKK ATTACK','KIRMES BRETT','RAVE SIGNAL','BASS GEWITTER','HOOVER DRIVE','NACHT SCHICHT','TOK TOK TOK'];
 const PATBPM=[186,160,190,175,200,170,182,195];
 const KEYS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -337,21 +337,26 @@ const WIN={x0:18.8,x1:28.6,z0:-19.5,z1:-13.5};                     // Röhrenfen
 const METERS={x0:2.8,z:[-14.25,-13.65],n:12,pitch:.48};
 const SLEDS=[{l:'USB',c:V.accent2},{l:'MIDI',c:null},{l:'CLK',c:null},{l:'IN',c:null},{l:'LIMIT',c:null},{l:'FAN',c:null}];
 const SLED_X=k=>9.6+k*1.35,SLED_Z=-13.95;
-/* Raster (Rev 2.1): Blöcke 0,3 cm auseinander, Ränder links/rechts gleich (±28,6). Mittleres Band -12,6 … -2, unteres Band -1,6 … 5,4 */
+/* Raster (Rev 2.3): Blöcke 0,3 cm auseinander, Ränder links/rechts gleich (±28,6), alle Unterkanten über den Pads auf 8,6.
+   Mittleres Band -12,6 … -2, unteres Band -1,6 … 8,6. Reihen stehen mittig im Block, gleiche Größen pro Reihe */
 const SECTS=[
   {n:'PARAMETRIC EQ',x0:-28.6,x1:-12.2,z0:-9.6,z1:-5.7},{n:'FILTER',x0:-28.6,x1:-12.2,z0:-5.4,z1:-.5},{n:'AMP EG · ADSR',x0:-28.6,x1:-12.2,z0:-.2,z1:4.6},
-  {n:'SYNTH OSCILLATOR',x0:-11.9,x1:-3.3,z0:-12.6,z1:5.4,cls:'emx'},{n:'OSC WAVE',x0:-3,x1:6.3,z0:-12.6,z1:-7.4,cls:'emx'},{n:'SAMPLE · PITCH',x0:-3,x1:6.3,z0:-7.1,z1:-2},
-  {n:'TUBE · OUTPUT',x0:2,x1:18.4,z0:-20.4,z1:-15},{n:'MODULATION',x0:6.6,x1:17.1,z0:-12.6,z1:-2},{n:'AMP',x0:17.4,x1:28.6,z0:-12.6,z1:-2},
-  {n:'MIX',x0:-3,x1:10.3,z0:-1.6,z1:5.4},{n:'INSERT FX',x0:10.6,x1:28.6,z0:-1.6,z1:5.4},{n:'',x0:-28.6,x1:-19.9,z0:6.5,z1:8.85}
+  {n:'',x0:-28.6,x1:-12.2,z0:4.9,z1:8.6},
+  {n:'SYNTH OSCILLATOR',x0:-11.9,x1:-3.3,z0:-12.6,z1:8.6,cls:'emx'},{n:'OSC WAVE',x0:-3,x1:6.3,z0:-12.6,z1:-7.4,cls:'emx'},{n:'SAMPLE · PITCH',x0:-3,x1:6.3,z0:-7.1,z1:-2},
+  {n:'TUBE',x0:.5,x1:12.1,z0:-20.4,z1:-15},{n:'OUTPUT',x0:12.4,x1:18.4,z0:-20.4,z1:-15},{n:'MODULATION',x0:6.6,x1:17.1,z0:-12.6,z1:-2},{n:'AMP',x0:17.4,x1:28.6,z0:-12.6,z1:-2},
+  {n:'MIX',x0:-3,x1:10.3,z0:-1.6,z1:8.6},{n:'INSERT FX',x0:10.6,x1:28.6,z0:-1.6,z1:8.6}
 ];
 /* Pads: links 8 × 2 (Parts/Steps 1-16), rechts 4 × 2 (17-24). Echte Pad-Größe 3,6 × 3,3 cm */
 const PADW=3.6,PADD=3.3,PADROWZ=[14.3,17.8];
 const padRC=i=>i<16?{r:Math.floor(i/8),c:i%8}:{r:Math.floor((i-16)/4),c:8+(i-16)%4};
 const colX=c=>c<8?-17.4+c*3.9:15.9+(c-8)*3.75;
 const padAt=(r,c)=>c<8?r*8+c:16+r*4+(c-8);
-const PADX=i=>colX(padRC(i).c),PADZI=i=>PADROWZ[padRC(i).r],FNX=k=>-17.7+k*3.45,FN_Z=11.6;
-const IFXON_X=k=>18.75+k*2.15;
-const BARLED_X=k=>18.4+k*1.0,BARLED_Z=9.65,OCTLED_Z=10.35;
+/* Funktionsreihe: 9 Tasten bündig über dem linken Pad-Block (Kante zu Kante), rechts 4 Tasten genau über den 4 Pad-Spalten */
+const PADX=i=>colX(padRC(i).c),PADZI=i=>PADROWZ[padRC(i).r],FNX=k=>-17.7+k*3.4875,FN_Z=11.6;
+const IFXROW_X=k=>10.6+18*(k+.5)/7;                                 // INSERT FX: ◀ 1 2 3 4 5 ▶ gleichmäßig über die Blockbreite
+const BARLED_X=k=>(colX(8)+colX(11))/2-3.5+k,BARLED_Z=9.6,OCTLED_Z=10.25;
+const TRX=k=>-28.6+16.4*(k+.5)/8;                                   // Spiel-Reihe unter ADSR: 8 Tasten gleichmäßig
+const EQX=k=>-28.6+16.4*(k+.5)/6;                                   // EQ: 5 Regler + BANDWIDTH gleichmäßig
 const SLOTS=[];
 const REAR=[
   {x:-10,l:'12 V DC'},{x:-7.6,l:'POWER'},{x:-5.2,l:'USB-C PC'},{x:-2.6,l:'USB HOST'},{x:0,l:'MIDI IN'},{x:2.5,l:'MIDI OUT'},{x:5,l:'MIDI THRU'},
@@ -359,7 +364,7 @@ const REAR=[
 ];
 const REAR_VENTS=[];
 /* SYNTH OSCILLATOR: TYPE-Regler mit 16 Beschriftungen + LEDs rundherum wie bei der EMX */
-const OSCT={x:-7.6,z:-3.7,r:1.15,lr:2.25,span:300};
+const OSCT={x:-7.6,z:-1.9,r:1.3,lr:2.6,span:300};
 const OSCLCD={x:-7.6,z:-10.35,w:7.6,d:2};                         // Anzeige im EMX-Block: Typ + Welle
 const oscAng=k=>(-OSCT.span/2+k*OSCT.span/15)*D2R;
 
@@ -368,80 +373,82 @@ const K=[],BT=[];
 const kd=(id,label,x,z,r,o={})=>K.push(Object.assign({id,label,x,z,r,kind:'knob',ring:!o.plain},o));
 const bd=(id,label,x,z,w,d,o={})=>BT.push(Object.assign({id,label,x,z,w,d,kind:'button'},o));
 /* Alle Part-Regler sind Endlos-Encoder mit LED-Ring. Nur MASTER/PHONES sind echte Potis. groß = r .95, normal = r .7, klein = r .45 */
-/* Menü-Block: VALUE/PATTERN (im Normalzustand Pattern-Wechsel, im Menü Wert) + 6 Tasten */
-kd('value','VALUE / PATTERN',-8.25,-16.2,1.3,{endless:true,plain:true});
-bd('pgprev','<PAGE',-4.6,-18.9,2.4,1,{sh:'UNDO'});bd('pgnext','PAGE>',-1.6,-18.9,2.4,1,{sh:'REDO'});
-bd('menu','MENU',-4.6,-16.6,2.4,1,{sh:'MIDI'});bd('enter','ENTER',-1.6,-16.6,2.4,1);bd('exit','EXIT',-4.6,-14.3,2.4,1,{sh:'HOME'});bd('save','SAVE',-1.6,-14.3,2.4,1,{led:'red',sh:'SAVE AS'});
-/* EQ-Reihe unter dem Display */
-kd('eqL','LOW',-27,-7.75,.6,{p:'eqL',sect:'EQ LOW',eq:0});kd('eqM','MID',-24.2,-7.75,.6,{p:'eqM',sect:'EQ MID',eq:1});kd('eqH','HIGH',-21.4,-7.75,.6,{p:'eqH',sect:'EQ HIGH',eq:2});
-kd('eqF','FREQ',-18,-7.75,.6,{p:'eqF',sect:'EQ FREQ',eq:3});kd('eqX','MIX',-15.2,-7.75,.6,{p:'eqX',sect:'EQ MIX',eq:4});
-bd('bw','BW',-13.2,-7.75,1.3,.8,{led:'B',sh:'PRESET'});
-/* Spiel-Regler (hero) = silberne Kappe wie bei der EMX, Auswahl-Regler (TYPE, SAMPLE, EQ) = dunkel.
-   FILTER und ADSR stehen in denselben 4 Spalten (-26 / -22,2 / -18,4 / -14,6) */
+/* Menü-Block: VALUE/PATTERN (im Normalzustand Pattern-Wechsel, im Menü Wert) + 6 Tasten, mittig zwischen Display und TUBE */
+kd('value','VALUE / PATTERN',-9.15,-16.2,1.3,{endless:true,plain:true});
+bd('pgprev','<PAGE',-5.5,-18.9,2.4,1,{sh:'UNDO',aria:'PAGE zurück'});bd('pgnext','PAGE>',-2.5,-18.9,2.4,1,{sh:'REDO',aria:'PAGE weiter'});
+bd('menu','MENU',-5.5,-16.6,2.4,1,{sh:'MIDI'});bd('enter','ENTER',-2.5,-16.6,2.4,1);bd('exit','EXIT',-5.5,-14.3,2.4,1,{sh:'HOME'});bd('save','SAVE',-2.5,-14.3,2.4,1,{led:'red',sh:'SAVE AS'});
+/* Alle Beschriftungen ausgeschrieben und unter der Taste/dem Regler, keine Symbole auf den Tasten.
+   Spiel-Regler (hero) = silberne Kappe wie bei der EMX, Auswahl-Regler (TYPE, SAMPLE, EQ, Röhre) = dunkel */
+/* PARAMETRIC EQ: 5 Regler + BANDWIDTH gleichmäßig */
+kd('eqL','LOW',EQX(0),-7.75,.6,{p:'eqL',sect:'EQ LOW',eq:0});kd('eqM','MID',EQX(1),-7.75,.6,{p:'eqM',sect:'EQ MID',eq:1});kd('eqH','HIGH',EQX(2),-7.75,.6,{p:'eqH',sect:'EQ HIGH',eq:2});
+kd('eqF','FREQUENCY',EQX(3),-7.75,.6,{p:'eqF',sect:'EQ FREQUENCY',eq:3});kd('eqX','MIX',EQX(4),-7.75,.6,{p:'eqX',sect:'EQ MIX',eq:4});
+bd('bw','BANDWIDTH',EQX(5),-7.75,1.5,.8,{led:'B',sh:'PRESET',aria:'BW'});
+/* FILTER und ADSR in denselben 4 Spalten (-26 / -22,2 / -18,4 / -14,6) */
 kd('ftype','TYPE',-26,-2.9,.8,{p:'ftype',det:'list',sect:'FILTER TYPE',aria:'FILTER TYPE',sh:'TRACK'});
 kd('reso','RESONANCE',-22.2,-2.9,.85,{p:'reso',sect:'FILTER',hero:true});
-kd('egint','EG INT',-18.4,-2.9,.85,{p:'eg',det:'center',sect:'FILTER EG',hero:true});
+kd('egint','EG INTENSITY',-18.4,-2.9,.85,{p:'eg',det:'center',sect:'FILTER EG INTENSITY',hero:true,aria:'EG INT'});
 kd('cutoff','CUTOFF',-14.6,-2.9,1.1,{p:'cut',sect:'FILTER',hero:true});
 /* ADSR: Drehen = X-Achse (Zeit), SHIFT + Drehen = Y-Achse (Pegel) */
 kd('attack','ATTACK',-26,2,.85,{p:'att',sect:'AMP EG · ATTACK',shp:'egal',sh:'LEVEL',eg:1,hero:true});
 kd('decay','DECAY',-22.2,2,.85,{p:'dec',sect:'AMP EG · DECAY',shp:'egdl',sh:'LEVEL',eg:3,hero:true});
-kd('sustain','SUST.',-18.4,2,.85,{p:'egST',sect:'AMP EG · SUSTAIN TIME',shp:'egs',sh:'LEVEL',eg:4,aria:'SUSTAIN',hero:true});
+kd('sustain','SUSTAIN',-18.4,2,.85,{p:'egST',sect:'AMP EG · SUSTAIN TIME',shp:'egs',sh:'LEVEL',eg:4,hero:true});
 kd('release','RELEASE',-14.6,2,.85,{p:'egR',sect:'AMP EG · RELEASE',shp:'egcr',sh:'CURVE',eg:6,hero:true});
-/* Transport + ROLL/SHIFT + TEMPO LOCK + SOLO: alles auf einer Grundlinie (z 7,65) */
-bd('tap','TAP',-27.1,5.55,2.3,.7,{led:'A',sh:'BPM'});
-bd('rec','REC',-27.1,7.65,2.3,1.2,{led:'red',sh:'RESAMPLE',sym:'rec'});bd('stop','STOP',-24.25,7.65,2.3,1.2,{sh:'PANIC',sym:'stop'});bd('play','PLAY/PAUSE',-21.4,7.65,2.3,1.2,{led:'green',sh:'RESTART',sym:'play'});
-bd('roll','ROLL',-17.6,6.35,1.3,1.8,{led:'A',sh:'TYPE',tall:true});
-bd('shift','SHIFT',-17.6,8.15,2.4,.75,{led:'B'});
-bd('tlock','TEMP. LOCK',-13.8,7.65,3,1.2,{led:'A'});
-bd('solo','SOLO',-2.2,7.3,1.3,2.5,{led:'white',sh:'DROP',tall:true});
+/* Spiel-Reihe (Plan: Transport, SHIFT, ROLL, SOLO, TEMPO LOCK) in einer Reihe, gleich groß */
+bd('tap','TAP',TRX(0),6.7,1.7,.9,{led:'A',sh:'BPM'});
+bd('rec','REC',TRX(1),6.7,1.7,.9,{led:'red',sh:'RESAMPLE'});bd('stop','STOP',TRX(2),6.7,1.7,.9,{sh:'PANIC'});bd('play','PLAY/PAUSE',TRX(3),6.7,1.7,.9,{led:'green',sh:'RESTART'});
+bd('shift','SHIFT',TRX(4),6.7,1.7,.9,{led:'B'});bd('roll','ROLL',TRX(5),6.7,1.7,.9,{led:'A',sh:'TYPE'});
+bd('solo','SOLO',TRX(6),6.7,1.7,.9,{led:'A',sh:'DROP'});bd('tlock','TEMPO LOCK',TRX(7),6.7,1.7,.9,{led:'A'});
 /* SYNTH OSCILLATOR (EMX-1): oben die Anzeige (Typ + Welle), TYPE mit 16 Typen rundherum, unten OSC EDIT 1 + 2 */
 kd('osc','TYPE',OSCT.x,OSCT.z,OSCT.r,{p:'osc',det:'list',sect:'SYNTH OSCILLATOR',aria:'OSC TYPE',emxRing:true,plain:true});
-kd('edit','OSC EDIT 1',-9.7,2.6,.75,{p:'edit',sect:'OSC EDIT 1',shp:'druck',sh:'DRUCK',emx:true,hero:true});
-kd('edit2','OSC EDIT 2',-5.5,2.6,.75,{p:'edit2',sect:'OSC EDIT 2',emx:true,hero:true});
-/* OSC WAVE: eigenes Rad wie das zweite Rad (Dial) der EMX – wählt die Welle/Kombination im Typ (z. B. UNISON 3SAW … 6SIN, DUAL OSC SAW+SIN) */
+kd('edit','OSC EDIT 1',-9.7,6.3,.85,{p:'edit',sect:'OSC EDIT 1',shp:'druck',sh:'DRUCK',emx:true,hero:true});
+kd('edit2','OSC EDIT 2',-5.5,6.3,.85,{p:'edit2',sect:'OSC EDIT 2',emx:true,hero:true});
+/* OSC WAVE: eigenes Rad wie das zweite Rad (Dial) der EMX – läuft durch alle 258 Kombinationen */
 kd('wave','WAVE',1.65,-10.05,1.2,{endless:true,plain:true,wave:true,emx:true,sect:'OSC WAVE',aria:'OSC WAVE',sh:'×10'});
 /* SAMPLE · PITCH */
-kd('sample','SAMPLE',-.4,-4.4,.75,{p:'src',det:'list',sect:'SAMPLE'});
-kd('pitch','PITCH',3.6,-4.4,.85,{p:'pitch',det:'center',sect:'PITCH',shp:'glide',sh:'GLIDE',hero:true});
-/* TUBE · OUTPUT */
-kd('tubemix','T.MIX',4.4,-18.35,.95,{p:'tubeMix',det:'tube',sect:'TUBE MIX'});
-kd('driveA','A',7.9,-18.35,.6,{p:'driveA',sect:'TUBE STAGE A',aria:'DRIVE A'});
-kd('driveB','B',10.9,-18.35,.6,{p:'driveB',sect:'TUBE STAGE B',aria:'DRIVE B'});
-kd('master','MASTER',14.3,-18.35,1,{g:true,pot:true,ring:false,ticks:true,cap:true,sect:'MASTER'});
-kd('phones','PHONES',17.4,-18.35,.5,{g:true,pot:true,ring:false,ticks:true,sect:'PHONES'});
-bd('tubeon','T.ON',4.4,-15.85,2,.75,{led:'tube',aria:'TUBE ON'});   // SHIFT + T.ON = alle Parts (ohne Aufdruck, Platz)
-/* MODULATION: 2 Spalten (9,2 / 14,5) */
+kd('sample','SAMPLE',-.55,-4.4,.75,{p:'src',det:'list',sect:'SAMPLE'});
+kd('pitch','PITCH',3.85,-4.4,.85,{p:'pitch',det:'center',sect:'PITCH',shp:'glide',sh:'GLIDE',hero:true});
+/* TUBE (pro Part) und OUTPUT (gesamt) */
+bd('tubeon','TUBE ON',1.85,-17.15,2,.9,{led:'tube',sh:'ALL PARTS'});
+kd('tubemix','TUBE MIX',4.6,-17.8,.7,{p:'tubeMix',det:'tube',sect:'TUBE MIX'});
+kd('driveA','DRIVE A',7.6,-17.8,.7,{p:'driveA',sect:'TUBE STAGE A'});
+kd('driveB','DRIVE B',10.6,-17.8,.7,{p:'driveB',sect:'TUBE STAGE B'});
+kd('master','MASTER',14.1,-17.8,.95,{g:true,pot:true,ring:false,ticks:true,cap:true,sect:'MASTER'});
+kd('phones','PHONES',17.25,-17.8,.6,{g:true,pot:true,ring:false,ticks:true,sect:'PHONES'});
+/* MODULATION: 2 Spalten (9,2 / 14,5), START POINT mittig darunter */
 kd('mtype','TYPE',9.2,-9.9,.8,{p:'mtype',det:'list',sect:'MOD TYPE',aria:'MOD TYPE'});
-kd('speed','SPEED',14.5,-9.9,.85,{p:'speed',sect:'MODULATION',hero:true});
-kd('egtime','EG TIME',9.2,-6.3,.7,{p:'mEgT',sect:'MOD EG TIME'});
-kd('depth','DEPTH',14.5,-6.3,.85,{p:'depth',sect:'MODULATION',hero:true});
-kd('start','START POINT',9.2,-3.5,.45,{p:'start',sect:'SAMPLE START POINT'});
-/* AMP: MONO/POLY · LEVEL · PAN mittig im Block */
-bd('mono','MONO/POLY',19.3,-7.3,2.6,1,{led:'B',sh:'CHOKE',aria:'VOICE ASSIGN'});
-kd('level','LEVEL',23.1,-7.3,1.05,{p:'lvl',sect:'AMP',hero:true});
-kd('pan','PAN',26.7,-7.3,.9,{p:'pan',sect:'AMP',hero:true});
-/* MIX: Regler-Reihe z 2 wie INSERT FX, Tasten oben, OKT. SEND darunter */
-kd('sc','SIDECHAIN',-.9,2,.75,{p:'sc',sect:'SIDECHAIN'});
-kd('gluedrv','GLUE DRIVE',2.9,2,.75,{p:'glueDrv',sect:'BASS GLUE · PER PART'});
-bd('glue','BASS GLUE',5.75,.8,1.6,.9,{led:'tube'});bd('send','MFX SEND',7.55,.8,1.6,.9,{led:'A'});bd('rollsend','ROLL SEND',9.35,.8,1.6,.9,{led:'A'});
-bd('oktsend','OKT. SEND',7.55,3.5,5.2,.9,{led:'A',aria:'OKT SEND'});
-/* INSERT FX: TYPE + EDIT nebeneinander (EDIT = Spiel-Regler), rechts −/+ und 1–5 */
-kd('ifxtype','TYPE',12.6,2,.85,{p:'fxType',det:'list',sect:'INSERT FX',aria:'IFX TYPE'});
-kd('ifxedit','EDIT',16.2,2,.85,{p:'fxEdit',sect:'INSERT FX',aria:'IFX EDIT',hero:true});
-bd('ifxdn','-',IFXON_X(0),.8,1.9,1,{sh:'IFX 1',noLbl:true,aria:'IFX auswählen zurück'});bd('ifxup','+',IFXON_X(4),.8,1.9,1,{sh:'IFX 5',noLbl:true,aria:'IFX auswählen weiter'});
-for(let k=0;k<5;k++)bd('ifxon'+k,String(k+1),IFXON_X(k),3.5,1.8,.8,{led:'A',ifxOn:k,aria:'IFX '+(k+1)+' ON/OFF'});
-/* Touchpad-Tasten */
-bd('gatearp','GATE ARP',-28,10,2.3,.8,{led:'A',sh:'TYPE'});
-bd('padmode','T.SCALE',-25.4,10,2.3,.8,{led:'A',sh:'SCALE',aria:'TOUCH SCALE'});
-bd('mfxon','MFX',-22.8,10,2.3,.8,{led:'A',mfxOn:0,sh:'TYPE',aria:'MASTER FX'});
-bd('mfxhold','HOLD',-20.4,10,1.9,.8,{led:'B',mfxHold:0});
+kd('speed','SPEED',14.5,-9.9,.8,{p:'speed',sect:'MODULATION',hero:true});
+kd('egtime','EG TIME',9.2,-6.3,.8,{p:'mEgT',sect:'MOD EG TIME'});
+kd('depth','DEPTH',14.5,-6.3,.8,{p:'depth',sect:'MODULATION',hero:true});
+kd('start','START POINT',11.85,-3.5,.45,{p:'start',sect:'SAMPLE START POINT'});
+/* AMP: LEVEL + PAN, MONO/POLY mittig darunter */
+kd('level','LEVEL',20.4,-9,1,{p:'lvl',sect:'AMP',hero:true});
+kd('pan','PAN',25.6,-9,1,{p:'pan',sect:'AMP',hero:true});
+bd('mono','MONO/POLY',23,-4.5,3,.9,{led:'B',sh:'CHOKE',aria:'VOICE ASSIGN'});
+/* MIX: 2 Regler über den mittleren Tasten, darunter die 4 Sends gleichmäßig */
+const MIXX=k=>-3+13.3*(k+.5)/4;
+kd('sc','SIDECHAIN',MIXX(1),2.2,.75,{p:'sc',sect:'SIDECHAIN'});
+kd('gluedrv','GLUE DRIVE',MIXX(2),2.2,.75,{p:'glueDrv',sect:'BASS GLUE · PER PART'});
+bd('glue','BASS GLUE',MIXX(0),6.2,2.6,.9,{led:'tube'});bd('send','MASTER FX SEND',MIXX(1),6.2,2.6,.9,{led:'A',aria:'MFX SEND'});
+bd('rollsend','ROLL SEND',MIXX(2),6.2,2.6,.9,{led:'A'});bd('oktsend','OCTAVE SEND',MIXX(3),6.2,2.6,.9,{led:'A'});
+/* INSERT FX: TYPE + EDIT über der Mitte, darunter ◀ 1 2 3 4 5 ▶ */
+kd('ifxtype','TYPE',IFXROW_X(2),2.2,.85,{p:'fxType',det:'list',sect:'INSERT FX',aria:'IFX TYPE'});
+kd('ifxedit','EDIT',IFXROW_X(4),2.2,.85,{p:'fxEdit',sect:'INSERT FX',aria:'IFX EDIT',hero:true});
+bd('ifxdn','<SELECT',IFXROW_X(0),6.2,2.1,.9,{sh:'FX 1',aria:'IFX auswählen zurück'});bd('ifxup','SELECT>',IFXROW_X(6),6.2,2.1,.9,{sh:'FX 5',aria:'IFX auswählen weiter'});
+for(let k=0;k<5;k++)bd('ifxon'+k,String(k+1),IFXROW_X(k+1),6.2,2.1,.9,{led:'A',ifxOn:k,aria:'IFX '+(k+1)+' ON/OFF'});
+/* Touchpad-Tasten: gleichmäßig über der Touchpad-Breite */
+const TPX=k=>XYPAD.x-XYPAD.w/2+.95+k*(XYPAD.w-1.9)/3;
+bd('gatearp','GATE ARP',TPX(0),10,1.9,.8,{led:'A',sh:'TYPE'});
+bd('padmode','TOUCH SCALE',TPX(1),10,1.9,.8,{led:'A',sh:'SCALE'});
+bd('mfxon','MASTER FX',TPX(2),10,1.9,.8,{led:'A',mfxOn:0,sh:'TYPE'});
+bd('mfxhold','HOLD',TPX(3),10,1.9,.8,{led:'B',mfxHold:0});
 /* Funktionsreihe */
-bd('partprev','<P',FNX(0),FN_Z,3,.9,{sh:'COPY',aria:'PART zurück'});bd('partnext','P>',FNX(1),FN_Z,3,.9,{aria:'PART weiter'});
-const FSH={TRIGGER:'HOLD = SELECT',SEQUENCER:'FILL',KEYBOARD:'KEY',CHORD:'SCALE',MUTE:'ALL ON',ERASE:'INIT PAT'};
+bd('partprev','<PART',FNX(0),FN_Z,3,.9,{sh:'COPY',aria:'PART zurück'});bd('partnext','PART>',FNX(1),FN_Z,3,.9,{aria:'PART weiter'});
+const FSH={TRIGGER:'HOLD = SELECT',SEQUENCER:'FILL',KEYBOARD:'KEY',CHORD:'SCALE',MUTE:'ALL ON',ERASE:'INIT PATTERN'};
 FUNCS.forEach((f,i)=>bd('fn'+i,FUNC_LBL[f]||f,FNX(i+2),FN_Z,3,.9,{led:'B',fn:f,mode:f,sh:FSH[f]||'',aria:f}));
-/* Bars + Oktave (rechts): ◁ ▷ = Takt, OKT − / OKT + = Oktave des aktuellen Parts (rote LEDs) */
-bd('bardn','<',14.6,10,1.6,1.1,{sh:'LEN -',aria:'BAR zurück'});bd('barup','>',16.5,10,1.6,1.1,{sh:'LEN +',aria:'BAR weiter'});
-bd('octdn','OKT −',colX(9),FN_Z,3,.9,{fn:'OCT -',aria:'OKT minus'});bd('octup','OKT +',colX(10),FN_Z,3,.9,{fn:'OCT +',aria:'OKT plus'});
+/* rechts über den 4 Pad-Spalten: BAR ◀ · OCTAVE − · OCTAVE + · BAR ▶ (darüber Bar- und Oktav-LEDs) */
+bd('bardn','<BAR',colX(8),FN_Z,3,.9,{sh:'LENGTH −',aria:'BAR zurück'});
+bd('octdn','OCTAVE −',colX(9),FN_Z,3,.9,{fn:'OCT -',sh:'SEMITONE −',aria:'OCTAVE minus'});bd('octup','OCTAVE +',colX(10),FN_Z,3,.9,{fn:'OCT +',sh:'SEMITONE +',aria:'OCTAVE plus'});
+bd('barup','BAR>',colX(11),FN_Z,3,.9,{sh:'LENGTH +',aria:'BAR weiter'});
 const CTRL={};K.forEach(d=>CTRL[d.id]=d);BT.forEach(d=>CTRL[d.id]=d);
 /* SHIFT-Ebene der Regler (kein eigener Platz auf dem Panel) */
 CTRL.druck={id:'druck',label:'DRUCK',p:'druck',sect:'DRUCK · SUB + KICK + DRIVE',kind:'knob'};

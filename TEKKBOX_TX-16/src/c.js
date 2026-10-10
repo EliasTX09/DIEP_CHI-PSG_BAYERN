@@ -164,7 +164,7 @@ function setPlaying(p){if(!ready)return;if(p===ui.playing&&p)return;ui.playing=p
 function setBPM(b,ramping){G.bpm=Math.round(clamp(b,40,300)*10)/10;if(!ramping&&G.tlock===0)cur.bpm=G.bpm;refreshKnob(CTRL.tempo);
   if(!E)return;PARTS.forEach((_,i)=>{const P=cur.parts[i];if(P.stretch===2)scheduleStretch(i);const M=modInfo(P.mtype);if(M&&!M.eg&&M.bpm)setLfoWave(E.ch[i],LFOW[M.src],lfoRate(P),now(),M.sign);});}
 function partLeds(){const P=cur.parts[ui.part];setLed(CTRL.tubeon,P.tube);setLed(CTRL.glue,P.glueOn);setLed(CTRL.reverse,P.reverse);setLed(CTRL.stretch,P.stretch>0);setLed(CTRL.bpmsync,P.sync);setLed(CTRL.egon,P.egOn);setLed(CTRL.send,P.send);setLed(CTRL.rollsend,P.rollSend!==false);setLed(CTRL.mono,(P.voice??0)<2);setLed(CTRL.oktsend,!!P.oktSend);setLed(CTRL.bw,!!ui.bw);ifxLeds();}
-function ifxLeds(){const P=cur.parts[ui.part];ifxPageEl.textContent='SELECT · IFX '+(ui.fxSel+1);for(let k=0;k<5;k++){const d=CTRL['ifxon'+k],f=P.fx[k];setLed(d,!!(f&&f.on));d.el.classList.toggle('sel',k===ui.fxSel);}}
+function ifxLeds(){const P=cur.parts[ui.part];ifxPageEl.textContent='EDIT · FX '+(ui.fxSel+1);for(let k=0;k<5;k++){const d=CTRL['ifxon'+k],f=P.fx[k];setLed(d,!!(f&&f.on));d.el.classList.toggle('sel',k===ui.fxSel);}}
 function setPart(i,quiet){ui.part=i;ALLK.forEach(d=>d.caught=false);partLeds();refreshKnobs();if(!quiet)popup('msg',{t:'PART SELECT',b:'PART '+pad2(i+1),s:PARTS[i]+' · '+partSrcName(cur.parts[i])});}
 const partSrcName=P=>P.src?pad3(P.src)+' '+SRC[P.src].n:P.osc?'OSC '+pad2(P.osc)+' '+OSCS[P.osc]:'SILENT';
 function queuePattern(n,byEvent){n=clamp(Math.round(n),1,250);if(ui.write&&ui.write.stage==='as'){ui.write.target=n;popup('write',{},8000);return;}
@@ -272,7 +272,7 @@ function func(d){
     if(s&&f==='ERASE'){const t=performance.now();if(t-ui.initConfirm<3000){ui.initConfirm=0;initPattern();}else{ui.initConfirm=t;popup('msg',{t:'INIT PATTERN '+patStr(),b:'SHIFT+ERASE AGAIN',s:'EMPTY PATTERN, SOUNDS STAY'},3000);}return;}
     if(s&&f==='KEYBOARD'){cur.key=(cur.key+1)%12;dirty();padLabels();popup('msg',{t:'PATTERN KEY',b:KEYS[cur.key]+' '+SCALES[cur.scale],s:'SHIFT + KEYBOARD = NEXT KEY'},1400);return;}
     if(s&&f==='CHORD'){cur.scale=(cur.scale+1)%SCALES.length;dirty();padLabels();popup('msg',{t:'PATTERN SCALE',b:KEYS[cur.key]+' '+SCALES[cur.scale],s:'SHIFT + CHORD = NEXT SCALE'},1400);return;}
-    /* SHIFT + SEQU. = FILL (Plan: keine eigene FILL-Taste mehr). Nochmal SHIFT + SEQU. oder ENTER = kopieren */
+    /* SHIFT + SEQUENCER = FILL (Plan: keine eigene FILL-Taste mehr). Nochmal SHIFT + SEQUENCER oder ENTER = kopieren */
     if(s&&f==='SEQUENCER'){if(ui.fill)fillExec();else fillStart(false);return;}
     const m=f;if(f==='TRIGGER'||f==='MUTE')ui.modeHold={f,prev:ui.mode,used:false};setMode(m);popup(m==='MUTE'?(ui.solo.size?'solo':'mute'):'mode');return;}
   switch(f){
@@ -280,12 +280,12 @@ function func(d){
       popup('msg',{t:'COPY · '+ui.clip.from,b:'PAD = PASTE',s:'OTHER PATTERN OK · COPY AGAIN = CANCEL'},3000);break;
     case 'FILL':if(ui.fill)fillExec();else fillStart(s);break;
     case 'DROP':ui.drop=!ui.drop;evLog('drop',ui.drop);setLed(d,ui.drop);popup('msg',{t:'DROP',b:ui.drop?'DROP!':'BACK IN',s:ui.drop?'ONLY KICK + TOK':'ALL PARTS PLAYING'});break;
-    /* OKT − / OKT + (Plan): Oktave des aktuellen Parts. SOLO halten = Solo-Parts, OKT. SEND halten = alle Send-Parts, KEYB./CHORD = Tastatur, SHIFT = Halbton */
+    /* OCTAVE − / OCTAVE + (Plan: Okt.-/Okt.+): Oktave des aktuellen Parts. SOLO halten = Solo-Parts, OCTAVE SEND halten = alle Send-Parts, KEYBOARD/CHORD = Tastatur, SHIFT = Halbton */
     case 'OCT -':case 'OCT +':{const dir=f==='OCT +'?1:-1;
       if(CTRL.solo.down&&ui.soloHold){soloOct(dir);break;}
       if(CTRL.oktsend.down&&ui.oktHold){ui.oktHold.used=true;oktShift(dir);break;}
       if(!s&&(ui.mode==='KEYBOARD'||ui.mode==='CHORD')){ui.kbOct=clamp((ui.kbOct||0)+dir,-4,4);padLabels(true);const lo=partNote(P,kbNote(0)),hi=partNote(P,kbNote(23));
-        popup('msg',{t:'KEYBOARD OCTAVE '+(ui.kbOct>0?'+':'')+ui.kbOct,b:noteName(lo)+' - '+noteName(hi),s:'OKT -/+ = 8 OCTAVES · SHIFT = SEMITONE'},1400);break;}
+        popup('msg',{t:'KEYBOARD OCTAVE '+(ui.kbOct>0?'+':'')+ui.kbOct,b:noteName(lo)+' - '+noteName(hi),s:'OCTAVE -/+ = 8 OCTAVES · SHIFT = SEMITONE'},1400);break;}
       if(s)P.tr=clamp(P.tr+dir,-12,12);else P.oct=clamp(P.oct+dir,-5,5);dirty();padLabels();
       popup('msg',{t:'PART '+pad2(ui.part+1)+' '+PARTS[ui.part],b:'OCT '+(P.oct>0?'+':'')+P.oct+(P.tr?'  TR '+(P.tr>0?'+':'')+P.tr:''),s:'ONLY THIS PART · -5 TO +5'},1200);break;}
   }
@@ -298,19 +298,19 @@ function modeRelease(d){const H=ui.modeHold;if(!H||!d.fn||H.f!==d.fn)return;ui.m
 /* COPY (SHIFT + <P): Part in die Zwischenablage, Pad drücken = einfügen (auch nach Pattern-Wechsel) */
 function copyToggle(){if(ui.copy){ui.copy=false;popup('msg',{t:'COPY',b:'CANCELLED'},900);return;}ui.clip=clipPart(ui.part);ui.copy=true;
   popup('msg',{t:'COPY · '+ui.clip.from,b:'PAD = PASTE',s:'OTHER PATTERN OK · SHIFT + <P = CANCEL'},3000);}
-/* OKT. SEND (Plan): pro Part einschaltbar. OKT. SEND halten + OKT -/+ (oder BAR < >) = Oktave aller Send-Parts hoch/runter.
+/* OCTAVE SEND (Plan: Okt. Send): pro Part einschaltbar. OCTAVE SEND halten + OCTAVE -/+ (oder BAR < >) = Oktave aller Send-Parts hoch/runter.
    Parts mit CUTOFF auf 0, LEVEL auf 0 oder gemutet werden nicht gepitcht */
 const oktSilent=p=>{const P=cur.parts[p];return ui.muted.has(p)||P.lvl<.01||(!P.ftrack&&P.cut<.01&&/^LPF|LADDER|ACID|DIODE|JUNO|POLY|P-5|MG|E-LPF|OB SVF LP|MS-20 LP/.test(FILTERS[P.ftype]));};
 function oktShift(dir){const ps=cur.parts.map((P,p)=>p).filter(p=>cur.parts[p].oktSend);let n=0;undoKind('okt'+(++undoN));
   ps.forEach(p=>{if(oktSilent(p))return;const P=cur.parts[p],o=clamp(P.oct+dir,-5,5);if(o!==P.oct){P.oct=o;n++;}});if(n)dirty();padLabels(true);
-  popup('msg',{t:'OKT. SEND '+(dir>0?'+1':'-1'),b:n+(n===1?' PART':' PARTS')+' PITCHED',s:ps.length?ps.map(p=>pad2(p+1)).join(' ').slice(0,38):'NO PART HAS OKT. SEND'},99999);}
+  popup('msg',{t:'OCTAVE SEND '+(dir>0?'+1':'-1'),b:n+(n===1?' PART':' PARTS')+' PITCHED',s:ps.length?ps.map(p=>pad2(p+1)).join(' ').slice(0,38):'NO PART HAS OCTAVE SEND'},99999);}
 function oktToggle(p){const P=cur.parts[p];undoKind('okts'+(++undoN));P.oktSend=!P.oktSend;dirty();if(p===ui.part)setLed(CTRL.oktsend,P.oktSend);
-  popup('msg',{t:'OKT. SEND · PART '+pad2(p+1),b:P.oktSend?'ON':'OFF',s:PARTS[p]+(P.oktSend?' FOLLOWS OKT -/+':'')},99999);}
-/* SOLO (Plan): gedrückt halten, Pads wählen die Parts. Egal ob gemutet. OKT -/+ (oder BAR < >) = Oktave der Solo-Parts. Loslassen = alles wie vorher */
+  popup('msg',{t:'OCTAVE SEND · PART '+pad2(p+1),b:P.oktSend?'ON':'OFF',s:PARTS[p]+(P.oktSend?' FOLLOWS OCTAVE -/+':'')},99999);}
+/* SOLO (Plan): gedrückt halten, Pads wählen die Parts. Egal ob gemutet. OCTAVE -/+ (oder BAR < >) = Oktave der Solo-Parts. Loslassen = alles wie vorher */
 function soloOct(dir){if(!ui.solo.size){popup('msg',{t:'SOLO',b:'PICK PADS FIRST'},99999);return;}const H=ui.soloHold;
   ui.solo.forEach(p=>{const P=cur.parts[p];if(!(p in H.oct))H.oct[p]=P.oct;P.oct=clamp(P.oct+dir,-5,5);});padLabels(true);
   popup('msg',{t:'SOLO · OCTAVE',b:[...ui.solo].map(p=>pad2(p+1)+(cur.parts[p].oct>0?'+':'')+cur.parts[p].oct).join(' ').slice(0,20),s:'RELEASE SOLO = BACK'},99999);}
-/* Taste losgelassen (SOLO, OKT. SEND) */
+/* Taste losgelassen (SOLO, OCTAVE SEND) */
 function btnUp(d){
   if(d.id==='solo'&&ui.soloHold){const H=ui.soloHold;ui.soloHold=null;for(const p in H.oct)cur.parts[p].oct=H.oct[p];ui.solo.clear();evLog('solo',[]);padLabels(true);ui.popup=null;}
   if(d.id==='oktsend'&&ui.oktHold){const H=ui.oktHold;ui.oktHold=null;ui.popup=null;if(!H.used)oktToggle(ui.part);}}
@@ -355,7 +355,7 @@ function act(d){
     case 'inmon':(async()=>{if(!E.in){const ok=await inputOn();syncInBtn();if(!ok){popup('msg',{t:'AUDIO IN',b:'NO INPUT',s:'MICROPHONE PERMISSION NEEDED'},2600);return;}}G.inMon=!G.inMon;setLed(d,G.inMon);applyInput();popup('msg',{t:'AUDIO IN',b:G.inMon?'MONITOR ON':'MONITOR OFF',s:'LIMITER ACTIVE · NO CLIPPING'});})();break;
     case 'partprev':if(sh()){copyToggle();break;}   // SHIFT + <P = COPY (dann Pad = einfügen, auch in anderem Pattern)
     case 'partnext':setPart((ui.part+(id==='partnext'?1:PARTS.length-1))%PARTS.length);break;
-    /* ◁ ▷: Takt wählen. SHIFT = Länge. OKT SEND halten = Oktave der Send-Parts. SOLO halten = Oktave der Solo-Parts (nur solange gehalten) */
+    /* ◁ ▷: Takt wählen. SHIFT = Länge. OCTAVE SEND halten = Oktave der Send-Parts. SOLO halten = Oktave der Solo-Parts (nur solange gehalten) */
     case 'bardn':case 'barup':{const dir=id==='barup'?1:-1;
       if(CTRL.oktsend.down&&ui.oktHold){ui.oktHold.used=true;oktShift(dir);break;}
       if(CTRL.solo.down&&ui.soloHold){soloOct(dir);break;}
@@ -363,8 +363,8 @@ function act(d){
       pageMove(dir);break;}
     case 'bw':if(sh()){eqPresetNext();break;}ui.bw=!ui.bw;setLed(d,ui.bw);ui.eqBand=ui.eqBand??1;refreshKnobs();popup('eqedit',{},600000);break;
     case 'solo':if(sh()){ui.drop=!ui.drop;evLog('drop',ui.drop);popup('msg',{t:'DROP',b:ui.drop?'DROP!':'BACK IN',s:ui.drop?'ONLY KICK + TOK':'ALL PARTS PLAYING'});break;}
-      ui.soloHold={oct:{}};popup('msg',{t:'SOLO',b:'HOLD + PADS',s:'OKT -/+ = OCTAVE · RELEASE = END'},99999);break;
-    case 'oktsend':ui.oktHold={used:false};popup('msg',{t:'OKT. SEND',b:'HOLD + PADS / OKT -/+',s:'TAP = PART '+pad2(ui.part+1)+' ON/OFF'},99999);break;
+      ui.soloHold={oct:{}};popup('msg',{t:'SOLO',b:'HOLD + PADS',s:'OCTAVE -/+ · RELEASE = END'},99999);break;
+    case 'oktsend':ui.oktHold={used:false};popup('msg',{t:'OCTAVE SEND',b:'HOLD + PADS / OCTAVE -/+',s:'TAP = PART '+pad2(ui.part+1)+' ON/OFF'},99999);break;
     case 'rec':if(sh()){ui.resample=!ui.resample;setLed(d,ui.resample);popup('msg',{t:'RESAMPLING',b:ui.resample?'ARMED':'OFF',s:ui.resample?'NEXT BAR > NEW SAMPLE':'SHIFT + REC'});if(ui.resample&&!ui.playing)setPlaying(true);break;}
       ui.rec=!ui.rec;setLed(d,ui.rec);applyRouting();popup('msg',{t:'RECORD',b:ui.rec?'REC ARMED':'REC OFF',s:ui.rec?'PADS, KNOBS + MFX ONLY ON PART '+pad2(ui.part+1):''});break;
     case 'stop':if(sh()){panic();popup('msg',{t:'PANIC',b:'ALL NOTES OFF'},1000);}setPlaying(false);ui.paused=false;seq.step=0;ui.dispStep=0;break;
@@ -622,7 +622,7 @@ const MENU=[
     {k:'GLIDE',v:()=>valStr(CTRL.glide),adj:x=>{const P=P_();P.glide=clamp((P.glide||0)+x*.02);dirty();}},
     {k:'WAVE',v:()=>P_().osc?(pad3((P_().wave|0)+1)+' '+emxWaveName(P_())).slice(0,18):'- (SAMPLE)',adj:x=>{waveAdj(x);ui.popup=null;}},
     {k:'AMP EG',v:()=>P_().egOn?'ON (ADSR)':'OFF (GATE)',adj:()=>{const P=P_();P.egOn=!P.egOn;dirty();}},
-    {k:'OKT. SEND',v:()=>yes(P_().oktSend),adj:()=>{const P=P_();P.oktSend=!P.oktSend;dirty();setLed(CTRL.oktsend,P.oktSend);}},
+    {k:'OCTAVE SEND',v:()=>yes(P_().oktSend),adj:()=>{const P=P_();P.oktSend=!P.oktSend;dirty();setLed(CTRL.oktsend,P.oktSend);}},
     {k:'EQ PRESET',v:()=>EQ_PRESETS[P_().eqPre??0][0]+((P_().eqPre??-1)<0?' (EDIT)':''),adj:x=>{const P=P_();eqPreset(((P.eqPre??0)+x+EQ_PRESETS.length)%EQ_PRESETS.length);ui.popup=null;}},
     {k:'EQ DRIVE',v:()=>valStr(CTRL.eqD),adj:x=>{const P=P_();P.eqD=clamp((P.eqD||0)+x*.02);afterPartChange('eqD');}},
     {k:'HIGH CUT',v:()=>eqStr(P_(),'hc'),adj:x=>{const P=P_();P.hc=clamp(pget(P,'hc')+x*.01);delete P.eqPre;afterPartChange('hc');}},
