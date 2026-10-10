@@ -125,7 +125,7 @@ canvas.a{display:block}
     <li><b>SOLO</b> gedrückt halten + Pads = nur diese Parts (auch wenn gemutet). Dabei OKT −/+ = Oktave der Solo-Parts. Loslassen = alles wie vorher. <b>SHIFT + SOLO</b> = DROP.</li>
     <li><b>OKT. SEND</b> (im MIX-Block) tippen = aktueller Part an/aus, halten + Pads = mehrere Parts. <b>OKT. SEND halten + OKT −/+</b> (oder ◁ ▷) = Oktave aller Send-Parts runter/hoch. Parts mit CUTOFF 0, LEVEL 0 oder MUTE werden nicht gepitcht.</li></ul></div>
   <div><h2>Sound</h2><ul>
-    <li><b>SYNTH OSCILLATOR</b> 1:1 wie Korg EMX: <b>TYPE</b> wählt einen der 16 Typen (WAVEFORM, DUAL OSC, CHORD, UNISON, RING MOD, OSC SYNC, CROSS MOD, VPM, WS, ADDITIVE, COMB, FORMANT, NOISE, PCM+COMB, PCM+WS, AUDIO IN+COMB). Das <b>WAVE-Rad</b> (wie das zweite Rad der EMX) wählt die Welle bzw. Kombination im Typ, z. B. UNISON 3SAW … 6SIN, DUAL OSC SAW+SIN, VPM SAW … SIN, bei PCM-Typen das Sample. SHIFT = 10er-Schritte. Die Anzeige im blauen Block zeigt Typ + Welle. <b>OSC EDIT 1 + 2</b> = die zwei Parameter des Typs. SHIFT + OSC EDIT 1 = DRUCK.</li>
+    <li><b>SYNTH OSCILLATOR</b> 1:1 wie Korg EMX-1: 16 Typen mit zusammen <b>258 Oszillator-Kombinationen</b>. <b>TYPE</b> springt direkt zu einem Typ (WAVEFORM, DUAL OSC, CHORD, UNISON, RING MOD, OSC SYNC, CROSS MOD, VPM, WS, ADDITIVE, COMB, FORMANT, NOISE, PCM+COMB, PCM+WS, AUDIO IN+COMB). Das <b>WAVE-Rad</b> dreht am Stück durch alle 258 und wechselt dabei von selbst in den nächsten Typ: SAW … SIN, DUAL OSC SAW+SAW … SIN+NS, UNISON 3SAW … 6SIN, VPM, ADDITIVE … bis zu den <b>76 PCM-Wellen der EMX</b> (PIANO, E.PIANO, CLAV, M1-ORGAN … STRINGS, GITARREN, BÄSSE, SYNSIN, DIGI, RAVEHIT1-6, Chord Sets, Drum Sets – nachgebaut, gleiche Namen und Reihenfolge wie im EMX-Handbuch). SHIFT = 10er-Schritte. Die blaue Anzeige zeigt Typ, Position (z. B. 165/258) und Welle, das 7"-Display die Liste davor/danach. <b>Chord Sets</b> (CH-…): die Oktave wählt den Akkord (Dur, Moll, Maj7, min7). <b>Drum Sets</b> (DR-…): jeder Ton ist ein anderer Drum-Sound. <b>OSC EDIT 1 + 2</b> = die zwei Parameter des Typs. SHIFT + OSC EDIT 1 = DRUCK.</li>
     <li><b>Silberne Regler</b> = Spiel-Regler (CUTOFF, RESONANCE, EG INT, ADSR, PITCH, OSC EDIT, SPEED, DEPTH, LEVEL, PAN, IFX EDIT). <b>Dunkle Regler</b> = Auswahl (TYPE, SAMPLE, EQ, Röhre).</li>
     <li><b>SAMPLE</b>-Regler (der zuletzt gedrehte von SAMPLE/TYPE spielt), <b>PITCH</b> (SHIFT = GLIDE), <b>START POINT</b> = Sample-Start.</li>
     <li><b>AMP EG · ADSR</b>: ATTACK, DECAY, SUST., RELEASE = X-Achse (Zeit), <b>mit SHIFT = Y-Achse</b>: Attack-Pegel, Decay-Pegel, Sustain-Pegel, Release-Kurve. SUST. ohne SHIFT = Zeit vom Decay- zum Sustain-Pegel. Drehen öffnet <b>EG EDIT</b> im Display (9 Punkte zum Ziehen inkl. Delay, Hold, Kurven).</li>
@@ -189,7 +189,16 @@ const EMX=[null,
   {w:WCOMBO,e1:'MOD DEPTH',e2:'MOD PITCH',m2:'pm'},{w:WB,e1:'MOD DEPTH',e2:'MOD HARM',m2:'h'},{w:['TYPE1','TYPE2'],e1:'WAVSHAPE',e2:'OSC2 PTCH',m2:'pm'},
   {w:WB,e1:'OSC2 HARM',e2:'OSC3 HARM',m2:'h',m1:'h'},{w:['SAW','SQU','TRI','SIN','NOISE'],e1:'FEEDBACK',e2:'COMB PTCH',m2:'u'},{w:['---'],e1:'FORMANT',e2:'OFFSET',m2:'pm'},
   {w:['---'],e1:'RATE',e2:'COLOR',m2:'pm'},{w:null,e1:'FEEDBACK',e2:'COMB PTCH',m2:'u'},{w:null,e1:'WAVSHAPE',e2:'CHARACTR',m2:'u'},{w:['AUDIO IN'],e1:'FEEDBACK',e2:'COMB PTCH',m2:'u'}];
-const emxWaves=t=>EMX[t]?(EMX[t].w||SRC.slice(1).map(s=>s.n)):['-'];
+/* EMX-1 Synth PCM List (Owner's Manual S. 40): die 76 Wellen der PCM-Typen. 66-72 = Chord Sets, 73-76 = Drum Sets. Klänge nachgebaut (b.js PCM_GEN) */
+const EMXPCM=['PIANO','E.PIANO','CLAV','M1-ORGAN','ORGAN','MARIMBA','VIBE','CYMBELL','FLUTE','ALTOSAX','M1-T.SAX','TRUMPET','MUTETP','BRASSENS','VOICEAH','M1-CHOIR',
+  'VOICEWAV','VIOLIN','STRINGS','PIZZICAT','F.GUITAR','A.GUITAR','MUTEGTR','FUNKGTR','SITAR','A.BASS','E.BASS','M1-BASS','PICKBASS','SLAPBASS','FMBASS','88BASS',
+  'BOOSTSAW','SAWSQMIX','HPFSAW','OCTBASS1','OCTBASS2','SAW5TH','SQU5TH','SYNSIN1','SYNSIN2','SYNSIN3','SYNSIN4','SYNSIN5','SYNWIRE1','SYNWIRE2','DIGI1','DIGI2','DIGI3','DIGI4',
+  'SYNVOX1','SYNVOX2','ENDLESS','SYN-FX1','SYN-FX2','ORCHHIT','BANDHIT1','BANDHIT2','DISCOHIT','RAVEHIT1','RAVEHIT2','RAVEHIT3','RAVEHIT4','RAVEHIT5','RAVEHIT6',
+  'CH-PIANO','CH-M1PIA','CH-EPIAN','CH-ORGAN','CH-STRGS','CH-GTR1','CH-GTR2','DR-BDS','DR-SDS','DR-CYMTM','DR-PERCS'];
+const emxWaves=t=>EMX[t]?(EMX[t].w||EMXPCM):['-'];
+/* Alle Oszillator-Kombinationen der EMX am Stück (Typ 1-16, darin die Wellen) = 258 wie bei der EMX-1. Das WAVE-Rad läuft da durch */
+const EMX_ALL=[];for(let t=1;t<EMX.length;t++)emxWaves(t).forEach((_,w)=>EMX_ALL.push([t,w]));
+const emxIdx=(t,w)=>{let g=0;for(let k=1;k<t;k++)g+=emxWaves(k).length;return g+clamp(w|0,0,emxWaves(t).length-1);};
 /* Rev 1.2 hatte 88 eigene Oszillatoren. Namen nur noch für die Umrechnung alter Patterns (Migration ver<1.3) */
 const OLD_OSCS=['OFF','SAW','DUAL SAW','SUPERSAW','HYPER SAW','HOOVER','REESE','SQUARE','PULSE','PWM','SUPERSQUARE','CHIP 8-BIT','TRIANGLE','SINE','SUB SINE','KICK','PIEP',
   'FM','FM BELL','FM METAL','SYNC','RING','ORGAN','STAB','PLUCK','ACID','FORMANT','VOX','DIGITAL','WAVE MORPH','NOISE','NOISE PINK',

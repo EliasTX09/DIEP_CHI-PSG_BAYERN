@@ -81,10 +81,12 @@ function patternFromObj(o,n){const P=blankPattern(n),ver=parseFloat(o.tx16)||0;i
   /* Rev 2.0 (Plan 10.10.): SYNTH OSCILLATOR = Korg EMX, alte 88 OSCs auf den ähnlichsten EMX-Typ umrechnen. Stretch-Länge jetzt in Steps, EG TIME eigener Regler */
   if(ver<1.3)o.parts.forEach(p=>{const nm=OLD_OSCS[p.osc|0];if(p.osc>0&&nm){const m=OSC_MAP[nm]||[1,0,0,.5];p.osc=m[0];p.wave=m[1];p.edit=m[2];p.edit2=m[3];}else p.osc=0;
     p.lenSt=((p.len??3)+1)*16;p.mEgT=p.speed??.45;});
+  /* Rev 2.2: PCM OSC+COMB / PCM OSC+WS haben jetzt die 76 EMX-PCM-Wellen. Vorher war dort ein TX-Sample gewählt -> der Part spielt dieses Sample direkt */
+  if(ver<1.4)o.parts.forEach(p=>{if(p.osc===14||p.osc===15){p.src=(p.wave|0)+1;p.osc=0;p.wave=0;}});
   P.parts=o.parts.map(fixPart);while(P.parts.length<PARTS.length)P.parts.push(newPart(P.parts.length));
   ARR.forEach(k=>{if(o[k])P[k]=o[k].map(a=>ARRT[k].from(a));});P.motion=o.motion||P.motion;while(P.motion.length<PARTS.length)P.motion.push({});
   PATKEYS.forEach(k=>{if(o[k]!==undefined)P[k]=o[k];});return P;}
-function patternToObj(){const o={tx16:'1.3',parts:cur.parts,motion:cur.motion};PATKEYS.forEach(k=>o[k]=cur[k]);ARR.forEach(k=>o[k]=cur[k].map(a=>Array.from(a)));return o;}
+function patternToObj(){const o={tx16:'1.4',parts:cur.parts,motion:cur.motion};PATKEYS.forEach(k=>o[k]=cur[k]);ARR.forEach(k=>o[k]=cur[k].map(a=>Array.from(a)));return o;}
 function loadPattern(n){
   try{const raw=localStorage.getItem('tx16.v6.pat.'+n);if(raw)return patternFromObj(JSON.parse(raw),n);}catch(e){}
   return genPattern(n);
@@ -528,6 +530,151 @@ async function renderLibrary(){
   SRC.forEach(s=>{if(s.buf&&!s.loop)s.f0=detectF0(s.buf);});
 }
 
+/* ---------- EMX-1 SYNTH PCM: die 76 Wellen der PCM-Typen (PCM OSC+COMB, PCM OSC+WS) ----------
+   Namen + Reihenfolge wie die Synth PCM List im EMX-1-Handbuch (S. 40). Die Klänge sind hier nachgebaut, es sind keine Korg-Samples.
+   Tonale Wellen stehen auf A3 = 220 Hz wie die übrigen Samples. Gehaltene Klänge haben eine Schleife (Übergang überblendet), Anschläge nicht.
+   66-72 Chord Sets: die Oktave wählt den Akkord (A3-Oktave C3-H3 = Dur, C4-H4 = Moll, C5-H5 = Maj7, sonst min7; Gitarren Dur/Moll/sus4/7).
+   73-76 Drum Sets: der Ton wählt den Drum-Sound (A3 = erster). Gerechnet wird erst, wenn eine Welle gebraucht wird, in kleinen Häppchen,
+   damit Sequencer und Oberfläche nicht stocken. Danach bleibt sie im Speicher. */
+const PF=220,PCM=[],pcmJobs=new Map();
+const CH4=[[0,4,7,12],[0,3,7,12],[0,4,7,11],[0,3,7,10]],CHG=[[0,7,12,16,19,24],[0,7,12,15,19,24],[0,7,12,17,19,24],[0,7,10,16,19,24]];
+const PCM_DRUMS=[['KICK HARD','KICK TOK','KICK LONG','KICK PIEP','KICK PIEP HI','KICK DIST','KICK GABBER','KICK 909','KICK BOOM','KICK SHORT','KICK ZAPP','KICK TEKK 2'],
+  ['SNARE','SNARE TEKK','CLAP TEKK','CLAP 909','CLAP BIG','RIM','RIM 808'],['HAT 909 C','HAT 909 O','HAT 808 C','HAT 808 O','RIDE','CRASH','REVERSE CRASH','TOM LOW','TOM HIGH'],
+  ['PERC','TOK','CONGA','COWBELL','CLAVE','SHAKER','TAMBOURINE']];
+const st2=s=>Math.pow(2,s/12),ct2=c=>Math.pow(2,c/1200),nz=()=>Math.random()*2-1,envAD=(t,a,dec)=>t<a?t/a:(dec?Math.exp(-(t-a)/dec):1);
+/* Bausteine: Oszillator mit PolyBLEP (kein Aliasing-Kratzen), Zustandsvariablen-Filter */
+const pblep=(t,dt)=>{if(t<dt){t/=dt;return t+t-t*t-1;}if(t>1-dt){t=(t-1)/dt;return t*t+t+t+1;}return 0;};
+function pOsc(R){let p=Math.random();return{
+  saw(f){const dt=f/R,v=2*p-1-pblep(p,dt);p+=dt;if(p>=1)p-=1;return v;},
+  sq(f,w=.5){const dt=f/R,v=(p<w?1:-1)+pblep(p,dt)-pblep((p-w+1)%1,dt);p+=dt;if(p>=1)p-=1;return v;},
+  sin(f){const v=Math.sin(TAU*p);p+=f/R;if(p>=1)p-=1;return v;}};}
+function pSVF(R){let a=0,b=0;const o={lp:0,bp:0,hp:0,run(x,fc,q){const g=Math.tan(Math.PI*Math.min(fc,R*.45)/R),k=1/q,a1=1/(1+g*(g+k)),a2=g*a1,a3=g*a2,v3=x-b,v1=a1*a+a2*v3,v2=b+a2*a+a3*v3;
+  a=2*v1-a;b=2*v2-b;o.lp=v2;o.bp=v1;o.hp=x-k*v1-v2;return v2;}};return o;}
+/* Additiv: Teiltöne [Verhältnis, Pegel, Ausklingzeit s (0 = gehalten)], ch = Akkord in Halbtönen, det = Schwebung (zweite Saite) */
+const gAdd=(parts,{att=.003,dec=0,ch=[0],det=0,hammer=0,hCut=2500,trem=0,tremR=5.5}={})=>(R)=>{
+  const ps=[];ch.forEach(s=>parts.forEach(([r,a,dc],k)=>{ps.push({f:PF*st2(s)*r,a,m:dc?Math.exp(-1/(R*dc)):1,e:1,o:pOsc(R)});if(det&&k<6)ps.push({f:PF*st2(s)*r*(1+det),a:a*.7,m:dc?Math.exp(-1/(R*dc)):1,e:1,o:pOsc(R)});}));
+  const sv=pSVF(R),g=1/ch.length;
+  return i=>{const t=i/R;let v=0;for(const p of ps){v+=p.a*p.e*p.o.sin(p.f);p.e*=p.m;}v*=g*envAD(t,att,dec);
+    if(trem)v*=1-trem*.5*(1-Math.cos(TAU*tremR*t));if(hammer&&t<.06)v+=hammer*Math.exp(-t/.006)*sv.run(nz(),hCut,.7);return v;};};
+/* FM: Modulator m1 (Index i0 -> i1 in it Sekunden), m2/j0/jt = kurzer Glockenanteil (E-Piano-Tine), lfo = Wackeln am Modulator */
+const gFM=({m1=1,i0=2,i1=.4,it=.4,m2=0,j0=0,jt=.03,att=.002,dec=1,ch=[0],lfo=0,lfoR=0}={})=>(R)=>{
+  const vs=ch.map(s=>({f:PF*st2(s),c:0,m:0,m2:0})),g=1/ch.length;
+  return i=>{const t=i/R,I=i1+(i0-i1)*Math.exp(-t/it),J=j0*Math.exp(-t/jt),lm=1+lfo*Math.sin(TAU*lfoR*t);let v=0;
+    for(const x of vs){v+=Math.sin(TAU*x.c+I*Math.sin(TAU*x.m)+J*Math.sin(TAU*x.m2));x.c=(x.c+x.f/R)%1;x.m=(x.m+x.f*m1*lm/R)%1;x.m2=(x.m2+x.f*m2/R)%1;}
+    return v*g*envAD(t,att,dec);};};
+/* Oszillator-Stapel + Filter: vs = [[Welle saw|sq|sin, Verhältnis, Cent, Pegel]]. cut0 -> cut in ct Sekunden, mode lp|bp, hp = Hochpass,
+   sat = Sättigung, scoop = Tonhöhe kommt von +/- Cent (Zeit sct), noise = Anschlag-Rauschen */
+const gSyn=(vs,{att=.005,dec=0,cut=8000,cut0=0,ct=.1,q=.7,mode='lp',hp=0,sat=0,pw=.5,vib=0,vibR=5.5,vibD=.25,scoop=0,sct=.04,ch=[0],noise=0,nDec=.03,nCut=3000}={})=>(R)=>{
+  const os=[];ch.forEach(s=>vs.forEach(([ty,r,c,a])=>os.push({ty,f:PF*st2(s)*r*ct2(c),a,o:pOsc(R)})));
+  const f1=pSVF(R),f2=pSVF(R),f3=pSVF(R),g=1/Math.sqrt(ch.length);
+  return i=>{const t=i/R,pm=(vib&&t>vibD?1+vib*Math.sin(TAU*vibR*(t-vibD)):1)*(scoop?ct2(scoop*Math.exp(-t/sct)):1);let v=0;
+    for(const x of os){const ff=x.f*pm;v+=x.a*(x.ty==='saw'?x.o.saw(ff):x.ty==='sq'?x.o.sq(ff,pw):x.o.sin(ff));}
+    v*=g;if(noise)v+=noise*Math.exp(-t/nDec)*f3.run(nz(),nCut,.8);
+    f1.run(v,cut0?cut+(cut0-cut)*Math.exp(-t/ct):cut,q);v=mode==='bp'?f1.bp:f1.lp;if(hp){f2.run(v,hp,.7);v=f2.hp;}
+    if(sat)v=Math.tanh(v*sat);return v*envAD(t,att,dec);};};
+/* Gezupfte Saite (Karplus-Strong): dec = Ausklingzeit, br = Helligkeit 0..1, pk = Anschlagpunkt, buzz = Sitar-Schnarren,
+   ch = Akkord (gestrummt, strum = Abstand), body = Korpus-Resonanz, pop = Slap-Knacken */
+const gPluck=({dec=1.5,br=.6,pk=.15,buzz=0,ch=[0],strum=.012,body=.25,pop=0}={})=>(R,n)=>{
+  const vs=ch.map((s,k)=>{const f=PF*st2(s),L=R/f,sm=.5-br*.42,E=Math.ceil(L),ex=new Float32Array(E);let lp=0;
+    for(let j=0;j<E;j++){lp+=(nz()-lp)*(.12+br*.88);ex[j]=lp;}const pS=Math.max(1,Math.round(pk*L));for(let j=E-1;j>=pS;j--)ex[j]-=ex[j-pS];
+    return{st:Math.round(k*strum*R),D:L-sm,y:new Float32Array(n),ex,E,sm,g:Math.pow(.001,1/(f*dec))};});
+  const b1=pSVF(R),b2=pSVF(R),g=1/Math.sqrt(ch.length);
+  return i=>{let v=0;for(const x of vs){const j=i-x.st;if(j<0)continue;let s=j<x.E?x.ex[j]:0;const p=j-x.D*(buzz?1-buzz*Math.min(1,Math.abs(x.y[j-1]||0)):1);
+      if(p>=1){const q=Math.floor(p),fr=p-q,a0=x.y[q]+(x.y[q+1]-x.y[q])*fr,a1=x.y[q-1]+(x.y[q]-x.y[q-1])*fr;s+=x.g*((1-x.sm)*a0+x.sm*a1);}x.y[j]=s;v+=s;}
+    v*=g;if(body){b1.run(v,240,1.4);b2.run(v,480,1.8);v+=body*(b1.bp+.6*b2.bp);}if(pop&&i<R*.02)v+=pop*Math.exp(-i/R/.002)*nz();return v;};};
+/* Formanten (Stimme, Saxofon, Geige …): Sägezahn/Puls durch parallele Bandpässe [Hz, Güte, Pegel]; morph = Ziel-Formanten nach mt Sekunden */
+const gVox=(forms,{att=.06,dec=0,vib=.005,vibR=5.2,vibD=.25,br=.03,voices=[0],src='saw',pw=.5,morph=null,mt=.6,scoop=0,ch=[0]}={})=>(R)=>{
+  const os=[];ch.forEach(s=>voices.forEach(c=>os.push({f:PF*st2(s)*ct2(c),o:pOsc(R)})));const fl=forms.map(()=>pSVF(R)),g=1/os.length;
+  return i=>{const t=i/R,pm=(vib&&t>vibD?1+vib*Math.sin(TAU*vibR*(t-vibD)):1)*(scoop?ct2(scoop*Math.exp(-t/.05)):1);let x=0;
+    for(const u of os)x+=src==='saw'?u.o.saw(u.f*pm):u.o.sq(u.f*pm,pw);x=x*g+br*nz();let v=0;
+    forms.forEach(([ff,q,a],k)=>{fl[k].run(x,morph?ff+(morph[k]-ff)*Math.min(1,t/mt):ff,q);v+=a*fl[k].bp;});return v*envAD(t,att,dec);};};
+const gFlute=()=>(R)=>{const o1=pOsc(R),o2=pOsc(R),o3=pOsc(R),bn=pSVF(R);return i=>{const t=i/R,pm=t>.3?1+.005*Math.sin(TAU*5*(t-.3)):1;
+  bn.run(nz(),2600,1.2);return(o1.sin(PF*pm)+.22*o2.sin(2*PF*pm)+.07*o3.sin(3*PF*pm)+.16*bn.bp*(1+.6*Math.exp(-t/.06)))*(t<.08?t/.08:1);};};
+/* Endless: Shepard-Ton, steigt endlos (eine Oktave pro 2 s) */
+const gEndless=()=>(R)=>{const K=9,ph=new Float64Array(K);return i=>{const t=i/R;let v=0;for(let k=0;k<K;k++){const x=(k+t/2)%K;ph[k]=(ph[k]+27.5*Math.pow(2,x)/R)%1;v+=Math.exp(-Math.pow((x-K/2)/(K/5),2))*Math.sin(TAU*ph[k]);}return v;};};
+/* Syn-FX2: Rauschen durch wandernden Resonanzfilter (Wind) */
+const gWind=()=>(R)=>{const f=pSVF(R),f2=pSVF(R);return i=>{const t=i/R,fc=900*Math.pow(2,1.6*Math.sin(TAU*.5*t)),x=nz();f.run(x,fc,8);f2.run(x,fc*2.03,10);return f.bp+.5*f2.bp;};};
+const PIANO=Array.from({length:12},(_,k)=>{const n=k+1;return[n*Math.sqrt(1+.0004*n*n),(n===1?1:1.25)/Math.pow(n,1.15),1.9/(1+.42*k)];}),
+  M1PIANO=Array.from({length:12},(_,k)=>{const n=k+1;return[n*Math.sqrt(1+.0003*n*n),1/Math.pow(n,.9),1.4/(1+.35*k)];}),
+  M1ORG=[[.5,.45,0],[1,1,0],[1.5,.3,0],[2,.55,0],[2,.3,.12],[3,.3,0],[3,.25,.08],[4,.32,0],[6,.12,0],[8,.08,0]],
+  HORG=[[.5,.8,0],[1,1,0],[1.5,.8,0],[2,.55,0],[3,.4,0],[3,.35,.15],[4,.3,0],[5,.15,0],[6,.15,0],[8,.12,0]],
+  STR=[['saw',1,-12,.4],['saw',1,-5,.4],['saw',1,0,.4],['saw',1,6,.4],['saw',1,12,.4]];
+/* Einträge: sec = Länge, mk = Generator, ls/le = Schleife (s), xf = Überblendung; chord 1 = Akkord-Set, chord 2 = Gitarren-Set; drum = Drum-Set */
+const ONE=(sec,mk)=>({sec,mk}),SUS=(sec,mk,ls,le,xf=.12)=>({sec,mk,ls,le,xf}),PER=(mk)=>({sec:1.2,mk,ls:.4,le:.9,xf:.02});   // PER = periodische Welle, Schleife 0,5 s (ganze Perioden)
+const EP=ch=>gFM({m1:1,i0:1.7,i1:.25,it:.45,m2:14,j0:1.1,jt:.018,dec:1.25,ch});
+const PCM_GEN=[
+  ONE(2.2,gAdd(PIANO,{det:.0009,hammer:.35})),ONE(2.2,EP([0])),ONE(1.4,gPluck({dec:.7,br:.95,pk:.07,body:0})),
+  SUS(1.4,gAdd(M1ORG,{hammer:.12,hCut:4000}),.5,1,.02),SUS(1.4,gAdd(HORG,{hammer:.18,hCut:5000}),.5,1,.02),
+  ONE(1.3,gAdd([[1,1,.45],[3.93,.38,.11],[9.2,.12,.035]],{att:.001,hammer:.15,hCut:2000})),
+  ONE(2.4,gAdd([[1,1,1.7],[4,.32,.45],[10,.08,.12]],{att:.001,trem:.4,tremR:5.6,hammer:.08})),
+  ONE(2.4,gAdd([[.56,.5,1.5],[.92,.45,1.1],[1,1,1.9],[1.19,.4,.9],[1.71,.35,.7],[2,.3,.8],[2.74,.25,.5],[3,.22,.4],[3.76,.15,.3],[4.07,.15,.25]],{att:.001})),
+  SUS(1.8,gFlute(),.7,1.7),
+  SUS(1.8,gVox([[520,4,1],[1450,5,.7],[2600,6,.35]],{src:'sq',pw:.42,br:.04,vib:.004,scoop:-35,att:.05}),.7,1.7),
+  SUS(1.8,gVox([[430,4,1],[1200,5,.65],[2350,6,.3]],{br:.06,vib:.0045,vibR:5,scoop:-50,att:.05}),.7,1.7),
+  SUS(1.8,gSyn([['saw',1,0,1]],{att:.03,cut:3200,cut0:500,ct:.05,q:1.3,vib:.004,vibD:.4,scoop:-45}),.7,1.7),
+  SUS(1.8,gSyn([['saw',1,0,1]],{att:.03,mode:'bp',cut:1800,cut0:900,ct:.05,q:2.5,hp:500,vib:.004,vibD:.4,scoop:-30}),.7,1.7),
+  SUS(1.8,gSyn([['saw',1,-9,.6],['saw',1,0,.6],['saw',1,9,.6],['saw',.5,4,.3]],{att:.05,cut:2800,cut0:600,ct:.08,q:.9,scoop:-25}),.7,1.7),
+  SUS(1.8,gVox([[730,8,1],[1090,9,.5],[2440,12,.25]],{vib:.006,att:.1}),.7,1.7),
+  SUS(2,gVox([[600,7,1],[1000,8,.45],[2600,10,.2]],{voices:[-11,-4,4,11],br:.02,att:.18,vib:.004}),.8,1.9,.15),
+  SUS(1.9,gVox([[730,8,1],[1090,9,.5],[2440,12,.25]],{morph:[570,840,2410],mt:.6,vib:.005}),.8,1.8),
+  SUS(1.8,gVox([[280,2,.8],[1000,2.5,1],[2600,3,.5]],{vib:.007,vibR:5.8,vibD:.15,att:.08,br:.01}),.7,1.7),
+  SUS(2,gSyn(STR,{att:.14,cut:3600,q:.6,vib:.003,vibR:5,vibD:.2}),.8,1.9,.15),
+  ONE(.8,gPluck({dec:.4,br:.45,pk:.22,body:.4})),ONE(2.2,gPluck({dec:2.2,br:.78,pk:.12,body:.3})),ONE(2,gPluck({dec:1.7,br:.45,pk:.2,body:.4})),
+  ONE(.5,gPluck({dec:.13,br:.38,pk:.15,body:.3})),ONE(.8,gPluck({dec:.35,br:.92,pk:.07,body:.15})),ONE(2.4,gPluck({dec:2.6,br:.82,pk:.1,buzz:.35,body:.2})),
+  ONE(1.6,gPluck({dec:1.3,br:.28,pk:.25,body:.5})),ONE(1.8,gPluck({dec:1.6,br:.5,pk:.2,body:.1})),ONE(1.6,gPluck({dec:1.4,br:.62,pk:.16,body:.15,pop:.15})),
+  ONE(1.6,gPluck({dec:1.3,br:.85,pk:.1,body:.1,pop:.25})),ONE(1.4,gPluck({dec:1,br:1,pk:.05,body:.1,pop:.6})),
+  ONE(1.2,gFM({m1:1,i0:3.2,i1:.5,it:.12,dec:.75})),ONE(1.2,gSyn([['sq',1,0,.7],['sin',.5,0,.6]],{att:.002,dec:.55,cut:500,cut0:3500,ct:.07,q:1.6})),
+  PER(gSyn([['saw',1,0,1],['sin',1,0,.6]],{sat:2.2,cut:9000})),PER(gSyn([['saw',1,0,.6],['sq',2,0,.4]],{cut:9000})),PER(gSyn([['saw',1,0,1]],{cut:12000,hp:1400})),
+  PER(gSyn([['saw',1,0,.7],['saw',.5,0,.7]],{cut:3500})),PER(gSyn([['sq',1,0,.6],['sq',.5,0,.6]],{cut:2600})),
+  PER(gSyn([['saw',1,0,.7],['saw',1.5,0,.55]],{cut:8000})),PER(gSyn([['sq',1,0,.6],['sq',1.5,0,.5]],{cut:7000})),
+  PER(gSyn([['sin',1,0,1]])),PER(gSyn([['sin',1,0,1],['sin',2,0,.4]])),PER(gSyn([['sin',1,0,1],['sin',3,0,.35],['sin',5,0,.12]])),
+  PER(gSyn([['sin',1,0,1],['sin',1.5,0,.5],['sin',2,0,.25]])),PER(gSyn([['sin',1,0,1]],{sat:3})),
+  PER(gSyn([['sq',1,0,1]],{pw:.08,cut:10000})),PER(gSyn([['sq',1,0,.7],['saw',3,0,.25]],{pw:.16,cut:6000,q:2.2})),
+  PER(gFM({m1:2,i0:2.4,i1:2.4,dec:0})),PER(gFM({m1:3,i0:1.7,i1:1.7,dec:0})),PER(gFM({m1:.5,i0:3.4,i1:3.4,dec:0})),PER(gFM({m1:4,i0:1.2,i1:1.2,m2:7,j0:.6,jt:1e9,dec:0})),
+  SUS(1.8,gVox([[300,10,1],[870,10,.4],[2240,12,.2]],{voices:[-7,7],vib:0,br:.01,att:.1}),.7,1.7),
+  SUS(1.8,gVox([[270,10,1],[2290,12,.6],[3010,12,.3]],{voices:[-7,7],vib:0,br:.01,att:.1}),.7,1.7),
+  SUS(2.5,gEndless(),.4,2.4,.2),SUS(2.2,gFM({m1:1.41,i0:4,i1:4,dec:0,lfo:.08,lfoR:2.5}),.6,2.2,.1),SUS(2.6,gWind(),.5,2.5,.2),
+  ONE(1.2,gSyn([['saw',1,-8,.5],['saw',1,8,.5],['sq',.5,0,.3]],{ch:[0,4,7,12,16],att:.002,dec:.28,cut:5000,cut0:9000,ct:.1,noise:.5,nCut:2000})),
+  ONE(1,gSyn([['saw',1,-7,.5],['saw',1,7,.5]],{ch:[0,4,7,12],att:.008,dec:.3,cut:3500,cut0:800,ct:.03,q:1,noise:.4,nDec:.05,nCut:5000})),
+  ONE(1,gSyn([['saw',1,-7,.5],['saw',1,7,.5]],{ch:[0,3,7,10,12],att:.008,dec:.3,cut:4000,cut0:900,ct:.03,q:1,noise:.35,nDec:.05,nCut:5000})),
+  ONE(1.4,gSyn([['saw',1,-10,.4],['saw',1,0,.4],['saw',1,10,.4]],{ch:[0,7,12,16,24],att:.004,dec:.45,cut:6000,noise:.2,nDec:.02})),
+  ONE(1,gSyn([['saw',1,-15,.5],['saw',1,15,.5]],{ch:[0,3,7,12],att:.002,dec:.3,cut:5000,sat:1.8})),
+  ONE(1.2,gSyn([['saw',1,-25,.5],['saw',1,0,.5],['saw',1,25,.5],['saw',.5,0,.4]],{ch:[0,12],att:.003,dec:.45,cut:4000,scoop:-300,sct:.06,sat:1.5})),
+  ONE(1,gAdd(M1ORG,{ch:[0,3,7,12],dec:.3,hammer:.2})),ONE(1.6,gAdd(M1PIANO,{ch:[0,4,7,11],det:.0012,hammer:.4})),
+  ONE(1,gSyn([['sq',1,-6,.5],['sq',1,6,.5]],{ch:[0,5,7,12],att:.002,dec:.28,cut:500,cut0:7000,ct:.07,q:4})),
+  ONE(.9,gSyn([['saw',1,-12,.5],['saw',1,12,.5]],{ch:[0,7,12],att:.001,dec:.2,cut:7000,scoop:900,sct:.05,noise:.6,nDec:.02,nCut:8000})),
+  {sec:2.2,chord:1,mk:ch=>gAdd(PIANO,{ch,det:.0009,hammer:.35})},{sec:2,chord:1,mk:ch=>gAdd(M1PIANO,{ch,det:.0012,hammer:.4})},{sec:2.2,chord:1,mk:EP},
+  {sec:1.4,chord:1,mk:ch=>gAdd(HORG,{ch,hammer:.18,hCut:5000}),ls:.5,le:1,xf:.02},{sec:2,chord:1,mk:ch=>gSyn(STR,{ch,att:.14,cut:3600,q:.6,vib:.003,vibR:5,vibD:.2}),ls:.8,le:1.9,xf:.15},
+  {sec:2.2,chord:2,mk:ch=>gPluck({ch,dec:2,br:.75,pk:.12,body:.3,strum:.014})},{sec:.8,chord:2,mk:ch=>gPluck({ch,dec:.25,br:.85,pk:.08,body:.15,strum:.008})},
+  {drum:0},{drum:1},{drum:2},{drum:3}];
+/* rechnet eine Welle in Häppchen (max. ~6 ms am Stück), entfernt Gleichanteil, gleicht die Lautheit an (RMS der ersten 0,4 s,
+   Spitzen weich begrenzt – sonst wären gezupfte Wellen viel leiser als Orgeln), blendet Anschläge am Ende aus */
+async function pRender(sec,mk,oneShot){const R=ctx.sampleRate,n=Math.ceil(sec*R),d=new Float32Array(n),step=mk(R,n);let i=0;
+  while(i<n){const t0=performance.now();while(i<n&&performance.now()-t0<6){const e=Math.min(n,i+512);for(;i<e;i++)d[i]=step(i);}if(i<n)await new Promise(r=>setTimeout(r,0));}
+  let x1=0,y1=0,ss=0,pk=1e-9;const wN=Math.min(n,Math.round(.4*R));for(let k=0;k<n;k++){const y=d[k]-x1+.9995*y1;x1=d[k];y1=y;d[k]=y;if(k<wN)ss+=y*y;pk=Math.max(pk,Math.abs(y));}
+  const g=Math.min(.28/(Math.sqrt(ss/wN)+1e-9),2/pk),fo=oneShot?Math.round(.02*R):0;   // Ziel ca. -11 dBFS RMS wie die Synth-Typen
+  for(let k=0;k<n;k++){let v=d[k]*g;const a=Math.abs(v);if(a>.8)v=Math.sign(v)*(.8+.2*Math.tanh((a-.8)/.2));d[k]=v*(k>=n-fo?(n-k)/fo:1);}
+  const b=ctx.createBuffer(1,n,R);b.copyToChannel(d,0);return b;}
+/* Schleife ohne Knacken: das Ende der Schleife wird in den Bereich vor dem Schleifenstart überblendet */
+function bakeLoop(b,ls,le,xf){const R=b.sampleRate,d=b.getChannelData(0),s=Math.round(ls*R),e=Math.min(d.length,Math.round(le*R)),X=Math.min(Math.round(xf*R),s,e-s);
+  for(let i=0;i<X;i++){const a=i/X,j=e-X+i;d[j]=d[j]*(1-a)+d[s-X+i]*a;}}
+async function pcmMake(k){const Gn=PCM_GEN[k];let r;if(Gn.drum!=null)return{drum:PCM_DRUMS[Gn.drum].map(srcIdx).filter(x=>x>0)};
+  if(Gn.chord){const bufs=[];for(const c of(Gn.chord===2?CHG:CH4))bufs.push(await pRender(Gn.sec,Gn.mk(c),!Gn.ls));r={bufs};}else r={buf:await pRender(Gn.sec,Gn.mk,!Gn.ls)};
+  if(Gn.ls){(r.bufs||[r.buf]).forEach(b=>bakeLoop(b,Gn.ls,Gn.le,Gn.xf));r.ls=Gn.ls;r.le=Gn.le;}return r;}
+/* Warteschlange: immer nur eine Welle gleichzeitig rechnen, die zuletzt gewünschte zuerst. Beim schnellen Durchdrehen
+   werden nur die letzten 6 behalten, nicht alles, woran man vorbeigedreht hat */
+const pcmWant=[];let pcmBusy=false;
+function emxPcmLoad(k){k|=0;if(!ctx||k<0||k>=PCM_GEN.length||PCM[k]||pcmJobs.has(k))return;const i=pcmWant.indexOf(k);if(i>=0)pcmWant.splice(i,1);pcmWant.push(k);
+  if(pcmWant.length>6)pcmWant.shift();if(!pcmBusy)pcmRun();}
+async function pcmRun(){pcmBusy=true;while(pcmWant.length){const k=pcmWant.pop();if(PCM[k])continue;pcmJobs.set(k,1);
+    try{PCM[k]=await pcmMake(k);}catch(e){console.warn('EMX PCM',k,e);}pcmJobs.delete(k);}pcmBusy=false;}
+/* PCM-Wellen, die das Pattern benutzt, schon vorher rechnen (sonst bleibt der erste Ton stumm) */
+function pcmPreload(){if(!cur)return;cur.parts.forEach(P=>{if(P.osc===14||P.osc===15)emxPcmLoad(P.wave|0);});}
+/* Puffer + Tonhöhe für einen Ton: Chord Sets wählen den Akkord nach Oktave, Drum Sets den Sound nach Ton */
+function emxPcmVoice(k,freq){const Q=PCM[k];if(!Q){emxPcmLoad(k);return null;}const note=Math.round(69+12*Math.log2(freq/440));
+  if(Q.drum){if(!Q.drum.length)return null;const S=SRC[Q.drum[((note-57)%Q.drum.length+Q.drum.length)%Q.drum.length]];return S&&S.buf?{buf:S.buf,rate:1}:null;}
+  return{buf:Q.bufs?Q.bufs[Math.floor((((note%48)+48)%48)/12)]:Q.buf,rate:freq/PF,ls:Q.ls,le:Q.le};}
+
 /* ---------- Time-Stretch (WSOLA) ---------- */
 function wsola(chs,alpha){
   const N=2048,Hs=N>>1,tol=512,inLen=chs[0].length,outLen=Math.ceil(inLen*alpha),win=new Float32Array(N);
@@ -627,8 +774,9 @@ function emxOsc(P,t,freq,gr,out,srcs){
       emxWave('SAW',0,freq,gr,s,.8,srcs);[0,1].forEach(k=>{const bp=biqN('bandpass',(A[k]+(B[k]-A[k])*fr)*sh,7+k*2),bg=gainN(k?.6:1);s.connect(bp);bp.connect(bg);bg.connect(sum);});sum.connect(out);break;}
     case 13:{const nz=ctx.createBufferSource(),c=(e2-.5)*2,lp=biqN('lowpass',freq,6),hp=biqN('highpass',freq,6),gl=gainN(clamp(.5-c/2)*2),gh=gainN(clamp(.5+c/2)*2);  // NOISE: EDIT1 = Rate, EDIT2 = Color
       nz.buffer=E.noise;nz.loop=true;nz.playbackRate.value=Math.pow(2,-e1*7);nz.connect(lp);nz.connect(hp);lp.connect(gl);hp.connect(gh);gl.connect(out);gh.connect(out);srcs.push({node:nz,kind:'noise'});break;}
-    case 14:case 15:{const S=SRC[(P.wave|0)+1];if(!S||!S.buf)break;const rate=freq/220,bs=ctx.createBufferSource(),s=gainN(.8);bs.buffer=S.buf;bs.playbackRate.value=rate;bs.loop=!!S.loop;  // PCM-Typen: WAVE = Sample
-      bs.connect(s);bs.start(t,Math.min(S.buf.duration*.95,(P.start||0)*S.buf.duration));srcs.push({node:bs,kind:'buf',base:rate,rate});
+    case 14:case 15:{const V=emxPcmVoice(P.wave|0,freq);if(!V)break;const rate=V.rate,bs=ctx.createBufferSource(),s=gainN(1);bs.buffer=V.buf;bs.playbackRate.value=rate;  // PCM-Typen: WAVE = EMX-PCM-Welle 1-76
+      let off=Math.min(V.buf.duration*.95,(P.start||0)*V.buf.duration);if(V.le){bs.loop=true;bs.loopStart=V.ls;bs.loopEnd=V.le;off=Math.min(off,V.ls);}
+      bs.connect(s);bs.start(t,off);srcs.push({node:bs,kind:'buf',base:rate,rate});
       if(T===14)emxComb(s,out,freq*emxU(e2),e1,.9);
       else{const sh=ctx.createWaveShaper(),d=Math.round(e1*16)/16,ch=Math.round(e2*8)/8,g=gainN(.85);sh.curve=ccurve('pw'+d+'|'+ch,x=>(1-ch)*Math.tanh(x*(1+d*8))+ch*Math.sin(x*(1+d*6)*Math.PI/2));sh.oversample='2x';s.connect(sh);sh.connect(g);g.connect(out);}
       break;}

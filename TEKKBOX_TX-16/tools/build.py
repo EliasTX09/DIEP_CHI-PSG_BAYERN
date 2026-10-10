@@ -13,7 +13,7 @@ PARTS = ['a.html', 'b.js', 'c.js', 'd.js']
 
 # Test-Hook: macht Engine und Zustand von außen erreichbar (nur in tools/test.html, nie in der App)
 HOOK = ("window.__tx={get cur(){return cur},get E(){return E},get ctx(){return ctx},get ui(){return ui},"
-        "trigger,voice,SRC,G,CTRL,FN,MENU,OSCS,FILTERS,MODS,GATEARPS,SCALES,IFXS,MFXS};\n")
+        "trigger,voice,SRC,G,CTRL,FN,MENU,OSCS,FILTERS,MODS,GATEARPS,SCALES,IFXS,MFXS,PCM,PCM_GEN,emxPcmLoad,EMX_ALL,EMXPCM,patternFromObj};\n")
 
 
 def build(test=False):

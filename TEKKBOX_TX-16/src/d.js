@@ -165,13 +165,15 @@ function eqLcd(x,y,first){const P=cur.parts[ui.part];
 
 /* SYNTH OSCILLATOR-Seite: TYPE, WAVE (VALUE), EDIT 1 + 2 wie auf der EMX */
 SCR.oscedit=function(g){const P=cur.parts[ui.part];hdr(g,'SYNTH OSCILLATOR · PART '+pad2(ui.part+1),null,'EMX');
-  if(!P.osc){L(g,'OSC OFF',LW/2,22,16,'center');L(g,'SAMPLE: '+(P.src?pad3(P.src)+' '+SRC[P.src].n:'---'),LW/2,48,8,'center');L(g,'TURN TYPE = OSCILLATOR',LW/2,66,8,'center');return;}
-  const W=emxWaves(P.osc),wi=clamp(P.wave|0,0,W.length-1);
-  g.fillRect(3,14,36,24);inv(g,()=>L(g,pad2(P.osc),21,18,16,'center'));L(g,OSCS[P.osc],44,16,16);
-  L(g,'WAVE',3,44);g.fillRect(36,42,LW-39,12);inv(g,()=>{L(g,pad3(wi+1)+' '+String(W[wi]).slice(0,22),40,44);L(g,(wi+1)+'/'+W.length,LW-6,44,8,'right');});
-  const e1=emxEditStr(P,1),e2=emxEditStr(P,2);L(g,'EDIT 1',3,60);L(g,e1,LW-3,60,8,'right');barG(g,3,69,LW-6,6,P.edit??0);
-  L(g,'EDIT 2',3,79);L(g,e2,LW-3,79,8,'right');barG(g,3,88,LW-6,6,P.edit2??.5);
-  L(g,'WAVE / VALUE · SHIFT = 10ER · EXIT',LW/2,104,8,'center');};
+  if(!P.osc){L(g,'OSC OFF',LW/2,22,16,'center');L(g,'SAMPLE: '+(P.src?pad3(P.src)+' '+SRC[P.src].n:'---'),LW/2,48,8,'center');L(g,'TYPE ODER WAVE DREHEN = OSZILLATOR',LW/2,66,8,'center');return;}
+  const gi=emxIdx(P.osc,P.wave),pcm=P.osc===14||P.osc===15;
+  g.fillRect(3,14,36,22);inv(g,()=>L(g,pad2(P.osc),21,17,16,'center'));L(g,OSCS[P.osc],44,15,16);
+  L(g,pad3(gi+1)+'/'+EMX_ALL.length+(pcm&&!PCM[P.wave|0]?' LOADING':''),LW-3,15,8,'right');
+  /* Liste wie beim Durchdrehen: 2 davor, die aktuelle, 2 danach – läuft über die Typgrenzen */
+  for(let r=-2;r<=2;r++){const k=gi+r;if(k<0||k>=EMX_ALL.length)continue;const[t,w]=EMX_ALL[k],y=62+r*10,a=pad3(w+1)+' '+String(emxWaves(t)[w]).slice(0,15),b=OSCS[t].slice(0,10);
+    if(r===0){g.fillRect(3,y-1,LW-6,10);inv(g,()=>{L(g,a,6,y);L(g,b,LW-6,y,8,'right');});}else{L(g,a,6,y);L(g,b,LW-6,y,8,'right');}}
+  L(g,'EDIT 1',3,92);L(g,emxEditStr(P,1),LW-3,92,8,'right');barG(g,3,101,LW-6,4,P.edit??0);
+  L(g,'EDIT 2',3,108);L(g,emxEditStr(P,2),LW-3,108,8,'right');barG(g,3,117,LW-6,4,P.edit2??.5);};
 
 /* Pad angeschlagen (Plan): Welle zeigen statt Sample-Name */
 const wavePeaks=new WeakMap();
@@ -307,7 +309,8 @@ txt('-4',BARLED_X(0),OCTLED_Z+.42,.12,'#5d606b');txt('+3',BARLED_X(7),OCTLED_Z+.
 at('bezel',OSCLCD.x,OSCLCD.z,OSCLCD.w+.3,OSCLCD.d+.3);const oscLcd=at('osclcd',OSCLCD.x,OSCLCD.z,OSCLCD.w,OSCLCD.d);oscLcd.setAttribute('aria-live','polite');
 oscLcd.innerHTML='<div class="l1"><b></b><i></i></div><div class="l2"><b></b><i></i></div>';const OL=[...oscLcd.querySelectorAll('b,i')];let oscLcdSig='';
 function oscLcdUpdate(){const P=cur.parts[ui.part],sig=ui.part+'|'+P.osc+'|'+P.wave+'|'+P.src;if(sig===oscLcdSig)return;oscLcdSig=sig;
-  const v=P.osc?['TYPE '+pad2(P.osc)+' '+OSCS[P.osc],'PART '+pad2(ui.part+1),pad3((P.wave|0)+1)+' '+String(emxWaveName(P)).slice(0,13),((P.wave|0)+1)+'/'+emxWaves(P.osc).length]
+  /* oben: Typ + Position in allen 258 (wie weit man gedreht hat), unten groß: Welle */
+  const v=P.osc?[pad2(P.osc)+' '+OSCS[P.osc],pad3(emxIdx(P.osc,P.wave)+1)+'/'+EMX_ALL.length,pad3((P.wave|0)+1)+' '+String(emxWaveName(P)).slice(0,12),'']
     :['OSC OFF · SAMPLE','PART '+pad2(ui.part+1),P.src?pad3(P.src)+' '+SRC[P.src].n.slice(0,12):'--- NO SOUND',''];
   v.forEach((x,k)=>{if(OL[k].textContent!==x)OL[k].textContent=x;});}
 SLOTS.forEach(o=>{const s=at('slot',o.x,o.z,o.w,o.d);s.setAttribute('aria-label','Freier Slot für Add-ons');txt(o.t,o.x,o.z-.12,.2,'#5d606b');txt(o.s,o.x,o.z+.25,.14,'#4a4c55');});
@@ -448,7 +451,7 @@ window.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;drop.hidden=tr
 async function powerOn(){
   if(ctx)return;ctx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
   $('#offScreen').hidden=true;['#power','#power2'].forEach(s=>{const b=$(s);b.textContent='Lädt …';b.disabled=true;});
-  buildEngine();await Promise.all([renderLibrary(),calibrateLoop(),calibrateShaper()]);ready=true;G.warm=0;ui.warmT0=performance.now();
+  buildEngine();await Promise.all([renderLibrary(),calibrateLoop(),calibrateShaper()]);pcmPreload();ready=true;G.warm=0;ui.warmT0=performance.now();
   PARTS.forEach((_,i)=>{applyChannel(i);if(cur.parts[i].stretch)scheduleStretch(i);});runStretch();
   $('#power').textContent='Eingeschaltet';partLeds();refreshKnobs();E.mfx.forEach(s=>s.update());
   popup('msg',{t:'TX-16 READY',b:'PRESS PLAY',s:'TUBES WARM UP · OR SPACE BAR'},2500);

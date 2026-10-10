@@ -170,7 +170,7 @@ const partSrcName=P=>P.src?pad3(P.src)+' '+SRC[P.src].n:P.osc?'OSC '+pad2(P.osc)
 function queuePattern(n,byEvent){n=clamp(Math.round(n),1,250);if(ui.write&&ui.write.stage==='as'){ui.write.target=n;popup('write',{},8000);return;}
   if(!byEvent)evLog('pat',n);if(ui.playing){ui.pendingPat=n===ui.pattern?null:n;popup('pattern',{},1500);seg('P.'+pad3(n));}else switchPattern(n);}
 function switchPattern(n){
-  const prev=G.bpm;ui.pattern=n;cur=loadPattern(n);ui.pendingPat=null;ui.saved=true;
+  const prev=G.bpm;ui.pattern=n;cur=loadPattern(n);ui.pendingPat=null;ui.saved=true;pcmPreload();
   if(G.tlock===0)setBPM(cur.bpm);else if(G.tlock===2&&Math.abs(cur.bpm-prev)>.05){ui.ramp={from:prev,to:cur.bpm,total:G.rampBars*16,done:0};}else G.bpm=prev;
   loadPatState();applyGlobals();PARTS.forEach((_,i)=>{applyChannel(i);if(cur.parts[i].stretch)scheduleStretch(i);});partLeds();refreshKnobs();padLabels();resetUndo();popup('pattern');seg('P.'+pad3(n));
 }
@@ -473,7 +473,7 @@ function tickKnob(d,n){
   const L=listInfo(d),P=cur.parts[ui.part],i=clamp(L.i+n*step,0,L.n-1);if(i===L.i)return;
   /* SAMPLE und OSC schließen sich aus: der zuletzt gedrehte Regler bestimmt die Klangquelle */
   if(d.p==='fxType'){selFx().type=i;}else if(d.p==='src'){P.src=i;if(i){P.osc=0;if(P.edit>.6)P.edit=0;}}
-  else if(d.p==='osc'){P.osc=i;if(i){P.src=0;P.wave=clamp(P.wave|0,0,emxWaves(i).length-1);}}else P[d.p]=i;afterPartChange(d.p);
+  else if(d.p==='osc'){P.osc=i;if(i){P.src=0;P.wave=clamp(P.wave|0,0,emxWaves(i).length-1);if(i===14||i===15)emxPcmLoad(P.wave);}}else P[d.p]=i;afterPartChange(d.p);
 }
 /* EMX-Anzeige der EDIT-Regler: Name + Wert wie auf der EMX (0..127, -63..+63, Harmonische, Akkord, Voicing) */
 function emxEditStr(P,k){const T=P.osc,ex=EMX[T];if(!ex)return'-';const v=clamp(k===1?(P.edit??0):(P.edit2??.5)),m=k===1?(T===3?'chord':ex.m1||'u'):ex.m2;
@@ -531,9 +531,12 @@ function knobChanged(d){
   popup('param',{d});
 }
 /* WAVE des EMX-Oszillators (OSC-Seite offen: VALUE wählt die Welle, bei PCM-Typen das Sample) */
-function waveAdj(n){const P=cur.parts[ui.part];if(!P.osc)return;const W=emxWaves(P.osc),w=clamp((P.wave|0)+n*(shiftNow()?10:1),0,W.length-1);if(w===(P.wave|0))return;undoKind('wave'+ui.part);P.wave=w;dirty();refreshKnob(CTRL.osc);popup('oscedit',{},600000);}
-/* WAVE-Rad (wie das Dial der EMX): Welle/Kombination im gewählten Typ. Ohne Oszillator zeigt es nur die OSC-Seite. n = 0: nur anzeigen */
-function waveTurn(n){const P=cur.parts[ui.part];ui.menu=-1;if(n&&P.osc){waveAdj(n);refreshKnob(CTRL.wave,true);}popup('oscedit',{},600000);}
+/* WAVE: läuft am Stück durch alle 258 EMX-Kombinationen (über die Typen hinweg). Aus OSC OFF startet es bei 001 WAVEFORM SAW. SHIFT = 10er */
+function waveAdj(n){const P=cur.parts[ui.part],g=P.osc?emxIdx(P.osc,P.wave):-1,g2=g<0?(n>0?0:-1):clamp(g+n*(shiftNow()?10:1),0,EMX_ALL.length-1);if(g2===g||g2<0)return;
+  undoKind('wave'+ui.part);const[t,w]=EMX_ALL[g2];if(!P.osc){P.src=0;if(P.edit>.6)P.edit=0;}P.osc=t;P.wave=w;dirty();refreshKnob(CTRL.osc);
+  if(t===14||t===15)[w+1,w-1,w].forEach(emxPcmLoad);/* die gewählte zuletzt = wird zuerst gerechnet */popup('oscedit',{},600000);}
+/* WAVE-Rad (wie das zweite Rad der EMX): läuft durch alle 258 Kombinationen, n = 0: nur die OSC-Seite zeigen */
+function waveTurn(n){ui.menu=-1;if(n){waveAdj(n);refreshKnob(CTRL.wave,true);}popup('oscedit',{},600000);}
 /* PARAMETRIC EQ im Display: VALUE = Gain des gewählten Bands (BW an = Bandbreite), bei LOW CUT/HIGH CUT = Frequenz */
 function eqAdj(n){const P=cur.parts[ui.part],s=ui.eqSel??1,k=s<3?(ui.bw?EQK.q[s]:EQK.g[s]):s===3?'lc':'hc';undoKind('eqv'+ui.part+':'+k);P[k]=clamp(pget(P,k)+n/127*(shiftNow()?1:3));delete P.eqPre;afterPartChange(k);refreshKnobs();popup('eqedit',{},600000);}
 function valueKnob(n){
