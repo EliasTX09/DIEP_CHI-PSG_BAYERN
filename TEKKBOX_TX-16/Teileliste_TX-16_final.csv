@@ -1,0 +1,43 @@
+﻿Gruppe;Bauteil;Typ;Menge;Stückpreis ca. €;Summe ca. €;Link
+Rechner & Audio;Raspberry Pi 5, 4 GB;SC1111;1;55,00;55,00;https://www.berrybase.de/raspberry-pi-5-4gb-ram
+Rechner & Audio;Active Cooler für Pi 5;SC1148;1;6,00;6,00;https://www.berrybase.de/search?search=active+cooler
+Rechner & Audio;microSD 64 GB High Endurance;SanDisk High Endurance 64 GB;1;10,00;10,00;https://www.berrybase.de/sandisk-high-endurance-microsdxc-uhs-i-u3-speicherkarte-adapter-64gb
+Rechner & Audio;Audio-Karte mit Line-In;HiFiBerry DAC+ ADC;1;45,00;45,00;https://www.hifiberry.com/shop/boards/dacplus-adc/
+Displays;Hauptdisplay 4,3″ IPS 800 × 480, DSI, Touch;4,3″ DSI Touch-Display;1;40,00;40,00;https://www.berrybase.de/kapazitives-touch-display-fuer-raspberry-pi-dsi-interface-800-480-4-3-zoll
+Displays;Display-Kabel Pi 5, 200 mm;Standard–Mini;1;2,00;2,00;https://www.berrybase.de/search?search=raspberry+pi+5+display+kabel
+Displays;OLED 0,91″ 128 × 32 I²C;SSD1306;2;4,00;8,00;https://www.az-delivery.de/search?q=0%2C91+oled
+Displays;7-Segment 4-stellig;TM1637-Modul;1;3,00;3,00;https://www.az-delivery.de/search?q=tm1637
+Controller;Mikrocontroller;Raspberry Pi Pico 2 H;1;6,50;6,50;https://www.berrybase.de/en/raspberry-pi-pico-2-rp2350-mikrocontroller-board-mit-headern
+Controller;Pegelwandler;SN74AHCT125N;1;0,50;0,50;https://www.mouser.de/c/?q=SN74AHCT125N
+Controller;16-Kanal-Multiplexer;CD74HC4067-Modul;1;1,50;1,50;https://www.aliexpress.com/w/wholesale-cd74hc4067-module.html
+Controller;DIN-Buchse 5-polig, Print;generisch;3;0,30;0,90;https://www.aliexpress.com/w/wholesale-5-pin-din-socket-pcb.html
+Regler & Tasten;Drehencoder 20-mm-Achse;EC11;30;0,30;9,00;https://www.aliexpress.com/w/wholesale-ec11-encoder-20mm.html
+Regler & Tasten;Poti 10 kΩ linear;WH148 B10K;2;0,30;0,60;https://www.aliexpress.com/w/wholesale-wh148-b10k.html
+Regler & Tasten;Drehknopf Ø 13 mm, 6-mm-D-Welle;Kunststoff schwarz;30;0,25;7,50;https://www.aliexpress.com/w/wholesale-knob-6mm-d-shaft-13mm.html
+Regler & Tasten;Taster 6 × 6 × 7 mm THT;generisch;60;0,03;1,80;https://www.aliexpress.com/w/wholesale-tact-switch-6x6x7.html
+LEDs;LED-Streifen WS2812B 144/m, 0,5 m;WS2812B;1;8,00;8,00;https://www.aliexpress.com/w/wholesale-ws2812b-144-led-strip.html
+Pads & X/Y-Pads;Drucksensor;Interlink FSR 402;16;3,49;55,84;https://www.mouser.de/c/?q=FSR%20402
+Pads & X/Y-Pads;X/Y-Touchsensor;Bela Trill Square;2;18,00;36,00;https://shop.bela.io/products/trill-square
+Röhren-Stufe;Röhre;JJ ECC82 / 12AU7;1;13,70;13,70;https://btb-elektronik.de/produkte/roehren/vorstufenroehren-doppeltrioden/roehre-ecc82-12au7-6189/
+Röhren-Stufe;Noval-Röhrensockel, Print;generisch;1;2,00;2,00;https://www.aliexpress.com/w/wholesale-noval-tube-socket-pcb.html
+Röhren-Stufe;Op-Amp;NE5532 DIP-8;2;0,60;1,20;https://www.reichelt.de/de/de/shop/suche/ne5532
+Röhren-Stufe;Digital-Poti 2 × 50 kΩ;MCP4251-503E/P;1;1,50;1,50;https://www.mouser.de/c/?q=MCP4251-503E%2FP
+Röhren-Stufe;Signal-Relais 5 V, 2 × UM;Hongfa HFD2 5V;1;1,50;1,50;https://www.reichelt.de/de/de/shop/suche/hfd2%205v
+Röhren-Stufe;Kopfhörer-Verstärker;NJM4556AD;1;1,00;1,00;https://www.reichelt.de/de/de/shop/suche/njm4556
+Strom;Netzteil 12 V / 3 A;Mean Well GST36B12-P1J;1;18,00;18,00;https://www.reichelt.de/de/de/shop/suche/gst36b12
+Strom;Step-Down-Modul 5 A;XL4015;2;3,00;6,00;https://www.aliexpress.com/w/wholesale-xl4015-5a-step-down.html
+Buchsen;Klinkenbuchse 6,3 mm stereo, Print;generisch;4;0,50;2,00;https://www.aliexpress.com/w/wholesale-6-35mm-stereo-jack-pcb.html
+Buchsen;Klinkenbuchse 3,5 mm stereo, Print;PJ-307;1;0,20;0,20;https://www.aliexpress.com/w/wholesale-pj-307-jack.html
+Platinen;M1 Encoder-Spalte 22 × 56 mm, mit Bestückung;JLCPCB;20;1,50;30,00;https://jlcpcb.com/
+Platinen;M2 Tasten-Leiste 92 × 18 mm, mit Bestückung;JLCPCB;15;1,20;18,00;https://jlcpcb.com/
+Platinen;M3 Pad-Leiste 100 × 40 mm, mit Bestückung;JLCPCB;4;2,00;8,00;https://jlcpcb.com/
+Platinen;M4 Controller + Strom 100 × 100 mm;JLCPCB;5;0,60;3,00;https://jlcpcb.com/
+Platinen;M5 Röhre 100 × 100 mm;JLCPCB;5;0,60;3,00;https://jlcpcb.com/
+Platinen;SMD-Bestückung M1–M3 inkl. LEDs + Versand;JLCPCB PCBA;1;85,00;85,00;https://jlcpcb.com/
+Gehäuse (3D-Druck);PETG schwarz 2 kg;falls nicht da;1;36,00;36,00;https://www.aliexpress.com/w/wholesale-petg-filament-black.html
+Gehäuse (3D-Druck);PETG transparent 1 kg;falls nicht da;1;18,00;18,00;https://www.aliexpress.com/w/wholesale-petg-filament-transparent.html
+Gehäuse (3D-Druck);TPU 95A transluzent 0,5 kg;falls nicht da;1;15,00;15,00;https://www.aliexpress.com/w/wholesale-tpu-filament-transparent.html
+Gehäuse (3D-Druck);Bedruckte Vinylfolie matt 460 × 300 mm;Aufkleber/Folie;1;15,00;15,00;https://www.wir-machen-druck.de/
+Gehäuse (3D-Druck);Acryl 3 mm Rauchglas 80 × 64 mm;Zuschnitt;1;6,00;6,00;https://www.plattenzuschnitt24.de/
+
+;GESAMT;;;;581,24;

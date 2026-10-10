@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="de">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<title>TX-16 Bauplan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Chakra+Petch:ital,wght@0,600;0,700;1,700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#f3f4f6;--surf:#ffffff;--surf2:#eceef2;--ink:#15161a;--muted:#5c606c;--line:#d8dbe2;
+  --accent:#d4145a;--accent2:#0b7f9f;--pcb:#1f6d47;--warn:#a85a00;--danger:#b42318;
+  --dfill:#ffffff;--dline:#9aa0ad;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+  --bg:#101114;--surf:#17181c;--surf2:#1f2126;--ink:#e9eaee;--muted:#9a9eab;--line:#2c2e35;
+  --accent:#ff4d8d;--accent2:#3cc7ef;--pcb:#4cc48a;--warn:#f5a524;--danger:#ff6b5e;--dfill:#1b1d22;--dline:#4a4e58;}}
+:root[data-theme="dark"]{color-scheme:dark;
+  --bg:#101114;--surf:#17181c;--surf2:#1f2126;--ink:#e9eaee;--muted:#9a9eab;--line:#2c2e35;
+  --accent:#ff4d8d;--accent2:#3cc7ef;--pcb:#4cc48a;--warn:#f5a524;--danger:#ff6b5e;--dfill:#1b1d22;--dline:#4a4e58;}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{background:var(--bg);color:var(--ink);font:16px/1.6 "Barlow",system-ui,sans-serif;padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;padding-top:32px}
+nav.toc b{display:block;font:700 11px/1 "Chakra Petch",sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+nav.toc a{display:block;color:var(--ink);text-decoration:none;font-size:14px;padding:4px 0 4px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover{border-left-color:var(--accent);color:var(--accent)}
+main{min-width:0;padding-top:28px}
+header.hero{padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.eyebrow{font:700 12px/1 "Chakra Petch",sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(30px,5vw,44px)/1.05 "Chakra Petch",sans-serif;margin:10px 0 12px;text-wrap:balance}
+h1 i{color:var(--accent);font-style:italic}
+.lede{max-width:68ch;color:var(--muted);font-size:17px;margin:0}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-top:22px}
+.stats div{background:var(--surf);padding:14px 16px}
+.stats b{display:block;font:700 24px/1.1 "Chakra Petch",sans-serif;font-variant-numeric:tabular-nums}
+.stats span{font-size:13px;color:var(--muted)}
+section{padding-top:44px}
+h2{font:700 26px/1.15 "Chakra Petch",sans-serif;margin:0 0 6px;text-wrap:balance}
+h2 small{display:block;font:600 12px/1.4 "Barlow",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--accent2);margin-bottom:6px}
+h3{font:700 18px/1.25 "Chakra Petch",sans-serif;margin:26px 0 6px}
+p{max-width:72ch;margin:8px 0}
+.muted{color:var(--muted)}
+code,.pn,.mono{font-family:"JetBrains Mono",Consolas,monospace;font-size:.86em}
+.call{border:1px solid var(--line);background:var(--surf);border-radius:8px;padding:14px 16px;margin:16px 0;max-width:80ch}
+.call.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));}
+.call.danger{border-color:color-mix(in srgb,var(--danger) 55%,var(--line));}
+.call b.t{display:block;font:700 13px/1.3 "Chakra Petch",sans-serif;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.call.warn b.t{color:var(--warn)}.call.danger b.t{color:var(--danger)}.call.info b.t{color:var(--accent2)}
+.call p{margin:4px 0}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surf);margin:14px 0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{font:700 11px/1.3 "Chakra Petch",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);background:var(--surf2);position:sticky;top:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr.grp th,tr.grp td{background:var(--surf2);font:700 14px/1.3 "Chakra Petch",sans-serif;color:var(--ink);letter-spacing:.02em;padding-top:12px}
+tr.total td{font:700 16px/1.3 "Chakra Petch",sans-serif;border-bottom:0}
+td .note{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+td.pn{white-space:nowrap;color:var(--accent2)}
+.bom td:first-child{min-width:220px}
+figure{margin:16px 0}
+figure .scroll{padding:12px}
+figcaption{font-size:13px;color:var(--muted);margin-top:6px}
+svg text{font-family:"Barlow",sans-serif}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px}
+.board{background:var(--surf);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.board h4{margin:0;font:700 16px/1.2 "Chakra Petch",sans-serif;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.board h4 span{font:600 12px/1 "JetBrains Mono",monospace;color:var(--pcb);white-space:nowrap}
+.board dl{display:grid;grid-template-columns:92px 1fr;gap:4px 10px;margin:10px 0 0;font-size:14px}
+.board dt{color:var(--muted)}
+.board dd{margin:0}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:14px 0;max-width:80ch}
+ol.steps li{counter-increment:s;position:relative;padding:0 0 18px 48px;border-left:2px solid var(--line);margin-left:15px}
+ol.steps li:last-child{border-left-color:transparent}
+ol.steps li::before{content:counter(s);position:absolute;left:-16px;top:-2px;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font:700 14px/30px "Chakra Petch",sans-serif;text-align:center}
+ol.steps b{font-family:"Chakra Petch",sans-serif}
+ul.plain{max-width:76ch;padding-left:20px}
+ul.plain li{margin:4px 0}
+a{color:var(--accent2)}
+:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+@media (max-width:900px){.wrap{grid-template-columns:1fr;gap:0}nav.toc{display:none}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Inhalt">
+  <b>Inhalt</b>
+  <a href="#ehrlich">Vorweg</a>
+  <a href="#aufbau">Aufbau</a>
+  <a href="#teile">Teileliste</a>
+  <a href="#platinen">Platinen</a>
+  <a href="#pins">Verdrahtung</a>
+  <a href="#roehre">Röhren-Stufe</a>
+  <a href="#software">Software</a>
+  <a href="#reihenfolge">Bau-Reihenfolge</a>
+  <a href="#sicherheit">Sicherheit</a>
+  <a href="#weiter">Nächste Schritte</a>
+</nav>
+<main>
+<header class="hero">
+  <div class="eyebrow">TEKKBOX TX-16 · Bauplan Rev 0.4</div>
+  <h1>So baust du die <i>TX-16</i></h1>
+  <p class="lede">Alle Teile mit Teilenummer, alle 9 Platinen, jeder Pin am Controller, die Software und die Reihenfolge, in der du baust. Die Maße kommen direkt aus dem 3D-Modell: Frontplatte 460 × 300 mm.</p>
+  <div class="stats">
+    <div><b>ca. 1.510,00 €</b><span>Hauptteile, Vollversion</span></div>
+    <div><b>42</b><span>Hauptteile zum Bestellen</span></div>
+    <div><b>9</b><span>eigene Platinen</span></div>
+    <div><b>1–2 Jahre</b><span>Bauzeit nebenbei</span></div>
+  </div>
+</header>
+
+<section id="ehrlich">
+  <h2><small>Vorweg</small>Ehrlich gesagt</h2>
+  <p>Vorhin hatte ich 500–900 € geschätzt. Das gilt für eine <b>Sparversion</b> (Pads ohne Anschlagstärke, keine LED-Ringe, Frontplatte aus dem 3D-Drucker). Das Gerät genau wie im Modell kostet eher <b>ca. 1.510,00 €</b>.</p>
+  <div class="call info"><b class="t">Was hier fertig ist und was nicht</b>
+    <p>Jede Platine ist hier genau festgelegt: Größe, Bauteile, Stecker und welcher Pin wohin geht. Die <b>Leiterbahnen</b> sind noch nicht gezeichnet. Das passiert in KiCad (kostenlos). Erst danach gibt es die Gerber-Dateien, die du bei JLCPCB hochlädst. Die Schaltpläne als KiCad-Dateien kann ich dir als nächsten Schritt erzeugen.</p>
+    <p>Preise sind circa-Werte (Stand Oktober 2026). Prüf Teilenummer und Lieferbarkeit im Shop, bevor du bestellst.</p>
+  </div>
+</section>
+
+<section id="aufbau">
+  <h2><small>Aufbau</small>Wie alles zusammenhängt</h2>
+  <p>Zwei Rechner teilen sich die Arbeit: Der <b>Raspberry Pi 5</b> macht den Sound, also Sampler, Sequencer, Effekte und das Display. Der <b>Teensy 4.1</b> kümmert sich um alles, was du anfasst: 28 Regler, 53 Tasten, 16 Pads, 2 X/Y-Pads, rund 570 LEDs und MIDI. Beide reden über ein kurzes USB-Kabel miteinander.</p>
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 920 440" width="100%" style="min-width:760px;display:block" role="img" aria-label="Blockschaltbild der TX-16">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--dline)"/></marker></defs>
+        <g style="fill:var(--dfill);stroke:var(--dline)" stroke-width="1.5">
+          <rect x="20" y="20" width="170" height="56" rx="6"/>
+          <rect x="250" y="20" width="190" height="56" rx="6"/>
+          <rect x="20" y="150" width="220" height="110" rx="6" style="stroke:var(--accent)" stroke-width="2"/>
+          <rect x="370" y="150" width="200" height="110" rx="6" style="stroke:var(--accent2)" stroke-width="2"/>
+          <rect x="680" y="120" width="220" height="190" rx="6"/>
+          <rect x="20" y="330" width="170" height="56" rx="6"/>
+          <rect x="230" y="330" width="170" height="56" rx="6"/>
+          <rect x="440" y="330" width="200" height="56" rx="6" style="stroke:var(--pcb)" stroke-width="2"/>
+          <rect x="680" y="330" width="220" height="56" rx="6"/>
+                    <rect x="500" y="20" width="160" height="56" rx="6"/>
+        </g>
+        <g style="fill:var(--ink)" font-size="14" font-weight="600">
+          <text x="34" y="44">Netzteil 12 V / 5 A</text><text x="34" y="64" font-weight="400" font-size="12" style="fill:var(--muted)">extern, fertig geprüft</text>
+          <text x="264" y="44">PCB 9 · PWR</text><text x="264" y="64" font-weight="400" font-size="12" style="fill:var(--muted)">2× 5 V · 12 V für die Röhre</text>
+          <text x="514" y="44">Display 4,3″ DSI</text><text x="514" y="64" font-weight="400" font-size="12" style="fill:var(--muted)">Korg-Pixel-Look</text>
+          <text x="34" y="176">Raspberry Pi 5 (8 GB)</text>
+          <text x="34" y="198" font-weight="400" font-size="12.5" style="fill:var(--muted)">Sampler · Sequencer · Effekte</text>
+          <text x="34" y="216" font-weight="400" font-size="12.5" style="fill:var(--muted)">Time-Stretch · 32-Bit-Mix · Limiter</text>
+          <text x="34" y="234" font-weight="400" font-size="12.5" style="fill:var(--muted)">NVMe 256 GB · WLAN-Freigabe</text>
+          <text x="384" y="176">PCB 1 · CTRL</text>
+          <text x="384" y="198" font-weight="400" font-size="12.5" style="fill:var(--muted)">Teensy 4.1 · MIDI DIN</text>
+          <text x="384" y="216" font-weight="400" font-size="12.5" style="fill:var(--muted)">3 LED-Ketten · Schieberegister</text>
+          <text x="384" y="234" font-weight="400" font-size="12.5" style="fill:var(--muted)">I²C · Multiplexer · Relais</text>
+          <text x="694" y="146">Bedien-Platinen</text>
+          <text x="694" y="170" font-weight="400" font-size="12.5" style="fill:var(--muted)">PCB 2 METER · Pegel-LEDs</text>
+          <text x="694" y="190" font-weight="400" font-size="12.5" style="fill:var(--muted)">PCB 3 TOP · VALUE, Menü, Tempo</text>
+          <text x="694" y="210" font-weight="400" font-size="12.5" style="fill:var(--muted)">PCB 4 EDIT · 22 Encoder</text>
+          <text x="694" y="230" font-weight="400" font-size="12.5" style="fill:var(--muted)">PCB 5 MFX · 2 X/Y-Pads</text>
+          <text x="694" y="250" font-weight="400" font-size="12.5" style="fill:var(--muted)">PCB 6 PLAY · Modes, Transport</text>
+          <text x="694" y="270" font-weight="400" font-size="12.5" style="fill:var(--muted)">PCB 7 PADS · 16 Drucksensoren</text>
+          <text x="34" y="354">HiFiBerry DAC+ ADC Pro</text><text x="34" y="374" font-weight="400" font-size="12" style="fill:var(--muted)">Audio-Karte auf dem Pi</text>
+          <text x="244" y="354">PCB 8 · TUBE</text><text x="244" y="374" font-weight="400" font-size="12" style="fill:var(--muted)">Nutube · Bypass-Relais</text>
+          <text x="454" y="354">Ausgänge</text><text x="454" y="374" font-weight="400" font-size="12" style="fill:var(--muted)">OUT L/R · PHONES</text>
+          <text x="694" y="354">MIDI IN / OUT / THRU</text><text x="694" y="374" font-weight="400" font-size="12" style="fill:var(--muted)">DIN-Buchsen auf PCB 1</text>
+        </g>
+        <g style="stroke:var(--dline);fill:none" stroke-width="1.6" marker-end="url(#ar)">
+          <path d="M190 48H248"/>
+          <path d="M300 76V112H130V148"/>
+          <path d="M360 76V112H470V148"/>
+          <path d="M430 76V112H610V312H340V328"/>
+          <path d="M240 205H368"/>
+          <path d="M570 205H678"/>
+          <path d="M200 150V128H580V78"/>
+          <path d="M105 260V328"/>
+          <path d="M190 358H228"/>
+          <path d="M400 358H438"/>
+          <path d="M520 260V296H290V328"/>
+          <path d="M570 230H640V358H678"/>
+        </g>
+        <g style="fill:var(--muted)" font-size="11.5" font-family="JetBrains Mono,monospace">
+          <text x="194" y="40">12 V</text>
+          <text x="136" y="108">5 V / 5 A (GPIO)</text>
+          <text x="476" y="108">5 V UI</text>
+          <text x="616" y="290">12 V</text>
+          <text x="262" y="198">USB</text>
+          <text x="590" y="198">Ketten + Bus</text>
+                    <text x="206" y="144">DSI</text>
+          <text x="112" y="300">I²S</text>
+          <text x="194" y="350">Line</text>
+          <text x="404" y="350">Line</text>
+          <text x="404" y="290">SPI + Relais</text>
+          <text x="646" y="318">UART</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Blockschaltbild. Der Pi bekommt seine 5 V über die GPIO-Pins, das Display hängt direkt am Pi. Die Röhre sitzt zwischen Audio-Karte und Ausgängen.</figcaption>
+  </figure>
+</section>
+
+<section id="teile">
+  <h2><small>Teileliste</small>Hauptteile mit Teilenummer</h2>
+  <p>Nur die Teile, die du gezielt bestellen musst. Werkzeug, Lötzinn, Kabel, Schrauben und Standard-Kleinteile sind nicht drin. Die gleiche Liste bekommst du als Datei <code>Hauptteile_TX-16.csv</code>. Sie öffnet sich in Excel oder LibreOffice. Bei Mouser und LCSC kannst du die Teilenummern direkt in den Warenkorb kopieren.</p>
+  <div class="scroll">
+    <table class="bom">
+      <thead><tr><th>Bauteil</th><th>Typ / Teilenummer</th><th class="num">Menge</th><th>Wo kaufen</th><th class="num">Stück ca.</th><th class="num">Summe ca.</th></tr></thead>
+      <tbody>
+<tr class="grp"><th colspan="5" scope="colgroup">Rechner &amp; Audio</th><td class="num">243,00 €</td></tr>
+<tr><td>Raspberry Pi 5, 8 GB<span class="note">Hauptrechner: Sampler, Sequencer, Effekte, Display</span></td><td class="pn">SC1112</td><td class="num">1</td><td>Berrybase, Reichelt</td><td class="num">85,00 €</td><td class="num">85,00 €</td></tr>
+<tr><td>Active Cooler für Pi 5<span class="note">Pflicht, der Pi 5 wird unter Last heiß</span></td><td class="pn">SC1148</td><td class="num">1</td><td>Berrybase</td><td class="num">6,00 €</td><td class="num">6,00 €</td></tr>
+<tr><td>NVMe-Adapter unter dem Pi<span class="note">Ersetzt die SD-Karte, oben bleibt Platz für die Audiokarte</span></td><td class="pn">Pimoroni NVMe Base</td><td class="num">1</td><td>Pimoroni, Berrybase</td><td class="num">15,00 €</td><td class="num">15,00 €</td></tr>
+<tr><td>NVMe-SSD 256 GB, M.2 2230<span class="note">Interner Speicher für Samples und Patterns</span></td><td class="pn">z. B. WD SN740 256 GB</td><td class="num">1</td><td>Mindfactory, Amazon</td><td class="num">30,00 €</td><td class="num">30,00 €</td></tr>
+<tr><td>Audio-Karte (HAT)<span class="note">Stereo-Ausgang + Line-Eingang zum Samplen</span></td><td class="pn">HiFiBerry DAC+ ADC Pro</td><td class="num">1</td><td>HiFiBerry, Berrybase</td><td class="num">65,00 €</td><td class="num">65,00 €</td></tr>
+<tr><td>Display 4,3″, 800 × 480, DSI<span class="note">Hauptdisplay, der Pi zeichnet den Korg-Pixel-Look</span></td><td class="pn">Waveshare 4.3inch DSI LCD</td><td class="num">1</td><td>Berrybase, Amazon</td><td class="num">40,00 €</td><td class="num">40,00 €</td></tr>
+<tr><td>Display-Kabel für Pi 5, 200 mm<span class="note">Der Pi 5 hat eine kleinere Display-Buchse</span></td><td class="pn">Raspberry Pi Display Cable (Standard–Mini)</td><td class="num">1</td><td>Berrybase</td><td class="num">2,00 €</td><td class="num">2,00 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Controller (liest alle Regler und Tasten)</th><td class="num">42,50 €</td></tr>
+<tr><td>Mikrocontroller<span class="note">Hängt per USB am Pi, schickt MIDI, steuert alle LEDs</span></td><td class="pn">PJRC Teensy 4.1 (mit Pins)</td><td class="num">1</td><td>PJRC, Eckstein, Mouser</td><td class="num">38,00 €</td><td class="num">38,00 €</td></tr>
+<tr><td>DIN-Buchse 5-polig, Print<span class="note">MIDI IN / OUT / THRU</span></td><td class="pn">CUI SDS-50J</td><td class="num">3</td><td>Mouser</td><td class="num">1,50 €</td><td class="num">4,50 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Anzeigen</th><td class="num">11,00 €</td></tr>
+<tr><td>OLED 0,91″, 128 × 32, I²C<span class="note">Effektname über den MFX-Pads</span></td><td class="pn">SSD1306-Modul</td><td class="num">2</td><td>AZ-Delivery</td><td class="num">4,00 €</td><td class="num">8,00 €</td></tr>
+<tr><td>7-Segment-Anzeige 0,56″, 4-stellig, rot<span class="note">BPM / Pattern-Nummer</span></td><td class="pn">TM1637-Modul</td><td class="num">1</td><td>AZ-Delivery</td><td class="num">3,00 €</td><td class="num">3,00 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Regler &amp; Tasten</th><td class="num">187,20 €</td></tr>
+<tr><td>Drehencoder mit Raster<span class="note">28 nötig + 2 Reserve</span></td><td class="pn">Bourns PEC11R-4220F-S0024</td><td class="num">30</td><td>Mouser</td><td class="num">2,40 €</td><td class="num">72,00 €</td></tr>
+<tr><td>Poti 10 kΩ linear<span class="note">MASTER und PHONES</span></td><td class="pn">Bourns PTV09A-4020F-B103</td><td class="num">2</td><td>Mouser</td><td class="num">0,90 €</td><td class="num">1,80 €</td></tr>
+<tr><td>Drehknopf Ø 15 mm, 6-mm-D-Welle</td><td class="pn">Davies-1900H-Stil, schwarz</td><td class="num">28</td><td>Thonk, AliExpress</td><td class="num">1,00 €</td><td class="num">28,00 €</td></tr>
+<tr><td>Drehknopf Ø 30 mm, Alu<span class="note">VALUE und MASTER</span></td><td class="pn">6-mm-D-Welle</td><td class="num">2</td><td>Reichelt, AliExpress</td><td class="num">5,00 €</td><td class="num">10,00 €</td></tr>
+<tr><td>Taster (Low-Profile)<span class="note">53 nötig + Reserve, klickt sauber, hält ewig</span></td><td class="pn">Kailh Choc v1 (PG1350), Brown</td><td class="num">58</td><td>Tastatur-Shops, AliExpress</td><td class="num">0,50 €</td><td class="num">29,00 €</td></tr>
+<tr><td>Hotswap-Sockel für Choc<span class="note">Taster stecken statt löten</span></td><td class="pn">Kailh Choc Hotswap (PG1350)</td><td class="num">58</td><td>Tastatur-Shops, AliExpress</td><td class="num">0,20 €</td><td class="num">11,60 €</td></tr>
+<tr><td>Tastenkappen Choc 1u, blank, transluzent<span class="note">Licht scheint durch</span></td><td class="pn">z. B. MBK Choc</td><td class="num">58</td><td>Tastatur-Shops</td><td class="num">0,60 €</td><td class="num">34,80 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Pads &amp; X/Y-Pads</th><td class="num">233,00 €</td></tr>
+<tr><td>Drucksensor<span class="note">Anschlagstärke + Aftertouch</span></td><td class="pn">Interlink FSR 402 (Short Tail)</td><td class="num">16</td><td>Mouser</td><td class="num">7,00 €</td><td class="num">112,00 €</td></tr>
+<tr><td>Silikon transluzent, Shore 37A<span class="note">Pads selbst gießen</span></td><td class="pn">Smooth-On Sorta-Clear 37 (Trial-Set)</td><td class="num">1</td><td>KauPo (Smooth-On-Händler)</td><td class="num">45,00 €</td><td class="num">45,00 €</td></tr>
+<tr><td>X/Y-Touchsensor<span class="note">Die zwei MFX-Pads</span></td><td class="pn">Bela Trill Square</td><td class="num">2</td><td>bela.io, Thonk</td><td class="num">38,00 €</td><td class="num">76,00 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Röhren-Stufe</th><td class="num">63,50 €</td></tr>
+<tr><td>Röhre<span class="note">Echte Röhre mit wenig Spannung, leuchtet grün-blau</span></td><td class="pn">Korg Nutube 6P1</td><td class="num">1</td><td>Röhren-Fachhandel</td><td class="num">50,00 €</td><td class="num">50,00 €</td></tr>
+<tr><td>Signal-Relais 5 V<span class="note">Bypass = 100 % sauberes Signal</span></td><td class="pn">Omron G6K-2F-Y DC5</td><td class="num">1</td><td>Mouser</td><td class="num">3,00 €</td><td class="num">3,00 €</td></tr>
+<tr><td>Digital-Poti 2 × 50 kΩ<span class="note">TUBE MIX und DRIVE vom Teensy aus</span></td><td class="pn">MCP4251-503E/SL</td><td class="num">1</td><td>Mouser, Reichelt</td><td class="num">1,50 €</td><td class="num">1,50 €</td></tr>
+<tr><td>Audio-Op-Amp<span class="note">Puffer vor und nach der Röhre</span></td><td class="pn">TI OPA2134PA</td><td class="num">2</td><td>Mouser, Reichelt</td><td class="num">4,00 €</td><td class="num">8,00 €</td></tr>
+<tr><td>Kopfhörer-Verstärker</td><td class="pn">NJM4556AD</td><td class="num">1</td><td>Reichelt</td><td class="num">1,00 €</td><td class="num">1,00 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Strom</th><td class="num">62,00 €</td></tr>
+<tr><td>Netzteil 12 V / 5 A<span class="note">Fertig geprüft, du arbeitest nie an 230 V</span></td><td class="pn">Mean Well GST60A12-P1J</td><td class="num">1</td><td>Reichelt</td><td class="num">26,00 €</td><td class="num">26,00 €</td></tr>
+<tr><td>Spannungswandler 5 V / 5,5 A<span class="note">Einer für den Pi, einer für Teensy + LEDs</span></td><td class="pn">Pololu D36V50F5</td><td class="num">2</td><td>Pololu, Eckstein</td><td class="num">18,00 €</td><td class="num">36,00 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Audio-Buchsen</th><td class="num">17,00 €</td></tr>
+<tr><td>Klinkenbuchse 6,3 mm stereo, Print<span class="note">OUT L, OUT R, LINE IN, PHONES</span></td><td class="pn">Neutrik NMJ6HCD2</td><td class="num">4</td><td>Reichelt, Thomann</td><td class="num">4,00 €</td><td class="num">16,00 €</td></tr>
+<tr><td>Klinkenbuchse 3,5 mm stereo, Print<span class="note">PHONES klein</span></td><td class="pn">Lumberg 1503 09</td><td class="num">1</td><td>Reichelt</td><td class="num">1,00 €</td><td class="num">1,00 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Platinen (Fertigung bei JLCPCB, je 5 Stück)</th><td class="num">429,00 €</td></tr>
+<tr><td>PCB 1 · CTRL (100 × 80 mm)<span class="note">Teensy, MIDI, Pegelwandler</span></td><td class="pn">2 Lagen, 1,6 mm, schwarz</td><td class="num">1</td><td>JLCPCB</td><td class="num">8,00 €</td><td class="num">8,00 €</td></tr>
+<tr><td>PCB 2 · METER (18 × 62 mm)<span class="note">2 × 12 Pegel-LEDs</span></td><td class="pn">2 Lagen</td><td class="num">1</td><td>JLCPCB</td><td class="num">5,00 €</td><td class="num">5,00 €</td></tr>
+<tr><td>PCB 3 · TOP (212 × 64 mm)<span class="note">VALUE, Menü, Tempo, Master</span></td><td class="pn">2 Lagen</td><td class="num">1</td><td>JLCPCB</td><td class="num">25,00 €</td><td class="num">25,00 €</td></tr>
+<tr><td>PCB 4 · EDIT (344 × 81 mm)<span class="note">22 Encoder mit LED-Ringen</span></td><td class="pn">2 Lagen</td><td class="num">1</td><td>JLCPCB</td><td class="num">45,00 €</td><td class="num">45,00 €</td></tr>
+<tr><td>PCB 5 · MFX (96 × 160 mm)<span class="note">Effekt-Typ, HOLD, FX ON</span></td><td class="pn">2 Lagen</td><td class="num">1</td><td>JLCPCB</td><td class="num">20,00 €</td><td class="num">20,00 €</td></tr>
+<tr><td>PCB 6 · PLAY (344 × 75 mm)<span class="note">Modes, Perform, Bars, Transport, SAVE</span></td><td class="pn">2 Lagen</td><td class="num">1</td><td>JLCPCB</td><td class="num">40,00 €</td><td class="num">40,00 €</td></tr>
+<tr><td>PCB 7 · PADS (448 × 40 mm)<span class="note">16 Drucksensoren + LEDs</span></td><td class="pn">2 Lagen</td><td class="num">1</td><td>JLCPCB</td><td class="num">40,00 €</td><td class="num">40,00 €</td></tr>
+<tr><td>PCB 8 · TUBE (100 × 70 mm)<span class="note">Röhre, Bypass, Kopfhörer</span></td><td class="pn">2 Lagen, Masse-Fläche</td><td class="num">1</td><td>JLCPCB</td><td class="num">8,00 €</td><td class="num">8,00 €</td></tr>
+<tr><td>PCB 9 · PWR (80 × 50 mm)<span class="note">Strom-Verteilung</span></td><td class="pn">2 Lagen, 2 oz Kupfer</td><td class="num">1</td><td>JLCPCB</td><td class="num">8,00 €</td><td class="num">8,00 €</td></tr>
+<tr><td>SMD-Bestückung inkl. Bauteile<span class="note">LEDs, Chips, Kondensatoren kommen von JLCPCB mit</span></td><td class="pn">JLCPCB PCBA</td><td class="num">1</td><td>JLCPCB</td><td class="num">230,00 €</td><td class="num">230,00 €</td></tr>
+<tr class="grp"><th colspan="5" scope="colgroup">Gehäuse</th><td class="num">220,00 €</td></tr>
+<tr><td>Frontplatte Alu 3 mm, 460 × 300, bedruckt + gebohrt<span class="note">Maße kommen aus dem 3D-Modell</span></td><td class="pn">Schaeffer AG (Frontplatten Designer)</td><td class="num">1</td><td>schaeffer-ag.de</td><td class="num">130,00 €</td><td class="num">130,00 €</td></tr>
+<tr><td>Gehäuse-Wanne</td><td class="pn">3D-Druck PETG in 4 Teilen oder Alu-Blech</td><td class="num">1</td><td>FabLab / Laserhub</td><td class="num">90,00 €</td><td class="num">90,00 €</td></tr>
+        <tr class="total"><td colspan="5">Gesamt Hauptteile</td><td class="num">ca. 1.510,00 €</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call info"><b class="t">Nicht in der Liste</b>
+    <p><b>Kommt bei der JLCPCB-Bestückung mit:</b> Schieberegister 8-fach (SN74HC165DR (SOIC-16)), Pegelwandler 3,3 → 5 V (SN74AHCT125DR), Analog-Multiplexer 16-fach (CD74HC4067M96), Inverter / Puffer (SN74HC14DR), NPN-Transistor (BC817-40), Spannungsregler 3,3 V (AP2112K-3.3TRG1), Widerstandsnetzwerk 8 × 10 kΩ (Bourns 4609X-101-103LF), RGB-LED, Reverse-Mount (SK6812MINI-E), RGB-LED 3535, Top-Mount (SK6812MINI), Kondensator 100 nF, 0603 (X7R 50 V).</p>
+    <p><b>Kleinkram, den du sowieso hast:</b> Abstandsbolzen-Set M2,5, Optokoppler MIDI IN, Wannenstecker IDC 2 × 5, gerade, USB-Kabel Micro-USB → USB-A, 15 cm, gewinkelt, Klares UV-Harz, Gießform für die Pads, Acryl 1 mm, schwarz satiniert, Kleinteile-Set, Hohlbuchse 5,5 / 2,1 mm, Einbau, Netzschalter, Rückstellende Sicherung 5 A, Elko 2200 µF / 25 V, Flachbandkabel 10-pol. + IDC-Stecker, JST-PH-Kabelset, Schrauben M3, Abstandsbolzen, Gummifüße, Widerstände und Kondensatoren für die Röhren-Stufe.</p>
+  </div>
+  <div class="call warn"><b class="t">Sparversion, ca. 600–800 €</b>
+    <p>Wenn du sparen willst, kannst du diese Teile ersetzen:</p>
+    <ul class="plain">
+      <li>Pads: <span class="mono">Adafruit NeoTrellis 4×4</span> statt Drucksensoren + Silikon. Dann gibt es keine Anschlagstärke und die Pads liegen 4 × 4 statt in einer Reihe.</li>
+      <li>Keine LED-Ringe um die Regler. Dann brauchst du keine SMD-Bestückung und nur ca. 100 LEDs.</li>
+      <li>Frontplatte aus dem 3D-Drucker statt aus Alu.</li>
+      <li>Die Röhre erst mal nur als Software-Simulation.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="platinen">
+  <h2><small>Platinen</small>Die 9 Platinen</h2>
+  <p>Eine einzige Platine in Gerätegröße wäre teuer und würde sich verbiegen. Deshalb gibt es sechs Bedien-Platinen direkt unter der Frontplatte und drei Platinen unten im Gehäuse. Alle Maße in Millimetern, gemessen von der linken hinteren Ecke der Frontplatte.</p>
+  <figure>
+    <div class="scroll">
+      <svg viewBox="0 0 920 330" width="100%" style="min-width:760px;display:block" role="img" aria-label="Lageplan der Platinen">
+        <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--warn)" stroke-width="1.2"/></pattern></defs>
+        <g font-size="12" style="fill:var(--muted)" font-weight="600"><text x="20" y="20">Obere Ebene · direkt unter der Frontplatte</text><text x="486" y="20">Untere Ebene · auf dem Gehäuseboden</text></g>
+        <g transform="translate(20,34) scale(.9)">
+          <rect x="0" y="0" width="460" height="300" rx="8" style="fill:var(--dfill);stroke:var(--dline)" stroke-width="1.5"/>
+          <rect x="8" y="7" width="76" height="60" rx="3" style="fill:url(#hatch);stroke:var(--warn)"/>
+          <rect x="129" y="4" width="106" height="67" rx="3" style="fill:none;stroke:var(--accent2)" stroke-dasharray="5 4" stroke-width="1.5"/>
+          <g style="fill:color-mix(in srgb,var(--pcb) 16%,transparent);stroke:var(--pcb)" stroke-width="1.5">
+            <rect x="89" y="7" width="16" height="60" rx="2"/>
+            <rect x="240" y="6" width="212" height="64" rx="3"/>
+            <rect x="8" y="76" width="344" height="81" rx="3"/>
+            <rect x="356" y="74" width="96" height="160" rx="3"/>
+            <rect x="8" y="162" width="344" height="75" rx="3"/>
+            <rect x="6" y="245" width="448" height="40" rx="3"/>
+          </g>
+          <g style="fill:var(--ink)" font-size="15" font-weight="700">
+            <text x="14" y="42">Röhren-</text><text x="14" y="58">fenster</text>
+            <text x="0" y="0" transform="translate(101,63) rotate(-90)" font-size="11">2 · METER</text>
+            <text x="140" y="42" style="fill:var(--accent2)">Display 4,3″</text>
+            <text x="250" y="30">3 · TOP</text><text x="250" y="48" font-size="12" font-weight="400" style="fill:var(--muted)">212 × 64</text>
+            <text x="18" y="100">4 · EDIT</text><text x="18" y="118" font-size="12" font-weight="400" style="fill:var(--muted)">344 × 81 · 22 Encoder</text>
+            <text x="366" y="98">5 · MFX</text><text x="366" y="116" font-size="12" font-weight="400" style="fill:var(--muted)">96 × 160</text>
+            <text x="18" y="186">6 · PLAY</text><text x="18" y="204" font-size="12" font-weight="400" style="fill:var(--muted)">344 × 75 · 38 Tasten</text>
+            <text x="18" y="270">7 · PADS</text><text x="96" y="270" font-size="12" font-weight="400" style="fill:var(--muted)">448 × 40 · 16 Drucksensoren</text>
+          </g>
+        </g>
+        <g transform="translate(486,34) scale(.9)">
+          <rect x="0" y="0" width="460" height="300" rx="8" style="fill:var(--dfill);stroke:var(--dline)" stroke-width="1.5"/>
+          <line x1="0" y1="2" x2="460" y2="2" style="stroke:var(--accent)" stroke-width="4"/>
+          <g style="fill:color-mix(in srgb,var(--pcb) 16%,transparent);stroke:var(--pcb)" stroke-width="1.5">
+            <rect x="8" y="8" width="100" height="70" rx="3"/>
+            <rect x="250" y="8" width="100" height="80" rx="3"/>
+            <rect x="370" y="8" width="80" height="50" rx="3"/>
+          </g>
+          <rect x="130" y="110" width="85" height="56" rx="4" style="fill:color-mix(in srgb,var(--accent) 14%,transparent);stroke:var(--accent)" stroke-width="1.5"/>
+          <g style="fill:var(--ink)" font-size="15" font-weight="700">
+            <text x="16" y="34">8 · TUBE</text><text x="16" y="52" font-size="12" font-weight="400" style="fill:var(--muted)">100 × 70</text>
+            <text x="258" y="34">1 · CTRL</text><text x="258" y="52" font-size="12" font-weight="400" style="fill:var(--muted)">100 × 80 · Teensy</text>
+            <text x="378" y="34">9 · PWR</text><text x="378" y="52" font-size="12" font-weight="400" style="fill:var(--muted)">80 × 50</text>
+            <text x="138" y="134" font-size="13">Pi 5 + HiFiBerry</text><text x="138" y="152" font-size="12" font-weight="400" style="fill:var(--muted)">NVMe darunter</text>
+            <text x="12" y="290" font-size="12" font-weight="600" style="fill:var(--accent)">▲ Rückseite (Buchsen) liegt oben im Bild</text>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <figcaption>Draufsicht. Grün: eigene Platinen. Gestrichelt: Display-Ausschnitt. Schraffiert: Röhrenfenster. Die Röhren liegen auf PCB 8 genau unter dem Fenster, die MIDI-, Audio- und Strombuchsen sitzen an der Hinterkante von PCB 1, 8 und 9.</figcaption>
+  </figure>
+
+  <div class="cards">
+    <article class="board"><h4>PCB 1 · CTRL <span>100 × 80 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>Gehirn der Bedienung: Teensy 4.1, MIDI, Pegelwandler</dd>
+      <dt>Bauteile</dt><dd>Teensy auf 2 × Buchsenleiste 1×24, 74AHCT125, 6N138 + 1N4148 + 220 Ω, 74HC14, 3 × DIN SDS-50J an der Hinterkante, 2 × BC817 + 1N4148 für das Relais, 100 µF + 4 × 100 nF</dd>
+      <dt>Stecker</dt><dd>J1 Strom (JST-VH 2), J2 TX-Bus (IDC 10), J3 LED-Kette A (JST-PH 3), J4 PADS (IDC 10), J5 + J6 I²C 1/2 (JST-PH 4), J7 Potis (JST-PH 4), J8 TUBE (JST-PH 6)</dd>
+      <dt>Wichtig</dt><dd>Auf dem Teensy die Leiterbahn <b>VUSB–VIN</b> durchtrennen, sonst kämpfen Pi und Netzteil um die 5 V.</dd></dl></article>
+    <article class="board"><h4>PCB 2 · METER <span>18 × 62 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>Zwei Pegelanzeigen TUBE und OUT</dd>
+      <dt>Bauteile</dt><dd>24 × SK6812MINI (je 12, Abstand 4,4 mm), 24 × 100 nF</dd>
+      <dt>Stecker</dt><dd>TX-Bus rein + raus (IDC 10). Die Schieberegister-Signale reicht sie nur durch.</dd>
+      <dt>LED-Kette</dt><dd>B, Position 1–24</dd></dl></article>
+    <article class="board"><h4>PCB 3 · TOP <span>212 × 64 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>VALUE, Menü-Tasten, TEMPO, SWING, MASTER, PHONES, Status-LEDs, BPM-Anzeige</dd>
+      <dt>Bauteile</dt><dd>3 × Encoder mit LED-Ring (45 LEDs), 6 × Choc-Taster + SK6812MINI-E, 4 Status-LEDs, 2 × Poti PTV09, Halter für das TM1637-Modul, 2 × 74HC165, 2 × 10-kΩ-Netzwerk, AP2112K-3.3</dd>
+      <dt>Stecker</dt><dd>TX-Bus rein + raus, J-ANALOG zu PCB 1 J7</dd>
+      <dt>Register</dt><dd>Byte 0–1 der Kette</dd></dl></article>
+    <article class="board"><h4>PCB 4 · EDIT <span>344 × 81 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>Tube, Oscillator, Filter, Modulation, Amp/EG, Insert-FX</dd>
+      <dt>Bauteile</dt><dd>22 × Encoder PEC11R mit je 15 LEDs im Bogen (330 LEDs), 6 × Choc-Taster + SK6812MINI-E, 7 × 74HC165, 7 × 10-kΩ-Netzwerk, AP2112K-3.3, 470 µF</dd>
+      <dt>Stecker</dt><dd>TX-Bus rein (letztes Board, SER des letzten Registers auf GND), LED-Kette A (JST-PH 3), eigener Strom 5 V (JST-VH 2)</dd>
+      <dt>Register</dt><dd>Byte 8–14 der Kette</dd></dl></article>
+    <article class="board"><h4>PCB 5 · MFX <span>96 × 160 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>Zwei Master-FX-Pads mit FX TYPE, HOLD, FX ON</dd>
+      <dt>Bauteile</dt><dd>2 × Encoder mit LED-Ring (30 LEDs), 4 × Choc-Taster + LEDs, 1 × 74HC165, 2 Aussparungen für Trill Square, Halter für 2 × OLED 0,91″</dd>
+      <dt>Stecker</dt><dd>TX-Bus rein + raus, 2 × I²C (JST-PH 4) von PCB 1</dd>
+      <dt>Register</dt><dd>Byte 2 der Kette</dd></dl></article>
+    <article class="board"><h4>PCB 6 · PLAY <span>344 × 75 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>Play-Modes, Perform, BAR 1–8, Part/Keyboard, Transport, PATTERN, SAVE, TAP</dd>
+      <dt>Bauteile</dt><dd>37 × Choc-Taster + SK6812MINI-E, 1 × Encoder mit Ring (PATTERN, 15 LEDs), 5 × 74HC165, 5 × 10-kΩ-Netzwerk, AP2112K-3.3</dd>
+      <dt>Stecker</dt><dd>TX-Bus rein + raus</dd>
+      <dt>Register</dt><dd>Byte 3–7 der Kette</dd></dl></article>
+    <article class="board"><h4>PCB 7 · PADS <span>448 × 40 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>16 Pads mit Anschlagstärke und Aftertouch</dd>
+      <dt>Bauteile</dt><dd>16 × FSR 402 (aufgeklebt, Anschluss auf 2-Pin-Lötpads), 16 × 10 kΩ nach GND, CD74HC4067, 16 × SK6812MINI neben jedem Sensor, AP2112K-3.3</dd>
+      <dt>Stecker</dt><dd>IDC 10 zu PCB 1 J4: 5 V, GND, S0–S3, SIG, LED-Kette C</dd>
+      <dt>Pads</dt><dd>Silikon in 3D-gedruckter Form gießen, 24 × 29 mm, 8 mm hoch, unten ein Noppen auf den Sensor</dd></dl></article>
+    <article class="board"><h4>PCB 8 · TUBE <span>100 × 70 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>Röhren-Stufe im Master, Bypass, Kopfhörer</dd>
+      <dt>Bauteile</dt><dd>Korg Nutube 6P1 (liegend im Halter unter dem Fenster), 2 × OPA2134, MCP4251, Relais G6K-2F-Y, NJM4556, Buchsen OUT L/R + LINE IN an der Hinterkante</dd>
+      <dt>Stecker</dt><dd>12 V + 5 V (JST-VH 3), Audio von/zur HiFiBerry (JST-PH 5, geschirmt), Steuerung von PCB 1 J8, Kabel zu den PHONES-Buchsen vorne</dd>
+      <dt>Layout</dt><dd>Durchgehende Massefläche unten, Audio weit weg von den Spannungswandlern</dd></dl></article>
+    <article class="board"><h4>PCB 9 · PWR <span>80 × 50 mm</span></h4><dl>
+      <dt>Aufgabe</dt><dd>12 V verteilen und zweimal 5 V erzeugen</dd>
+      <dt>Bauteile</dt><dd>Hohlbuchse, Wippschalter, MF-R500, 2 × Pololu D36V50F5 (auf Stiftleisten), 2 × 2200 µF</dd>
+      <dt>Ausgänge</dt><dd>5V_PI zu den GPIO-Pins 2 + 4 und GND am Pi · 5V_UI zu PCB 1 und PCB 4 · 12 V zu PCB 8</dd>
+      <dt>Wichtig</dt><dd>Kupfer 2 oz und breite Leiterbahnen (≥ 2 mm), es fließen bis 5 A</dd></dl></article>
+  </div>
+
+  <h3>JLCPCB-Bestellung, gleich für alle Platinen</h3>
+  <p>2 Lagen · 1,6 mm · Lötstopplack schwarz · Bestückungsdruck weiß · HASL bleifrei · 5 Stück. Für PCB 3–7 zusätzlich <b>„PCB Assembly“</b> auf der Oberseite mit LEDs, 100-nF-Kondensatoren, 74HC165 und Widerstandsnetzwerken. Encoder, Choc-Sockel und Stecker lötest du selbst.</p>
+</section>
+
+<section id="pins">
+  <h2><small>Verdrahtung</small>Jeder Pin am Teensy 4.1</h2>
+  <p>Der Teensy arbeitet mit 3,3 V und verträgt <b>keine 5 V an den Pins</b>. Deshalb laufen alle Schieberegister mit 3,3 V aus einem kleinen Spannungsregler auf jeder Platine. Nur die LEDs bekommen 5 V, ihre Datenleitungen gehen über den Pegelwandler 74AHCT125.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pin</th><th>Funktion</th><th>geht zu</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">0 (RX1)</td><td>MIDI IN</td><td>6N138-Ausgang (6N138 an 5 V, Ausgang mit 1 kΩ auf 3,3 V)</td></tr>
+        <tr><td class="pn">1 (TX1)</td><td>MIDI OUT</td><td>74HC14 → 10 Ω → DIN Pin 5, DIN Pin 4 über 33 Ω an 3,3 V (MIDI-Norm für 3,3 V)</td></tr>
+        <tr><td class="pn">2 / 3</td><td>BPM-Anzeige CLK / DIO</td><td>TX-Bus Pin 7 / 8 → TM1637 auf PCB 3 (Modul mit 3,3 V versorgen)</td></tr>
+        <tr><td class="pn">4, 5, 6, 7</td><td>Multiplexer S0–S3</td><td>PCB 7 PADS</td></tr>
+        <tr><td class="pn">8 (TX2)</td><td>LED-Kette A, 336 LEDs</td><td>74AHCT125 → PCB 4 EDIT</td></tr>
+        <tr><td class="pn">10</td><td>SH/LD aller 74HC165</td><td>TX-Bus Pin 3</td></tr>
+        <tr><td class="pn">12 (MISO)</td><td>Daten aus der Kette</td><td>TX-Bus Pin 5 (QH vom ersten Register auf PCB 3)</td></tr>
+        <tr><td class="pn">13 (SCK)</td><td>Takt der Kette</td><td>TX-Bus Pin 4</td></tr>
+        <tr><td class="pn">14 (A0) / 15 (A1)</td><td>MASTER / PHONES</td><td>Potis auf PCB 3 über J7</td></tr>
+        <tr><td class="pn">16 / 17</td><td>I²C-Bus 2 (SCL1 / SDA1)</td><td>MFX 2: OLED 0x3C + Trill Square 0x28</td></tr>
+        <tr><td class="pn">18 / 19</td><td>I²C-Bus 1 (SDA / SCL)</td><td>MFX 1: OLED 0x3C + Trill Square 0x28</td></tr>
+        <tr><td class="pn">20 (TX5)</td><td>LED-Kette B, 165 LEDs</td><td>74AHCT125 → METER → TOP → MFX → PLAY</td></tr>
+        <tr><td class="pn">24 (A10)</td><td>Pad-Drucksensoren</td><td>Multiplexer-Ausgang SIG auf PCB 7</td></tr>
+        <tr><td class="pn">26 / 27</td><td>SPI1 MOSI / SCK</td><td>MCP4251 auf PCB 8</td></tr>
+        <tr><td class="pn">29 (TX7)</td><td>LED-Kette C, 16 LEDs</td><td>74AHCT125 → PCB 7 PADS</td></tr>
+        <tr><td class="pn">30</td><td>Bypass-Relais</td><td>BC817 → Relais auf PCB 8</td></tr>
+        <tr><td class="pn">31</td><td>MCP4251 CS</td><td>PCB 8</td></tr>
+        <tr><td class="pn">VIN / GND</td><td>Strom 5 V</td><td>PCB 9 (5V_UI)</td></tr>
+        <tr><td class="pn">USB</td><td>MIDI + Daten</td><td>Raspberry Pi 5</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>TX-Bus · ein Flachbandkabel durch alle Bedien-Platinen</h3>
+  <p>Jede Bedien-Platine hat zwei gleiche Wannenstecker (IDC 2 × 5), einen rein und einen raus. Reihenfolge: PCB 1 → METER → TOP → MFX → PLAY → EDIT.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Pin</th><th>Signal</th><th>Pin</th><th>Signal</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">1</td><td>+5 V</td><td class="pn">2</td><td>GND</td></tr>
+        <tr><td class="pn">3</td><td>SH/LD (Schieberegister laden)</td><td class="pn">4</td><td>CLK (Takt)</td></tr>
+        <tr><td class="pn">5</td><td>QH → Richtung Teensy</td><td class="pn">6</td><td>LED-Daten → weg vom Teensy</td></tr>
+        <tr><td class="pn">7</td><td>TM1637 CLK</td><td class="pn">8</td><td>TM1637 DIO</td></tr>
+        <tr><td class="pn">9</td><td>GND</td><td class="pn">10</td><td>+5 V</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Was in welchem Bit steckt</h3>
+  <p>Der Teensy liest 15 Byte am Stück, über 2000 Mal pro Sekunde. A/B sind die beiden Kontakte eines Encoders.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Byte</th><th>Platine</th><th>Inhalt (Bit 0 → 7)</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">0</td><td>TOP</td><td>VALUE A, VALUE B, TEMPO A, TEMPO B, SWING A, SWING B, MENU, ENTER</td></tr>
+        <tr><td class="pn">1</td><td>TOP</td><td>EXIT, PAGE −, PAGE +, SHIFT, frei, frei, frei, frei</td></tr>
+        <tr><td class="pn">2</td><td>MFX</td><td>FX TYPE 1 A/B, HOLD 1, FX ON 1, FX TYPE 2 A/B, HOLD 2, FX ON 2</td></tr>
+        <tr><td class="pn">3–7</td><td>PLAY</td><td>PATTERN A/B, 8 Play-Modes, 8 Perform-Tasten, BAR 1–8, PART −/+, SOLO, SCALE, OCT −/+, REC, STOP, PLAY, PAT −/+, SAVE, TAP, 1 frei</td></tr>
+        <tr><td class="pn">8–14</td><td>EDIT</td><td>22 Encoder A/B (44 Bit), TUBE ON, REVERSE, STRETCH, BPM SYNC, IFX 1 ON, IFX 2 ON, 6 frei</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call warn"><b class="t">Strom für die LEDs</b><p>Rund 570 LEDs würden bei voller Helligkeit über 30 A ziehen. Die Firmware begrenzt deshalb die Helligkeit auf 25 % und rechnet zusätzlich ein Strombudget von 2,5 A mit. Wird es überschritten, dimmt sie alle LEDs etwas. Hell genug ist es trotzdem.</p></div>
+</section>
+
+<section id="roehre">
+  <h2><small>Röhren-Stufe</small>Signalweg durch die Röhre</h2>
+  <p>Die Korg Nutube ist eine echte Röhre, sie läuft aber mit 12 V statt 250 V. Hier sitzt sie im Master: Alles läuft einmal durch, und mit TUBE MIX regelst du, wie viel Röhre du hören willst. Die Röhren-Effekte pro Part (DRIVE A / B) rechnet der Pi als Software-Simulation.</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Stufe</th><th>Bauteil</th><th>Was passiert</th></tr></thead>
+      <tbody>
+        <tr><td class="pn">1</td><td>HiFiBerry OUT L/R</td><td>Fertig gemischtes Signal, 32-Bit-Mix mit Limiter bei −0,3 dBTP</td></tr>
+        <tr><td class="pn">2</td><td>OPA2134 (Puffer)</td><td>Pegel halbieren, damit die Röhre sauber arbeitet</td></tr>
+        <tr><td class="pn">3</td><td>Nutube 6P1, Triode A = links, B = rechts</td><td>Anode 12 V, Heizfaden 0,7 V / 17 mA über 150 Ω aus 3,3 V. Arbeitspunkt und Werte nach dem Beispiel-Schaltplan im Nutube-Datenblatt von Korg</td></tr>
+        <tr><td class="pn">4</td><td>OPA2134 (Aufholverstärker)</td><td>Pegel wieder auf Line-Level</td></tr>
+        <tr><td class="pn">5</td><td>MCP4251 (2 × 50 kΩ)</td><td>TUBE MIX: mischt trockenes und Röhren-Signal, gesteuert vom Teensy</td></tr>
+        <tr><td class="pn">6</td><td>Relais G6K-2F-Y</td><td>TUBE ON aus = das Signal geht direkt zu den Buchsen, 100 % sauber</td></tr>
+        <tr><td class="pn">7</td><td>OUT L/R + NJM4556</td><td>Ausgänge und Kopfhörer-Verstärker</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="call info"><b class="t">Gut zu wissen</b><p>Die Nutube leuchtet <b>grün-blau</b>, nicht orange wie eine alte Röhre. Durch das Rauchglas-Fenster sieht das trotzdem richtig gut aus.</p></div>
+</section>
+
+<section id="software">
+  <h2><small>Software</small>Was auf Pi und Teensy läuft</h2>
+  <h3>Raspberry Pi 5</h3>
+  <ul class="plain">
+    <li><b>System:</b> Raspberry Pi OS Lite 64-bit, startet von der NVMe-SSD. In <code>/boot/firmware/config.txt</code>: <code>dtoverlay=hifiberry-dacplusadcpro</code> und <code>usb_max_current_enable=1</code> (wegen der 5 V über die GPIO-Pins). Das Display-Overlay steht im Wiki von Waveshare.</li>
+    <li><b>tx-engine</b> (C++, das schreiben wir selbst): 16 Parts, Sampler und Oszillatoren, Sequencer mit 128 Steps, Insert- und Master-Effekte, 48 kHz bei 128 Samples Puffer, also etwa 2,7 ms Verzögerung.</li>
+    <li><b>Bibliotheken:</b> RtAudio (Ton), RtMidi (Teensy + DIN), Rubber Band Library (Time-Stretch: Pitch ändern bei gleicher Länge, Loops auf BPM strecken), libsndfile (WAV laden), SDL2 (Display im Korg-Look).</li>
+    <li><b>Kein Verzerren:</b> Jeder Part hat −6 dB Reserve, gemischt wird in 32-Bit-Gleitkomma, am Ende sitzt ein Limiter. Bass und Melodie können sich so nicht gegenseitig übersteuern.</li>
+    <li><b>Samples vom PC:</b> Über WLAN als Netzlaufwerk (Samba). Am PC erscheint ein Ordner „TX-16 Samples“, da ziehst du die WAVs rein oder löschst sie. Später geht das auch per USB-C-Kabel (USB-Gadget-Modus).</li>
+    <li>Startet automatisch beim Einschalten (systemd), bis zum Spielen dauert es ca. 10 Sekunden.</li>
+  </ul>
+  <h3>Teensy 4.1</h3>
+  <ul class="plain">
+    <li><b>Programmieren:</b> Arduino IDE 2 mit Teensyduino, USB-Typ „Serial + MIDI“.</li>
+    <li><b>Bibliotheken:</b> WS2812Serial (LEDs ohne Ruckeln), U8g2 (die zwei kleinen OLEDs), TM1637Display (BPM-Anzeige), Trill (X/Y-Pads), MIDI Library (DIN-Buchsen).</li>
+    <li><b>Ablauf:</b> Liest alle Tasten und Encoder über 2000 Mal pro Sekunde und die Pads mit 1000 Hz. Jede Bewegung geht als MIDI-Befehl an den Pi. Der Pi schickt zurück, welche LEDs leuchten und was auf den Anzeigen steht.</li>
+  </ul>
+</section>
+
+<section id="reihenfolge">
+  <h2><small>Bau-Reihenfolge</small>Schritt für Schritt</h2>
+  <p>Nach jedem Schritt funktioniert schon etwas. Du gibst also nie viel Geld aus, bevor du weißt, dass der vorherige Teil läuft.</p>
+  <ol class="steps">
+    <li><b>Pi, HiFiBerry und Display einrichten.</b> Ca. 245 €. Ziel: Der Pi spielt einen Beat aus WAV-Dateien, die Tasten der PC-Tastatur steuern ihn.</li>
+    <li><b>Teensy auf dem Steckbrett.</b> Ca. 60 €. Ein 74HC165, zwei Encoder, vier Taster und 16 LEDs. Ziel: Drehregler verändern den Sound auf dem Pi.</li>
+    <li><b>KiCad lernen mit PCB 1 und PCB 9.</b> Klein und einfach, ca. 20 € bei JLCPCB. Ziel: Strom und MIDI laufen über deine erste eigene Platine.</li>
+    <li><b>Pads bauen (PCB 7).</b> Silikon gießen, Drucksensoren aufkleben. Ziel: Pads mit Anschlagstärke.</li>
+    <li><b>Bedien-Platinen PCB 2–6 mit SMD-Bestückung bestellen.</b> Den größten Brocken machst du erst, wenn alles davor läuft.</li>
+    <li><b>Röhren-Board PCB 8.</b> Zuerst auf einer Lochrasterplatine testen, dann als Platine bestellen.</li>
+    <li><b>Frontplatte und Gehäuse.</b> Die Lochpositionen kommen aus dem 3D-Modell. Im Frontplatten Designer zeichnen und bestellen, die Wanne drucken.</li>
+    <li><b>Zusammenbauen und Software fertig machen.</b> Danach hast du deine eigene TX-16.</li>
+  </ol>
+</section>
+
+<section id="sicherheit">
+  <h2><small>Sicherheit</small>Das musst du beachten</h2>
+  <div class="call danger"><b class="t">Wichtig</b>
+    <ul class="plain">
+      <li>Nie selbst an 230 V arbeiten. Das fertige Netzteil macht daraus 12 V, alles im Gerät bleibt bei maximal 12 V.</li>
+      <li>Keine klassischen Röhren mit 250 V ohne erfahrene Person. Die Nutube braucht das nicht.</li>
+      <li>Kein selbstgebauter Akku-Pack. Wenn es mobil sein soll, nimm eine fertige USB-C-Powerbank mit 12-V-Ausgang.</li>
+      <li>Beim Löten lüften, Lötzinn nicht in den Mund, und den Lötkolben immer in den Ständer legen.</li>
+      <li>Bevor du das erste Mal einschaltest: mit dem Multimeter prüfen, dass zwischen 5 V und GND kein Kurzschluss ist.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="weiter">
+  <h2><small>Nächste Schritte</small>Was ich dir als Nächstes bauen kann</h2>
+  <ul class="plain">
+    <li><b>KiCad-Schaltpläne</b> für PCB 1 und PCB 9 zum Anfangen. Du musst dann nur noch die Bauteile platzieren und die Leiterbahnen ziehen.</li>
+    <li><b>Teensy-Firmware</b>, fertig zum Hochladen, für den Steckbrett-Test aus Schritt 2.</li>
+    <li><b>tx-engine</b>, das Grundgerüst der Software für den Pi: Sampler, Sequencer, Time-Stretch.</li>
+    <li><b>Bohrplan der Frontplatte</b> als Datei, direkt aus dem 3D-Modell.</li>
+    <li><b>Gießform</b> für die Silikon-Pads als 3D-Druck-Datei.</li>
+  </ul>
+  <p class="muted">TEKKBOX TX-16 · Bauplan Rev 0.4 · Oktober 2026</p>
+</section>
+</main>
+</div>
