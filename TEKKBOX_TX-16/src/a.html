@@ -37,6 +37,11 @@ button:focus-visible,label:focus-visible,[tabindex]:focus-visible{outline:2px so
 .oled16{border-radius:50%;background:#0a1a33}
 .hood{background:repeating-linear-gradient(90deg,#060607 0 calc(var(--u)*.22),#1a1b20 calc(var(--u)*.22) calc(var(--u)*.45));border-radius:calc(var(--u)*.2)}
 .slot{border:1px dashed #3a3c45;border-radius:calc(var(--u)*.3);background:repeating-linear-gradient(135deg,#17181c 0 calc(var(--u)*.25),#141519 calc(var(--u)*.25) calc(var(--u)*.5))}
+.osclcd{display:flex;flex-direction:column;justify-content:center;gap:calc(var(--u)*.12);padding:0 calc(var(--u)*.3);background:#03060c;border-radius:calc(var(--u)*.12);
+  font-family:Silkscreen,"Courier New",monospace;color:#8fd6ff;text-shadow:0 0 calc(var(--u)*.18) rgba(80,180,255,.55);line-height:1;pointer-events:none;overflow:hidden}
+.osclcd div{display:flex;justify-content:space-between;gap:calc(var(--u)*.3);white-space:nowrap}
+.osclcd .l1{font-size:calc(var(--u)*.36);opacity:.8}.osclcd .l2{font-size:calc(var(--u)*.6)}
+.osclcd i{font-style:normal;opacity:.65}
 .vent{background:#060607;border-radius:calc(var(--u)*.2);box-shadow:inset 0 1px 2px #000}
 .lbl{font-weight:700;letter-spacing:.06em;white-space:nowrap;text-align:center;pointer-events:none;line-height:1}
 .tri{display:inline-block;width:0;height:0;border-top:.32em solid transparent;border-bottom:.32em solid transparent;border-right:.48em solid currentColor;margin-right:.35em;vertical-align:.02em}
@@ -120,7 +125,8 @@ canvas.a{display:block}
     <li><b>SOLO</b> gedrückt halten + Pads = nur diese Parts (auch wenn gemutet). Dabei OKT −/+ = Oktave der Solo-Parts. Loslassen = alles wie vorher. <b>SHIFT + SOLO</b> = DROP.</li>
     <li><b>OKT. SEND</b> (im MIX-Block) tippen = aktueller Part an/aus, halten + Pads = mehrere Parts. <b>OKT. SEND halten + OKT −/+</b> (oder ◁ ▷) = Oktave aller Send-Parts runter/hoch. Parts mit CUTOFF 0, LEVEL 0 oder MUTE werden nicht gepitcht.</li></ul></div>
   <div><h2>Sound</h2><ul>
-    <li><b>SYNTH OSCILLATOR</b> 1:1 wie Korg EMX: TYPE mit 16 Typen (WAVEFORM, DUAL OSC, CHORD, UNISON, RING MOD, OSC SYNC, CROSS MOD, VPM, WS, ADDITIVE, COMB, FORMANT, NOISE, PCM+COMB, PCM+WS, AUDIO IN+COMB), <b>OSC EDIT 1 + 2</b>. Die WAVE wählt VALUE, solange die OSC-Seite offen ist (bei PCM-Typen = Sample). SHIFT + OSC EDIT 1 = DRUCK.</li>
+    <li><b>SYNTH OSCILLATOR</b> 1:1 wie Korg EMX: <b>TYPE</b> wählt einen der 16 Typen (WAVEFORM, DUAL OSC, CHORD, UNISON, RING MOD, OSC SYNC, CROSS MOD, VPM, WS, ADDITIVE, COMB, FORMANT, NOISE, PCM+COMB, PCM+WS, AUDIO IN+COMB). Das <b>WAVE-Rad</b> (wie das zweite Rad der EMX) wählt die Welle bzw. Kombination im Typ, z. B. UNISON 3SAW … 6SIN, DUAL OSC SAW+SIN, VPM SAW … SIN, bei PCM-Typen das Sample. SHIFT = 10er-Schritte. Die Anzeige im blauen Block zeigt Typ + Welle. <b>OSC EDIT 1 + 2</b> = die zwei Parameter des Typs. SHIFT + OSC EDIT 1 = DRUCK.</li>
+    <li><b>Silberne Regler</b> = Spiel-Regler (CUTOFF, RESONANCE, EG INT, ADSR, PITCH, OSC EDIT, SPEED, DEPTH, LEVEL, PAN, IFX EDIT). <b>Dunkle Regler</b> = Auswahl (TYPE, SAMPLE, EQ, Röhre).</li>
     <li><b>SAMPLE</b>-Regler (der zuletzt gedrehte von SAMPLE/TYPE spielt), <b>PITCH</b> (SHIFT = GLIDE), <b>START POINT</b> = Sample-Start.</li>
     <li><b>AMP EG · ADSR</b>: ATTACK, DECAY, SUST., RELEASE = X-Achse (Zeit), <b>mit SHIFT = Y-Achse</b>: Attack-Pegel, Decay-Pegel, Sustain-Pegel, Release-Kurve. SUST. ohne SHIFT = Zeit vom Decay- zum Sustain-Pegel. Drehen öffnet <b>EG EDIT</b> im Display (9 Punkte zum Ziehen inkl. Delay, Hold, Kurven).</li>
     <li><b>FILTER</b>: TYPE, RESONANCE, EG INT, CUTOFF (SHIFT + TYPE = TRACK). <b>MODULATION</b>: TYPE, SPEED, <b>EG TIME</b> (Zeit der EG-Typen), DEPTH.</li>
@@ -318,15 +324,16 @@ const PW=60,PT=-21,PB=21,PD=PB-PT,HX=PW/2,HZ=-PT;
 const BAND_Z=9;                                                   // Trennlinie zum Pad-Bereich
 const LCD={x:-20.4,z:-15.1,w:15.4,d:9.24},SEG=null;
 const OLED={x:-24.6,z:11.5,w:8.4,d:.6},XYPAD={x:-24.6,z:16.1,w:8.6,d:7.9};
-const WIN={x0:18.8,x1:29.2,z0:-19.5,z1:-13.5};                     // Röhrenfenster: 3 Röhren unter der Haube
+const WIN={x0:18.8,x1:28.6,z0:-19.5,z1:-13.5};                     // Röhrenfenster: 3 Röhren unter der Haube
 const METERS={x0:2.8,z:[-14.25,-13.65],n:12,pitch:.48};
 const SLEDS=[{l:'USB',c:V.accent2},{l:'MIDI',c:null},{l:'CLK',c:null},{l:'IN',c:null},{l:'LIMIT',c:null},{l:'FAN',c:null}];
 const SLED_X=k=>9.6+k*1.35,SLED_Z=-13.95;
+/* Raster (Rev 2.1): Blöcke 0,3 cm auseinander, Ränder links/rechts gleich (±28,6). Mittleres Band -12,6 … -2, unteres Band -1,6 … 5,4 */
 const SECTS=[
   {n:'PARAMETRIC EQ',x0:-28.6,x1:-12.2,z0:-9.6,z1:-5.7},{n:'FILTER',x0:-28.6,x1:-12.2,z0:-5.4,z1:-.5},{n:'AMP EG · ADSR',x0:-28.6,x1:-12.2,z0:-.2,z1:4.6},
-  {n:'SAMPLE · PITCH',x0:-3.05,x1:6.3,z0:-7.1,z1:-2},{n:'SYNTH OSCILLATOR',x0:-11.75,x1:-3.35,z0:-7.1,z1:4.1,cls:'emx'},
-  {n:'TUBE · OUTPUT',x0:2,x1:18.4,z0:-20.4,z1:-15},{n:'MODULATION',x0:6.6,x1:17.1,z0:-12.6,z1:-2},{n:'AMP',x0:17.4,x1:29.8,z0:-12.6,z1:-7.6},
-  {n:'MIX',x0:-1.9,x1:10,z0:-1.4,z1:4.8},{n:'INSERT FX',x0:10.3,x1:29.8,z0:-1.4,z1:4.8},{n:'',x0:-28.6,x1:-19.9,z0:6.2,z1:8.75}
+  {n:'SYNTH OSCILLATOR',x0:-11.9,x1:-3.3,z0:-12.6,z1:5.4,cls:'emx'},{n:'OSC WAVE',x0:-3,x1:6.3,z0:-12.6,z1:-7.4,cls:'emx'},{n:'SAMPLE · PITCH',x0:-3,x1:6.3,z0:-7.1,z1:-2},
+  {n:'TUBE · OUTPUT',x0:2,x1:18.4,z0:-20.4,z1:-15},{n:'MODULATION',x0:6.6,x1:17.1,z0:-12.6,z1:-2},{n:'AMP',x0:17.4,x1:28.6,z0:-12.6,z1:-2},
+  {n:'MIX',x0:-3,x1:10.3,z0:-1.6,z1:5.4},{n:'INSERT FX',x0:10.6,x1:28.6,z0:-1.6,z1:5.4},{n:'',x0:-28.6,x1:-19.9,z0:6.5,z1:8.85}
 ];
 /* Pads: links 8 × 2 (Parts/Steps 1-16), rechts 4 × 2 (17-24). Echte Pad-Größe 3,6 × 3,3 cm */
 const PADW=3.6,PADD=3.3,PADROWZ=[14.3,17.8];
@@ -334,16 +341,17 @@ const padRC=i=>i<16?{r:Math.floor(i/8),c:i%8}:{r:Math.floor((i-16)/4),c:8+(i-16)
 const colX=c=>c<8?-17.4+c*3.9:15.9+(c-8)*3.75;
 const padAt=(r,c)=>c<8?r*8+c:16+r*4+(c-8);
 const PADX=i=>colX(padRC(i).c),PADZI=i=>PADROWZ[padRC(i).r],FNX=k=>-17.7+k*3.45,FN_Z=11.6;
-const IFXON_X=k=>17+k*2.6;
+const IFXON_X=k=>18.75+k*2.15;
 const BARLED_X=k=>18.4+k*1.0,BARLED_Z=9.65,OCTLED_Z=10.35;
-const SLOTS=[{x:1.625,z:-10,w:9.35,d:5.2,t:'ADD-ON SLOT',s:'FREE · FOR LATER MODULES'}];
+const SLOTS=[];
 const REAR=[
   {x:-10,l:'12 V DC'},{x:-7.6,l:'POWER'},{x:-5.2,l:'USB-C PC'},{x:-2.6,l:'USB HOST'},{x:0,l:'MIDI IN'},{x:2.5,l:'MIDI OUT'},{x:5,l:'MIDI THRU'},
   {x:7.4,l:'SYNC IN'},{x:9.4,l:'SYNC OUT'},{x:11.6,l:'IN L'},{x:13.6,l:'IN R'},{x:15.6,l:'OUT L'},{x:17.6,l:'OUT R'}
 ];
 const REAR_VENTS=[];
 /* SYNTH OSCILLATOR: TYPE-Regler mit 16 Beschriftungen + LEDs rundherum wie bei der EMX */
-const OSCT={x:-7.55,z:-2.75,r:1.15,lr:2.25,span:300};
+const OSCT={x:-7.6,z:-3.7,r:1.15,lr:2.25,span:300};
+const OSCLCD={x:-7.6,z:-10.35,w:7.6,d:2};                         // Anzeige im EMX-Block: Typ + Welle
 const oscAng=k=>(-OSCT.span/2+k*OSCT.span/15)*D2R;
 
 /* ---------- Bedienelemente ---------- */
@@ -358,31 +366,34 @@ bd('menu','MENU',-4.6,-16.6,2.4,1,{sh:'MIDI'});bd('enter','ENTER',-1.6,-16.6,2.4
 /* EQ-Reihe unter dem Display */
 kd('eqL','LOW',-27,-7.75,.6,{p:'eqL',sect:'EQ LOW',eq:0});kd('eqM','MID',-24.2,-7.75,.6,{p:'eqM',sect:'EQ MID',eq:1});kd('eqH','HIGH',-21.4,-7.75,.6,{p:'eqH',sect:'EQ HIGH',eq:2});
 kd('eqF','FREQ',-18,-7.75,.6,{p:'eqF',sect:'EQ FREQ',eq:3});kd('eqX','MIX',-15.2,-7.75,.6,{p:'eqX',sect:'EQ MIX',eq:4});
-bd('bw','BW',-13.05,-7.75,1.3,.8,{led:'B',sh:'PRESET'});
-/* FILTER */
-kd('ftype','TYPE',-26.2,-2.9,.9,{p:'ftype',det:'list',sect:'FILTER TYPE',aria:'FILTER TYPE',sh:'TRACK'});
-kd('reso','RESONANCE',-22.4,-2.9,.7,{p:'reso',sect:'FILTER'});
-kd('egint','EG INT',-18.8,-2.9,.7,{p:'eg',det:'center',sect:'FILTER EG'});
-kd('cutoff','CUTOFF',-14.9,-2.9,.95,{p:'cut',sect:'FILTER'});
+bd('bw','BW',-13.2,-7.75,1.3,.8,{led:'B',sh:'PRESET'});
+/* Spiel-Regler (hero) = silberne Kappe wie bei der EMX, Auswahl-Regler (TYPE, SAMPLE, EQ) = dunkel.
+   FILTER und ADSR stehen in denselben 4 Spalten (-26 / -22,2 / -18,4 / -14,6) */
+kd('ftype','TYPE',-26,-2.9,.8,{p:'ftype',det:'list',sect:'FILTER TYPE',aria:'FILTER TYPE',sh:'TRACK'});
+kd('reso','RESONANCE',-22.2,-2.9,.85,{p:'reso',sect:'FILTER',hero:true});
+kd('egint','EG INT',-18.4,-2.9,.85,{p:'eg',det:'center',sect:'FILTER EG',hero:true});
+kd('cutoff','CUTOFF',-14.6,-2.9,1.1,{p:'cut',sect:'FILTER',hero:true});
 /* ADSR: Drehen = X-Achse (Zeit), SHIFT + Drehen = Y-Achse (Pegel) */
-kd('attack','ATTACK',-26,1.9,.95,{p:'att',sect:'AMP EG · ATTACK',shp:'egal',sh:'LEVEL',eg:1});
-kd('decay','DECAY',-22,1.9,.9,{p:'dec',sect:'AMP EG · DECAY',shp:'egdl',sh:'LEVEL',eg:3});
-kd('sustain','SUST.',-18.1,1.9,.85,{p:'egST',sect:'AMP EG · SUSTAIN TIME',shp:'egs',sh:'LEVEL',eg:4,aria:'SUSTAIN'});
-kd('release','RELEASE',-14.5,1.9,.75,{p:'egR',sect:'AMP EG · RELEASE',shp:'egcr',sh:'CURVE',eg:6});
-/* Transport + ROLL/SHIFT + TEMPO LOCK + SOLO */
-bd('tap','TAP',-27.6,5.3,1.9,.85,{led:'A',sh:'BPM'});
-bd('rec','REC',-27.1,7.55,2.3,1.25,{led:'red',sh:'RESAMPLE',sym:'rec'});bd('stop','STOP',-24.4,7.55,2.3,1.25,{sh:'PANIC',sym:'stop'});bd('play','PLAY/PAUSE',-21.7,7.55,2.3,1.25,{led:'green',sh:'RESTART',sym:'play'});
-bd('roll','ROLL',-17.6,6,1.3,1.9,{led:'A',sh:'TYPE',tall:true});
-bd('shift','SHIFT',-17.6,7.95,2.4,.8,{led:'B'});
-bd('tlock','TEMP. LOCK',-13.8,6.8,3,1.3,{led:'A'});
-bd('solo','SOLO',-2.8,6.5,1.3,3,{led:'white',sh:'DROP',tall:true});
-/* SAMPLE · PITCH (Plan: rechts neben dem Oszillator, links von MODULATION) */
-kd('sample','SAMPLE',-.4,-4.4,.75,{p:'src',det:'list',sect:'SAMPLE'});
-kd('pitch','PITCH',3.6,-4.4,.75,{p:'pitch',det:'center',sect:'PITCH',shp:'glide',sh:'GLIDE'});
-/* SYNTH OSCILLATOR (EMX) */
+kd('attack','ATTACK',-26,2,.85,{p:'att',sect:'AMP EG · ATTACK',shp:'egal',sh:'LEVEL',eg:1,hero:true});
+kd('decay','DECAY',-22.2,2,.85,{p:'dec',sect:'AMP EG · DECAY',shp:'egdl',sh:'LEVEL',eg:3,hero:true});
+kd('sustain','SUST.',-18.4,2,.85,{p:'egST',sect:'AMP EG · SUSTAIN TIME',shp:'egs',sh:'LEVEL',eg:4,aria:'SUSTAIN',hero:true});
+kd('release','RELEASE',-14.6,2,.85,{p:'egR',sect:'AMP EG · RELEASE',shp:'egcr',sh:'CURVE',eg:6,hero:true});
+/* Transport + ROLL/SHIFT + TEMPO LOCK + SOLO: alles auf einer Grundlinie (z 7,65) */
+bd('tap','TAP',-27.1,5.55,2.3,.7,{led:'A',sh:'BPM'});
+bd('rec','REC',-27.1,7.65,2.3,1.2,{led:'red',sh:'RESAMPLE',sym:'rec'});bd('stop','STOP',-24.25,7.65,2.3,1.2,{sh:'PANIC',sym:'stop'});bd('play','PLAY/PAUSE',-21.4,7.65,2.3,1.2,{led:'green',sh:'RESTART',sym:'play'});
+bd('roll','ROLL',-17.6,6.35,1.3,1.8,{led:'A',sh:'TYPE',tall:true});
+bd('shift','SHIFT',-17.6,8.15,2.4,.75,{led:'B'});
+bd('tlock','TEMP. LOCK',-13.8,7.65,3,1.2,{led:'A'});
+bd('solo','SOLO',-2.2,7.3,1.3,2.5,{led:'white',sh:'DROP',tall:true});
+/* SYNTH OSCILLATOR (EMX-1): oben die Anzeige (Typ + Welle), TYPE mit 16 Typen rundherum, unten OSC EDIT 1 + 2 */
 kd('osc','TYPE',OSCT.x,OSCT.z,OSCT.r,{p:'osc',det:'list',sect:'SYNTH OSCILLATOR',aria:'OSC TYPE',emxRing:true,plain:true});
-kd('edit','OSC EDIT 1',-9.6,1.9,.7,{p:'edit',sect:'OSC EDIT 1',shp:'druck',sh:'DRUCK',emx:true});
-kd('edit2','OSC EDIT 2',-5.5,1.9,.7,{p:'edit2',sect:'OSC EDIT 2',emx:true});
+kd('edit','OSC EDIT 1',-9.7,2.6,.75,{p:'edit',sect:'OSC EDIT 1',shp:'druck',sh:'DRUCK',emx:true,hero:true});
+kd('edit2','OSC EDIT 2',-5.5,2.6,.75,{p:'edit2',sect:'OSC EDIT 2',emx:true,hero:true});
+/* OSC WAVE: eigenes Rad wie das zweite Rad (Dial) der EMX – wählt die Welle/Kombination im Typ (z. B. UNISON 3SAW … 6SIN, DUAL OSC SAW+SIN) */
+kd('wave','WAVE',1.65,-10.05,1.2,{endless:true,plain:true,wave:true,emx:true,sect:'OSC WAVE',aria:'OSC WAVE',sh:'×10'});
+/* SAMPLE · PITCH */
+kd('sample','SAMPLE',-.4,-4.4,.75,{p:'src',det:'list',sect:'SAMPLE'});
+kd('pitch','PITCH',3.6,-4.4,.85,{p:'pitch',det:'center',sect:'PITCH',shp:'glide',sh:'GLIDE',hero:true});
 /* TUBE · OUTPUT */
 kd('tubemix','T.MIX',4.4,-18.35,.95,{p:'tubeMix',det:'tube',sect:'TUBE MIX'});
 kd('driveA','A',7.9,-18.35,.6,{p:'driveA',sect:'TUBE STAGE A',aria:'DRIVE A'});
@@ -390,26 +401,26 @@ kd('driveB','B',10.9,-18.35,.6,{p:'driveB',sect:'TUBE STAGE B',aria:'DRIVE B'});
 kd('master','MASTER',14.3,-18.35,1,{g:true,pot:true,ring:false,ticks:true,cap:true,sect:'MASTER'});
 kd('phones','PHONES',17.4,-18.35,.5,{g:true,pot:true,ring:false,ticks:true,sect:'PHONES'});
 bd('tubeon','T.ON',4.4,-15.85,2,.75,{led:'tube',aria:'TUBE ON'});   // SHIFT + T.ON = alle Parts (ohne Aufdruck, Platz)
-/* MODULATION */
-kd('mtype','TYPE',8.6,-10.4,.85,{p:'mtype',det:'list',sect:'MOD TYPE',aria:'MOD TYPE'});
-kd('speed','SPEED',14,-10.4,.8,{p:'speed',sect:'MODULATION'});
-kd('egtime','EG TIME',8.9,-6.6,.7,{p:'mEgT',sect:'MOD EG TIME'});
-kd('depth','DEPTH',14,-6.6,.85,{p:'depth',sect:'MODULATION'});
-kd('start','START POINT',8.9,-3.5,.45,{p:'start',sect:'SAMPLE START POINT'});
-/* AMP */
-bd('mono','MONO/POLY',19.8,-10.3,2.6,1,{led:'B',sh:'CHOKE',aria:'VOICE ASSIGN'});
-kd('level','LEVEL',24,-10.3,1.05,{p:'lvl',sect:'AMP'});
-kd('pan','PAN',28.1,-10.3,1.05,{p:'pan',sect:'AMP'});
-/* MIX */
-kd('sc','SIDECHAIN',-.2,2.2,.7,{p:'sc',sect:'SIDECHAIN'});
-kd('gluedrv','GLUE DRIVE',2.8,2.2,.7,{p:'glueDrv',sect:'BASS GLUE · PER PART'});
-bd('glue','BASS GLUE',5.1,1.1,1.7,.9,{led:'tube'});bd('send','MFX SEND',7,1.1,1.7,.9,{led:'A'});bd('rollsend','ROLL SEND',8.9,1.1,1.7,.9,{led:'A'});
-bd('oktsend','OKT. SEND',7,3.4,5.5,.9,{led:'A',aria:'OKT SEND'});
-/* INSERT FX */
-kd('ifxtype','TYPE',12.8,.4,.95,{p:'fxType',det:'list',sect:'INSERT FX',aria:'IFX TYPE',plain:true});
-kd('ifxedit','EDIT',12.8,3.5,.45,{p:'fxEdit',sect:'INSERT FX',aria:'IFX EDIT'});
-bd('ifxdn','-',18.3,.3,2.4,1.1,{sh:'IFX 1',noLbl:true,aria:'IFX auswählen zurück'});bd('ifxup','+',26.1,.3,2.4,1.1,{sh:'IFX 5',noLbl:true,aria:'IFX auswählen weiter'});
-for(let k=0;k<5;k++)bd('ifxon'+k,String(k+1),IFXON_X(k),2.6,2,.8,{led:'A',ifxOn:k,aria:'IFX '+(k+1)+' ON/OFF'});
+/* MODULATION: 2 Spalten (9,2 / 14,5) */
+kd('mtype','TYPE',9.2,-9.9,.8,{p:'mtype',det:'list',sect:'MOD TYPE',aria:'MOD TYPE'});
+kd('speed','SPEED',14.5,-9.9,.85,{p:'speed',sect:'MODULATION',hero:true});
+kd('egtime','EG TIME',9.2,-6.3,.7,{p:'mEgT',sect:'MOD EG TIME'});
+kd('depth','DEPTH',14.5,-6.3,.85,{p:'depth',sect:'MODULATION',hero:true});
+kd('start','START POINT',9.2,-3.5,.45,{p:'start',sect:'SAMPLE START POINT'});
+/* AMP: MONO/POLY · LEVEL · PAN mittig im Block */
+bd('mono','MONO/POLY',19.3,-7.3,2.6,1,{led:'B',sh:'CHOKE',aria:'VOICE ASSIGN'});
+kd('level','LEVEL',23.1,-7.3,1.05,{p:'lvl',sect:'AMP',hero:true});
+kd('pan','PAN',26.7,-7.3,.9,{p:'pan',sect:'AMP',hero:true});
+/* MIX: Regler-Reihe z 2 wie INSERT FX, Tasten oben, OKT. SEND darunter */
+kd('sc','SIDECHAIN',-.9,2,.75,{p:'sc',sect:'SIDECHAIN'});
+kd('gluedrv','GLUE DRIVE',2.9,2,.75,{p:'glueDrv',sect:'BASS GLUE · PER PART'});
+bd('glue','BASS GLUE',5.75,.8,1.6,.9,{led:'tube'});bd('send','MFX SEND',7.55,.8,1.6,.9,{led:'A'});bd('rollsend','ROLL SEND',9.35,.8,1.6,.9,{led:'A'});
+bd('oktsend','OKT. SEND',7.55,3.5,5.2,.9,{led:'A',aria:'OKT SEND'});
+/* INSERT FX: TYPE + EDIT nebeneinander (EDIT = Spiel-Regler), rechts −/+ und 1–5 */
+kd('ifxtype','TYPE',12.6,2,.85,{p:'fxType',det:'list',sect:'INSERT FX',aria:'IFX TYPE'});
+kd('ifxedit','EDIT',16.2,2,.85,{p:'fxEdit',sect:'INSERT FX',aria:'IFX EDIT',hero:true});
+bd('ifxdn','-',IFXON_X(0),.8,1.9,1,{sh:'IFX 1',noLbl:true,aria:'IFX auswählen zurück'});bd('ifxup','+',IFXON_X(4),.8,1.9,1,{sh:'IFX 5',noLbl:true,aria:'IFX auswählen weiter'});
+for(let k=0;k<5;k++)bd('ifxon'+k,String(k+1),IFXON_X(k),3.5,1.8,.8,{led:'A',ifxOn:k,aria:'IFX '+(k+1)+' ON/OFF'});
 /* Touchpad-Tasten */
 bd('gatearp','GATE ARP',-28,10,2.3,.8,{led:'A',sh:'TYPE'});
 bd('padmode','T.SCALE',-25.4,10,2.3,.8,{led:'A',sh:'SCALE',aria:'TOUCH SCALE'});

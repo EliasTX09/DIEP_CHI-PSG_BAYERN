@@ -96,9 +96,12 @@ Nach jeder Änderung testen (Abschnitt 6), dann App bauen und das Artifact aktua
 ### Layout Rev 2.0 (Plan vom 2026-10-10, gilt vor älteren Angaben oben)
 
 - Display oben links, darunter PARAMETRIC EQ (LOW MID HIGH · FREQ MIX · BW), FILTER, AMP EG (ADSR, SHIFT = Pegel).
-- Mitte: VALUE/PATTERN + Menütasten, darunter SYNTH OSCILLATOR (blauer EMX-Block), rechts daneben **SAMPLE · PITCH** (Plan), darüber ADD-ON SLOT.
+- Mitte: VALUE/PATTERN + Menütasten, darunter SYNTH OSCILLATOR (blauer EMX-Block: Anzeige Typ + Welle, TYPE-Ring, OSC EDIT 1/2).
+  Rechts daneben oben **OSC WAVE** (eigenes Rad = das zweite Rad/Dial der EMX: Welle/Kombination im Typ, z. B. UNISON 6SIN), darunter **SAMPLE · PITCH**.
+- Raster Rev 2.1: Blöcke 0,3 cm Abstand, Ränder ±28,6, mittleres Band -12,6 … -2, unteres Band -1,6 … 5,4. FILTER und ADSR in denselben 4 Spalten.
+  **Silberne Kappe (`hero:true`) = Spiel-Regler**, dunkle Kappe = Auswahl-Regler (TYPE, SAMPLE, EQ, Röhre).
 - Rechts oben: TUBE · OUTPUT (T.MIX, A, B, MASTER, PHONES, T.ON), Röhrenhaube mit 3 Röhren, MODULATION, AMP (MONO/POLY, LEVEL, PAN).
-- MIX: SIDECHAIN, GLUE DRIVE, BASS GLUE / MFX SEND / ROLL SEND, darunter **OKT. SEND** (Plan). INSERT FX: TYPE, EDIT, −/+, 1–5.
+- MIX: SIDECHAIN, GLUE DRIVE, BASS GLUE / MFX SEND / ROLL SEND, darunter **OKT. SEND** (Plan). INSERT FX: TYPE + EDIT nebeneinander, −/+, 1–5.
 - Unten links: TAP, REC/STOP/PLAY, ROLL + SHIFT, TEMP. LOCK, SOLO. Touchpad mit GATE ARP / T.SCALE / MFX / HOLD.
 - Pads: Funktionsreihe <P P> MUTE ERASE TRIGGER SEQU. KEYB. CHORD STEP JUMP. Rechts ◁ ▷ (Bars, blaue LEDs), rote LEDs = Oktave des Parts,
   **OKT − / OKT +** über dem rechten Pad-Block (= Oktave des aktuellen Parts, KEYB./CHORD = Tastatur, SOLO/OKT. SEND halten = deren Parts, SHIFT = Halbton).
@@ -150,3 +153,5 @@ Nach jeder Änderung testen (Abschnitt 6), dann App bauen und das Artifact aktua
 - **Rev 2.0:** Layout nach dem handgezeichneten Plan (60 × 42 cm, EMX-Oszillator-Block, 3 Röhren, SOLO, TEMP. LOCK, OKT. SEND, BW, EQ-Presets,
   Menü bleibt bis EXIT, Welle beim Anschlagen). Feinschliff 2026-10-10: OKT −/+ über den rechten Pads ergänzt, OKT. SEND in den MIX-Block,
   SAMPLE · PITCH neben den Oszillator, ◁ ▷ nur noch Bars, ADD-ON SLOT im Raster.
+- **Rev 2.1 (2026-10-10):** WAVE-Rad für den EMX-Oszillator (eigenes Rad statt VALUE) + Anzeige Typ/Welle im blauen Block, ADD-ON SLOT entfernt,
+  Panel auf sauberes Raster gebracht, Spiel-Regler silbern, IFX EDIT normal groß neben TYPE, Transport auf einer Grundlinie.

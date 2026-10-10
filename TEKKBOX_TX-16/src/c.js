@@ -488,7 +488,7 @@ function eqStr(P,k){const v=pget(P,k);switch(k){case 'eqL':case 'eqM':case 'eqH'
   case 'eqLF':return 'LOW '+hzStr(eqLHz(v));case 'eqF':return 'MID '+hzStr(eqFHz(v));case 'eqHF':return 'HIGH '+hzStr(eqHHz(v));
   case 'lc':return v<.01?'OFF':hzStr(lcHz(v));case 'hc':return v>=.999?'OFF':hzStr(hcHz(v));}return pctStr(v);}
 function valStr(d){
-  if(d.endless)return'VALUE';
+  if(d.endless){if(!d.wave)return'VALUE';const P=cur.parts[ui.part];return P.osc?NUM.osc(P.osc)+' · '+emxWaveName(P):'OSC OFF';}
   const P=cur.parts[ui.part],v=knobGet(d);
   if(d.eq!=null&&d.eq<4)return eqStr(P,keyOf(d));
   switch(d.id){case 'rolltype':return NUM.roll(ui.rollType);
@@ -532,6 +532,8 @@ function knobChanged(d){
 }
 /* WAVE des EMX-Oszillators (OSC-Seite offen: VALUE wählt die Welle, bei PCM-Typen das Sample) */
 function waveAdj(n){const P=cur.parts[ui.part];if(!P.osc)return;const W=emxWaves(P.osc),w=clamp((P.wave|0)+n*(shiftNow()?10:1),0,W.length-1);if(w===(P.wave|0))return;undoKind('wave'+ui.part);P.wave=w;dirty();refreshKnob(CTRL.osc);popup('oscedit',{},600000);}
+/* WAVE-Rad (wie das Dial der EMX): Welle/Kombination im gewählten Typ. Ohne Oszillator zeigt es nur die OSC-Seite. n = 0: nur anzeigen */
+function waveTurn(n){const P=cur.parts[ui.part];ui.menu=-1;if(n&&P.osc){waveAdj(n);refreshKnob(CTRL.wave,true);}popup('oscedit',{},600000);}
 /* PARAMETRIC EQ im Display: VALUE = Gain des gewählten Bands (BW an = Bandbreite), bei LOW CUT/HIGH CUT = Frequenz */
 function eqAdj(n){const P=cur.parts[ui.part],s=ui.eqSel??1,k=s<3?(ui.bw?EQK.q[s]:EQK.g[s]):s===3?'lc':'hc';undoKind('eqv'+ui.part+':'+k);P[k]=clamp(pget(P,k)+n/127*(shiftNow()?1:3));delete P.eqPre;afterPartChange(k);refreshKnobs();popup('eqedit',{},600000);}
 function valueKnob(n){

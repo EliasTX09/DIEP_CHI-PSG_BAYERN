@@ -37,6 +37,11 @@ button:focus-visible,label:focus-visible,[tabindex]:focus-visible{outline:2px so
 .oled16{border-radius:50%;background:#0a1a33}
 .hood{background:repeating-linear-gradient(90deg,#060607 0 calc(var(--u)*.22),#1a1b20 calc(var(--u)*.22) calc(var(--u)*.45));border-radius:calc(var(--u)*.2)}
 .slot{border:1px dashed #3a3c45;border-radius:calc(var(--u)*.3);background:repeating-linear-gradient(135deg,#17181c 0 calc(var(--u)*.25),#141519 calc(var(--u)*.25) calc(var(--u)*.5))}
+.osclcd{display:flex;flex-direction:column;justify-content:center;gap:calc(var(--u)*.12);padding:0 calc(var(--u)*.3);background:#03060c;border-radius:calc(var(--u)*.12);
+  font-family:Silkscreen,"Courier New",monospace;color:#8fd6ff;text-shadow:0 0 calc(var(--u)*.18) rgba(80,180,255,.55);line-height:1;pointer-events:none;overflow:hidden}
+.osclcd div{display:flex;justify-content:space-between;gap:calc(var(--u)*.3);white-space:nowrap}
+.osclcd .l1{font-size:calc(var(--u)*.36);opacity:.8}.osclcd .l2{font-size:calc(var(--u)*.6)}
+.osclcd i{font-style:normal;opacity:.65}
 .vent{background:#060607;border-radius:calc(var(--u)*.2);box-shadow:inset 0 1px 2px #000}
 .lbl{font-weight:700;letter-spacing:.06em;white-space:nowrap;text-align:center;pointer-events:none;line-height:1}
 .tri{display:inline-block;width:0;height:0;border-top:.32em solid transparent;border-bottom:.32em solid transparent;border-right:.48em solid currentColor;margin-right:.35em;vertical-align:.02em}
@@ -120,7 +125,8 @@ canvas.a{display:block}
     <li><b>SOLO</b> gedrückt halten + Pads = nur diese Parts (auch wenn gemutet). Dabei OKT −/+ = Oktave der Solo-Parts. Loslassen = alles wie vorher. <b>SHIFT + SOLO</b> = DROP.</li>
     <li><b>OKT. SEND</b> (im MIX-Block) tippen = aktueller Part an/aus, halten + Pads = mehrere Parts. <b>OKT. SEND halten + OKT −/+</b> (oder ◁ ▷) = Oktave aller Send-Parts runter/hoch. Parts mit CUTOFF 0, LEVEL 0 oder MUTE werden nicht gepitcht.</li></ul></div>
   <div><h2>Sound</h2><ul>
-    <li><b>SYNTH OSCILLATOR</b> 1:1 wie Korg EMX: TYPE mit 16 Typen (WAVEFORM, DUAL OSC, CHORD, UNISON, RING MOD, OSC SYNC, CROSS MOD, VPM, WS, ADDITIVE, COMB, FORMANT, NOISE, PCM+COMB, PCM+WS, AUDIO IN+COMB), <b>OSC EDIT 1 + 2</b>. Die WAVE wählt VALUE, solange die OSC-Seite offen ist (bei PCM-Typen = Sample). SHIFT + OSC EDIT 1 = DRUCK.</li>
+    <li><b>SYNTH OSCILLATOR</b> 1:1 wie Korg EMX: <b>TYPE</b> wählt einen der 16 Typen (WAVEFORM, DUAL OSC, CHORD, UNISON, RING MOD, OSC SYNC, CROSS MOD, VPM, WS, ADDITIVE, COMB, FORMANT, NOISE, PCM+COMB, PCM+WS, AUDIO IN+COMB). Das <b>WAVE-Rad</b> (wie das zweite Rad der EMX) wählt die Welle bzw. Kombination im Typ, z. B. UNISON 3SAW … 6SIN, DUAL OSC SAW+SIN, VPM SAW … SIN, bei PCM-Typen das Sample. SHIFT = 10er-Schritte. Die Anzeige im blauen Block zeigt Typ + Welle. <b>OSC EDIT 1 + 2</b> = die zwei Parameter des Typs. SHIFT + OSC EDIT 1 = DRUCK.</li>
+    <li><b>Silberne Regler</b> = Spiel-Regler (CUTOFF, RESONANCE, EG INT, ADSR, PITCH, OSC EDIT, SPEED, DEPTH, LEVEL, PAN, IFX EDIT). <b>Dunkle Regler</b> = Auswahl (TYPE, SAMPLE, EQ, Röhre).</li>
     <li><b>SAMPLE</b>-Regler (der zuletzt gedrehte von SAMPLE/TYPE spielt), <b>PITCH</b> (SHIFT = GLIDE), <b>START POINT</b> = Sample-Start.</li>
     <li><b>AMP EG · ADSR</b>: ATTACK, DECAY, SUST., RELEASE = X-Achse (Zeit), <b>mit SHIFT = Y-Achse</b>: Attack-Pegel, Decay-Pegel, Sustain-Pegel, Release-Kurve. SUST. ohne SHIFT = Zeit vom Decay- zum Sustain-Pegel. Drehen öffnet <b>EG EDIT</b> im Display (9 Punkte zum Ziehen inkl. Delay, Hold, Kurven).</li>
     <li><b>FILTER</b>: TYPE, RESONANCE, EG INT, CUTOFF (SHIFT + TYPE = TRACK). <b>MODULATION</b>: TYPE, SPEED, <b>EG TIME</b> (Zeit der EG-Typen), DEPTH.</li>
@@ -318,15 +324,16 @@ const PW=60,PT=-21,PB=21,PD=PB-PT,HX=PW/2,HZ=-PT;
 const BAND_Z=9;                                                   // Trennlinie zum Pad-Bereich
 const LCD={x:-20.4,z:-15.1,w:15.4,d:9.24},SEG=null;
 const OLED={x:-24.6,z:11.5,w:8.4,d:.6},XYPAD={x:-24.6,z:16.1,w:8.6,d:7.9};
-const WIN={x0:18.8,x1:29.2,z0:-19.5,z1:-13.5};                     // Röhrenfenster: 3 Röhren unter der Haube
+const WIN={x0:18.8,x1:28.6,z0:-19.5,z1:-13.5};                     // Röhrenfenster: 3 Röhren unter der Haube
 const METERS={x0:2.8,z:[-14.25,-13.65],n:12,pitch:.48};
 const SLEDS=[{l:'USB',c:V.accent2},{l:'MIDI',c:null},{l:'CLK',c:null},{l:'IN',c:null},{l:'LIMIT',c:null},{l:'FAN',c:null}];
 const SLED_X=k=>9.6+k*1.35,SLED_Z=-13.95;
+/* Raster (Rev 2.1): Blöcke 0,3 cm auseinander, Ränder links/rechts gleich (±28,6). Mittleres Band -12,6 … -2, unteres Band -1,6 … 5,4 */
 const SECTS=[
   {n:'PARAMETRIC EQ',x0:-28.6,x1:-12.2,z0:-9.6,z1:-5.7},{n:'FILTER',x0:-28.6,x1:-12.2,z0:-5.4,z1:-.5},{n:'AMP EG · ADSR',x0:-28.6,x1:-12.2,z0:-.2,z1:4.6},
-  {n:'SAMPLE · PITCH',x0:-3.05,x1:6.3,z0:-7.1,z1:-2},{n:'SYNTH OSCILLATOR',x0:-11.75,x1:-3.35,z0:-7.1,z1:4.1,cls:'emx'},
-  {n:'TUBE · OUTPUT',x0:2,x1:18.4,z0:-20.4,z1:-15},{n:'MODULATION',x0:6.6,x1:17.1,z0:-12.6,z1:-2},{n:'AMP',x0:17.4,x1:29.8,z0:-12.6,z1:-7.6},
-  {n:'MIX',x0:-1.9,x1:10,z0:-1.4,z1:4.8},{n:'INSERT FX',x0:10.3,x1:29.8,z0:-1.4,z1:4.8},{n:'',x0:-28.6,x1:-19.9,z0:6.2,z1:8.75}
+  {n:'SYNTH OSCILLATOR',x0:-11.9,x1:-3.3,z0:-12.6,z1:5.4,cls:'emx'},{n:'OSC WAVE',x0:-3,x1:6.3,z0:-12.6,z1:-7.4,cls:'emx'},{n:'SAMPLE · PITCH',x0:-3,x1:6.3,z0:-7.1,z1:-2},
+  {n:'TUBE · OUTPUT',x0:2,x1:18.4,z0:-20.4,z1:-15},{n:'MODULATION',x0:6.6,x1:17.1,z0:-12.6,z1:-2},{n:'AMP',x0:17.4,x1:28.6,z0:-12.6,z1:-2},
+  {n:'MIX',x0:-3,x1:10.3,z0:-1.6,z1:5.4},{n:'INSERT FX',x0:10.6,x1:28.6,z0:-1.6,z1:5.4},{n:'',x0:-28.6,x1:-19.9,z0:6.5,z1:8.85}
 ];
 /* Pads: links 8 × 2 (Parts/Steps 1-16), rechts 4 × 2 (17-24). Echte Pad-Größe 3,6 × 3,3 cm */
 const PADW=3.6,PADD=3.3,PADROWZ=[14.3,17.8];
@@ -334,16 +341,17 @@ const padRC=i=>i<16?{r:Math.floor(i/8),c:i%8}:{r:Math.floor((i-16)/4),c:8+(i-16)
 const colX=c=>c<8?-17.4+c*3.9:15.9+(c-8)*3.75;
 const padAt=(r,c)=>c<8?r*8+c:16+r*4+(c-8);
 const PADX=i=>colX(padRC(i).c),PADZI=i=>PADROWZ[padRC(i).r],FNX=k=>-17.7+k*3.45,FN_Z=11.6;
-const IFXON_X=k=>17+k*2.6;
+const IFXON_X=k=>18.75+k*2.15;
 const BARLED_X=k=>18.4+k*1.0,BARLED_Z=9.65,OCTLED_Z=10.35;
-const SLOTS=[{x:1.625,z:-10,w:9.35,d:5.2,t:'ADD-ON SLOT',s:'FREE · FOR LATER MODULES'}];
+const SLOTS=[];
 const REAR=[
   {x:-10,l:'12 V DC'},{x:-7.6,l:'POWER'},{x:-5.2,l:'USB-C PC'},{x:-2.6,l:'USB HOST'},{x:0,l:'MIDI IN'},{x:2.5,l:'MIDI OUT'},{x:5,l:'MIDI THRU'},
   {x:7.4,l:'SYNC IN'},{x:9.4,l:'SYNC OUT'},{x:11.6,l:'IN L'},{x:13.6,l:'IN R'},{x:15.6,l:'OUT L'},{x:17.6,l:'OUT R'}
 ];
 const REAR_VENTS=[];
 /* SYNTH OSCILLATOR: TYPE-Regler mit 16 Beschriftungen + LEDs rundherum wie bei der EMX */
-const OSCT={x:-7.55,z:-2.75,r:1.15,lr:2.25,span:300};
+const OSCT={x:-7.6,z:-3.7,r:1.15,lr:2.25,span:300};
+const OSCLCD={x:-7.6,z:-10.35,w:7.6,d:2};                         // Anzeige im EMX-Block: Typ + Welle
 const oscAng=k=>(-OSCT.span/2+k*OSCT.span/15)*D2R;
 
 /* ---------- Bedienelemente ---------- */
@@ -358,31 +366,34 @@ bd('menu','MENU',-4.6,-16.6,2.4,1,{sh:'MIDI'});bd('enter','ENTER',-1.6,-16.6,2.4
 /* EQ-Reihe unter dem Display */
 kd('eqL','LOW',-27,-7.75,.6,{p:'eqL',sect:'EQ LOW',eq:0});kd('eqM','MID',-24.2,-7.75,.6,{p:'eqM',sect:'EQ MID',eq:1});kd('eqH','HIGH',-21.4,-7.75,.6,{p:'eqH',sect:'EQ HIGH',eq:2});
 kd('eqF','FREQ',-18,-7.75,.6,{p:'eqF',sect:'EQ FREQ',eq:3});kd('eqX','MIX',-15.2,-7.75,.6,{p:'eqX',sect:'EQ MIX',eq:4});
-bd('bw','BW',-13.05,-7.75,1.3,.8,{led:'B',sh:'PRESET'});
-/* FILTER */
-kd('ftype','TYPE',-26.2,-2.9,.9,{p:'ftype',det:'list',sect:'FILTER TYPE',aria:'FILTER TYPE',sh:'TRACK'});
-kd('reso','RESONANCE',-22.4,-2.9,.7,{p:'reso',sect:'FILTER'});
-kd('egint','EG INT',-18.8,-2.9,.7,{p:'eg',det:'center',sect:'FILTER EG'});
-kd('cutoff','CUTOFF',-14.9,-2.9,.95,{p:'cut',sect:'FILTER'});
+bd('bw','BW',-13.2,-7.75,1.3,.8,{led:'B',sh:'PRESET'});
+/* Spiel-Regler (hero) = silberne Kappe wie bei der EMX, Auswahl-Regler (TYPE, SAMPLE, EQ) = dunkel.
+   FILTER und ADSR stehen in denselben 4 Spalten (-26 / -22,2 / -18,4 / -14,6) */
+kd('ftype','TYPE',-26,-2.9,.8,{p:'ftype',det:'list',sect:'FILTER TYPE',aria:'FILTER TYPE',sh:'TRACK'});
+kd('reso','RESONANCE',-22.2,-2.9,.85,{p:'reso',sect:'FILTER',hero:true});
+kd('egint','EG INT',-18.4,-2.9,.85,{p:'eg',det:'center',sect:'FILTER EG',hero:true});
+kd('cutoff','CUTOFF',-14.6,-2.9,1.1,{p:'cut',sect:'FILTER',hero:true});
 /* ADSR: Drehen = X-Achse (Zeit), SHIFT + Drehen = Y-Achse (Pegel) */
-kd('attack','ATTACK',-26,1.9,.95,{p:'att',sect:'AMP EG · ATTACK',shp:'egal',sh:'LEVEL',eg:1});
-kd('decay','DECAY',-22,1.9,.9,{p:'dec',sect:'AMP EG · DECAY',shp:'egdl',sh:'LEVEL',eg:3});
-kd('sustain','SUST.',-18.1,1.9,.85,{p:'egST',sect:'AMP EG · SUSTAIN TIME',shp:'egs',sh:'LEVEL',eg:4,aria:'SUSTAIN'});
-kd('release','RELEASE',-14.5,1.9,.75,{p:'egR',sect:'AMP EG · RELEASE',shp:'egcr',sh:'CURVE',eg:6});
-/* Transport + ROLL/SHIFT + TEMPO LOCK + SOLO */
-bd('tap','TAP',-27.6,5.3,1.9,.85,{led:'A',sh:'BPM'});
-bd('rec','REC',-27.1,7.55,2.3,1.25,{led:'red',sh:'RESAMPLE',sym:'rec'});bd('stop','STOP',-24.4,7.55,2.3,1.25,{sh:'PANIC',sym:'stop'});bd('play','PLAY/PAUSE',-21.7,7.55,2.3,1.25,{led:'green',sh:'RESTART',sym:'play'});
-bd('roll','ROLL',-17.6,6,1.3,1.9,{led:'A',sh:'TYPE',tall:true});
-bd('shift','SHIFT',-17.6,7.95,2.4,.8,{led:'B'});
-bd('tlock','TEMP. LOCK',-13.8,6.8,3,1.3,{led:'A'});
-bd('solo','SOLO',-2.8,6.5,1.3,3,{led:'white',sh:'DROP',tall:true});
-/* SAMPLE · PITCH (Plan: rechts neben dem Oszillator, links von MODULATION) */
-kd('sample','SAMPLE',-.4,-4.4,.75,{p:'src',det:'list',sect:'SAMPLE'});
-kd('pitch','PITCH',3.6,-4.4,.75,{p:'pitch',det:'center',sect:'PITCH',shp:'glide',sh:'GLIDE'});
-/* SYNTH OSCILLATOR (EMX) */
+kd('attack','ATTACK',-26,2,.85,{p:'att',sect:'AMP EG · ATTACK',shp:'egal',sh:'LEVEL',eg:1,hero:true});
+kd('decay','DECAY',-22.2,2,.85,{p:'dec',sect:'AMP EG · DECAY',shp:'egdl',sh:'LEVEL',eg:3,hero:true});
+kd('sustain','SUST.',-18.4,2,.85,{p:'egST',sect:'AMP EG · SUSTAIN TIME',shp:'egs',sh:'LEVEL',eg:4,aria:'SUSTAIN',hero:true});
+kd('release','RELEASE',-14.6,2,.85,{p:'egR',sect:'AMP EG · RELEASE',shp:'egcr',sh:'CURVE',eg:6,hero:true});
+/* Transport + ROLL/SHIFT + TEMPO LOCK + SOLO: alles auf einer Grundlinie (z 7,65) */
+bd('tap','TAP',-27.1,5.55,2.3,.7,{led:'A',sh:'BPM'});
+bd('rec','REC',-27.1,7.65,2.3,1.2,{led:'red',sh:'RESAMPLE',sym:'rec'});bd('stop','STOP',-24.25,7.65,2.3,1.2,{sh:'PANIC',sym:'stop'});bd('play','PLAY/PAUSE',-21.4,7.65,2.3,1.2,{led:'green',sh:'RESTART',sym:'play'});
+bd('roll','ROLL',-17.6,6.35,1.3,1.8,{led:'A',sh:'TYPE',tall:true});
+bd('shift','SHIFT',-17.6,8.15,2.4,.75,{led:'B'});
+bd('tlock','TEMP. LOCK',-13.8,7.65,3,1.2,{led:'A'});
+bd('solo','SOLO',-2.2,7.3,1.3,2.5,{led:'white',sh:'DROP',tall:true});
+/* SYNTH OSCILLATOR (EMX-1): oben die Anzeige (Typ + Welle), TYPE mit 16 Typen rundherum, unten OSC EDIT 1 + 2 */
 kd('osc','TYPE',OSCT.x,OSCT.z,OSCT.r,{p:'osc',det:'list',sect:'SYNTH OSCILLATOR',aria:'OSC TYPE',emxRing:true,plain:true});
-kd('edit','OSC EDIT 1',-9.6,1.9,.7,{p:'edit',sect:'OSC EDIT 1',shp:'druck',sh:'DRUCK',emx:true});
-kd('edit2','OSC EDIT 2',-5.5,1.9,.7,{p:'edit2',sect:'OSC EDIT 2',emx:true});
+kd('edit','OSC EDIT 1',-9.7,2.6,.75,{p:'edit',sect:'OSC EDIT 1',shp:'druck',sh:'DRUCK',emx:true,hero:true});
+kd('edit2','OSC EDIT 2',-5.5,2.6,.75,{p:'edit2',sect:'OSC EDIT 2',emx:true,hero:true});
+/* OSC WAVE: eigenes Rad wie das zweite Rad (Dial) der EMX – wählt die Welle/Kombination im Typ (z. B. UNISON 3SAW … 6SIN, DUAL OSC SAW+SIN) */
+kd('wave','WAVE',1.65,-10.05,1.2,{endless:true,plain:true,wave:true,emx:true,sect:'OSC WAVE',aria:'OSC WAVE',sh:'×10'});
+/* SAMPLE · PITCH */
+kd('sample','SAMPLE',-.4,-4.4,.75,{p:'src',det:'list',sect:'SAMPLE'});
+kd('pitch','PITCH',3.6,-4.4,.85,{p:'pitch',det:'center',sect:'PITCH',shp:'glide',sh:'GLIDE',hero:true});
 /* TUBE · OUTPUT */
 kd('tubemix','T.MIX',4.4,-18.35,.95,{p:'tubeMix',det:'tube',sect:'TUBE MIX'});
 kd('driveA','A',7.9,-18.35,.6,{p:'driveA',sect:'TUBE STAGE A',aria:'DRIVE A'});
@@ -390,26 +401,26 @@ kd('driveB','B',10.9,-18.35,.6,{p:'driveB',sect:'TUBE STAGE B',aria:'DRIVE B'});
 kd('master','MASTER',14.3,-18.35,1,{g:true,pot:true,ring:false,ticks:true,cap:true,sect:'MASTER'});
 kd('phones','PHONES',17.4,-18.35,.5,{g:true,pot:true,ring:false,ticks:true,sect:'PHONES'});
 bd('tubeon','T.ON',4.4,-15.85,2,.75,{led:'tube',aria:'TUBE ON'});   // SHIFT + T.ON = alle Parts (ohne Aufdruck, Platz)
-/* MODULATION */
-kd('mtype','TYPE',8.6,-10.4,.85,{p:'mtype',det:'list',sect:'MOD TYPE',aria:'MOD TYPE'});
-kd('speed','SPEED',14,-10.4,.8,{p:'speed',sect:'MODULATION'});
-kd('egtime','EG TIME',8.9,-6.6,.7,{p:'mEgT',sect:'MOD EG TIME'});
-kd('depth','DEPTH',14,-6.6,.85,{p:'depth',sect:'MODULATION'});
-kd('start','START POINT',8.9,-3.5,.45,{p:'start',sect:'SAMPLE START POINT'});
-/* AMP */
-bd('mono','MONO/POLY',19.8,-10.3,2.6,1,{led:'B',sh:'CHOKE',aria:'VOICE ASSIGN'});
-kd('level','LEVEL',24,-10.3,1.05,{p:'lvl',sect:'AMP'});
-kd('pan','PAN',28.1,-10.3,1.05,{p:'pan',sect:'AMP'});
-/* MIX */
-kd('sc','SIDECHAIN',-.2,2.2,.7,{p:'sc',sect:'SIDECHAIN'});
-kd('gluedrv','GLUE DRIVE',2.8,2.2,.7,{p:'glueDrv',sect:'BASS GLUE · PER PART'});
-bd('glue','BASS GLUE',5.1,1.1,1.7,.9,{led:'tube'});bd('send','MFX SEND',7,1.1,1.7,.9,{led:'A'});bd('rollsend','ROLL SEND',8.9,1.1,1.7,.9,{led:'A'});
-bd('oktsend','OKT. SEND',7,3.4,5.5,.9,{led:'A',aria:'OKT SEND'});
-/* INSERT FX */
-kd('ifxtype','TYPE',12.8,.4,.95,{p:'fxType',det:'list',sect:'INSERT FX',aria:'IFX TYPE',plain:true});
-kd('ifxedit','EDIT',12.8,3.5,.45,{p:'fxEdit',sect:'INSERT FX',aria:'IFX EDIT'});
-bd('ifxdn','-',18.3,.3,2.4,1.1,{sh:'IFX 1',noLbl:true,aria:'IFX auswählen zurück'});bd('ifxup','+',26.1,.3,2.4,1.1,{sh:'IFX 5',noLbl:true,aria:'IFX auswählen weiter'});
-for(let k=0;k<5;k++)bd('ifxon'+k,String(k+1),IFXON_X(k),2.6,2,.8,{led:'A',ifxOn:k,aria:'IFX '+(k+1)+' ON/OFF'});
+/* MODULATION: 2 Spalten (9,2 / 14,5) */
+kd('mtype','TYPE',9.2,-9.9,.8,{p:'mtype',det:'list',sect:'MOD TYPE',aria:'MOD TYPE'});
+kd('speed','SPEED',14.5,-9.9,.85,{p:'speed',sect:'MODULATION',hero:true});
+kd('egtime','EG TIME',9.2,-6.3,.7,{p:'mEgT',sect:'MOD EG TIME'});
+kd('depth','DEPTH',14.5,-6.3,.85,{p:'depth',sect:'MODULATION',hero:true});
+kd('start','START POINT',9.2,-3.5,.45,{p:'start',sect:'SAMPLE START POINT'});
+/* AMP: MONO/POLY · LEVEL · PAN mittig im Block */
+bd('mono','MONO/POLY',19.3,-7.3,2.6,1,{led:'B',sh:'CHOKE',aria:'VOICE ASSIGN'});
+kd('level','LEVEL',23.1,-7.3,1.05,{p:'lvl',sect:'AMP',hero:true});
+kd('pan','PAN',26.7,-7.3,.9,{p:'pan',sect:'AMP',hero:true});
+/* MIX: Regler-Reihe z 2 wie INSERT FX, Tasten oben, OKT. SEND darunter */
+kd('sc','SIDECHAIN',-.9,2,.75,{p:'sc',sect:'SIDECHAIN'});
+kd('gluedrv','GLUE DRIVE',2.9,2,.75,{p:'glueDrv',sect:'BASS GLUE · PER PART'});
+bd('glue','BASS GLUE',5.75,.8,1.6,.9,{led:'tube'});bd('send','MFX SEND',7.55,.8,1.6,.9,{led:'A'});bd('rollsend','ROLL SEND',9.35,.8,1.6,.9,{led:'A'});
+bd('oktsend','OKT. SEND',7.55,3.5,5.2,.9,{led:'A',aria:'OKT SEND'});
+/* INSERT FX: TYPE + EDIT nebeneinander (EDIT = Spiel-Regler), rechts −/+ und 1–5 */
+kd('ifxtype','TYPE',12.6,2,.85,{p:'fxType',det:'list',sect:'INSERT FX',aria:'IFX TYPE'});
+kd('ifxedit','EDIT',16.2,2,.85,{p:'fxEdit',sect:'INSERT FX',aria:'IFX EDIT',hero:true});
+bd('ifxdn','-',IFXON_X(0),.8,1.9,1,{sh:'IFX 1',noLbl:true,aria:'IFX auswählen zurück'});bd('ifxup','+',IFXON_X(4),.8,1.9,1,{sh:'IFX 5',noLbl:true,aria:'IFX auswählen weiter'});
+for(let k=0;k<5;k++)bd('ifxon'+k,String(k+1),IFXON_X(k),3.5,1.8,.8,{led:'A',ifxOn:k,aria:'IFX '+(k+1)+' ON/OFF'});
 /* Touchpad-Tasten */
 bd('gatearp','GATE ARP',-28,10,2.3,.8,{led:'A',sh:'TYPE'});
 bd('padmode','T.SCALE',-25.4,10,2.3,.8,{led:'A',sh:'SCALE',aria:'TOUCH SCALE'});
@@ -1765,7 +1776,7 @@ function eqStr(P,k){const v=pget(P,k);switch(k){case 'eqL':case 'eqM':case 'eqH'
   case 'eqLF':return 'LOW '+hzStr(eqLHz(v));case 'eqF':return 'MID '+hzStr(eqFHz(v));case 'eqHF':return 'HIGH '+hzStr(eqHHz(v));
   case 'lc':return v<.01?'OFF':hzStr(lcHz(v));case 'hc':return v>=.999?'OFF':hzStr(hcHz(v));}return pctStr(v);}
 function valStr(d){
-  if(d.endless)return'VALUE';
+  if(d.endless){if(!d.wave)return'VALUE';const P=cur.parts[ui.part];return P.osc?NUM.osc(P.osc)+' · '+emxWaveName(P):'OSC OFF';}
   const P=cur.parts[ui.part],v=knobGet(d);
   if(d.eq!=null&&d.eq<4)return eqStr(P,keyOf(d));
   switch(d.id){case 'rolltype':return NUM.roll(ui.rollType);
@@ -1809,6 +1820,8 @@ function knobChanged(d){
 }
 /* WAVE des EMX-Oszillators (OSC-Seite offen: VALUE wählt die Welle, bei PCM-Typen das Sample) */
 function waveAdj(n){const P=cur.parts[ui.part];if(!P.osc)return;const W=emxWaves(P.osc),w=clamp((P.wave|0)+n*(shiftNow()?10:1),0,W.length-1);if(w===(P.wave|0))return;undoKind('wave'+ui.part);P.wave=w;dirty();refreshKnob(CTRL.osc);popup('oscedit',{},600000);}
+/* WAVE-Rad (wie das Dial der EMX): Welle/Kombination im gewählten Typ. Ohne Oszillator zeigt es nur die OSC-Seite. n = 0: nur anzeigen */
+function waveTurn(n){const P=cur.parts[ui.part];ui.menu=-1;if(n&&P.osc){waveAdj(n);refreshKnob(CTRL.wave,true);}popup('oscedit',{},600000);}
 /* PARAMETRIC EQ im Display: VALUE = Gain des gewählten Bands (BW an = Bandbreite), bei LOW CUT/HIGH CUT = Frequenz */
 function eqAdj(n){const P=cur.parts[ui.part],s=ui.eqSel??1,k=s<3?(ui.bw?EQK.q[s]:EQK.g[s]):s===3?'lc':'hc';undoKind('eqv'+ui.part+':'+k);P[k]=clamp(pget(P,k)+n/127*(shiftNow()?1:3));delete P.eqPre;afterPartChange(k);refreshKnobs();popup('eqedit',{},600000);}
 function valueKnob(n){
@@ -2181,7 +2194,7 @@ SCR.oscedit=function(g){const P=cur.parts[ui.part];hdr(g,'SYNTH OSCILLATOR · PA
   L(g,'WAVE',3,44);g.fillRect(36,42,LW-39,12);inv(g,()=>{L(g,pad3(wi+1)+' '+String(W[wi]).slice(0,22),40,44);L(g,(wi+1)+'/'+W.length,LW-6,44,8,'right');});
   const e1=emxEditStr(P,1),e2=emxEditStr(P,2);L(g,'EDIT 1',3,60);L(g,e1,LW-3,60,8,'right');barG(g,3,69,LW-6,6,P.edit??0);
   L(g,'EDIT 2',3,79);L(g,e2,LW-3,79,8,'right');barG(g,3,88,LW-6,6,P.edit2??.5);
-  L(g,'VALUE = WAVE · SHIFT = 10ER · EXIT',LW/2,104,8,'center');};
+  L(g,'WAVE / VALUE · SHIFT = 10ER · EXIT',LW/2,104,8,'center');};
 
 /* Pad angeschlagen (Plan): Welle zeigen statt Sample-Name */
 const wavePeaks=new WeakMap();
@@ -2269,9 +2282,11 @@ function buildKnob(d){
   const svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox',`${-S} ${-S} ${2*S} ${2*S}`);e.appendChild(svg);d.dots=[];
   const add=(tag,attrs,p=svg)=>{const n=document.createElementNS(NS,tag);for(const k in attrs)n.setAttribute(k,attrs[k]);p.appendChild(n);return n;};
   if(d.ring||d.ticks){const n=d.ring?15:11,R0=d.r+.3;for(let k=0;k<n;k++){const a=(-135+k*270/(n-1))*D2R;const c=add('circle',{cx:(Math.sin(a)*R0).toFixed(3),cy:(-Math.cos(a)*R0).toFixed(3),r:d.ring?.075:.045,fill:d.ring?'#26272d':'#6f7380'});if(d.ring)d.dots.push(c);}}
-  add('circle',{r:d.r*1.06,fill:'#0b0b0d'});add('circle',{r:d.r*.95,fill:'url(#kb)'});add('circle',{r:d.r*.74,fill:d.cap||d.emxRing?'url(#ka)':'url(#kc)'});
+  add('circle',{r:d.r*1.06,fill:'#0b0b0d'});add('circle',{r:d.r*.95,fill:'url(#kb)'});add('circle',{r:d.r*.74,fill:d.cap||d.emxRing||d.hero?'url(#ka)':'url(#kc)'});
   if(d.pot){d.rot=add('g',{});add('rect',{x:-d.r*.06,y:-d.r*.9,width:d.r*.12,height:d.r*.45,rx:d.r*.04,fill:d.cap?'#16171b':'#fff'},d.rot);}
   else add('circle',{r:d.r*.86,fill:'none',stroke:'#4a4c55','stroke-width':d.r*.1,'stroke-dasharray':(d.r*.07)+' '+(d.r*.07)});d.el=e;
+  /* Räder (VALUE, WAVE): Fingermulde, dreht sich mit */
+  if(d.endless){d.rot=add('g',{});add('circle',{cx:0,cy:-d.r*.52,r:d.r*.14,fill:'#121216',stroke:'#5a5c64','stroke-width':d.r*.025},d.rot);}
   /* EMX-Oszillator: 16 Beschriftungen + LED rundherum wie bei der Korg EMX */
   if(d.emxRing){d.typeLeds=[];for(let k=0;k<16;k++){const a=oscAng(k),lx=d.x+Math.sin(a)*OSCT.lr,lz=d.z-Math.cos(a)*OSCT.lr,dx=d.x+Math.sin(a)*(d.r+.32),dz=d.z-Math.cos(a)*(d.r+.32);
       d.typeLeds.push(at('oled16',dx,dz,.16,.16));const s=Math.sin(a),al=Math.abs(s)<.25?'center':s<0?'right':'left';txt(OSCS[k+1],lx+(al==='center'?0:s*.05),lz,.17,'#dfe9ff',al,.02,'olbl');}
@@ -2282,8 +2297,8 @@ function buildKnob(d){
 }
 function refreshKnob(d,keep){if(!d||!d.el)return;
   if(d.typeLeds){const i=cur.parts[ui.part].osc|0;d.typeLeds.forEach((el,k)=>{const on=k===i-1,c=on?V.accent:'#0a1a33';if(el._c!==c){el._c=c;el.style.background=c;el.style.boxShadow=on?'0 0 6px '+V.accent:'';}});d.el.setAttribute('aria-valuetext',valStr(d));return;}
-  if(!d.rot&&!d.dots.length){if(!keep&&!d.endless)d.raw=knobGet(d);d.el.setAttribute('aria-valuetext',valStr(d));return;}let v=knobGet(d);if(d.endless)v=((v%1)+1)%1;
-  if(!keep&&!d.endless)d.raw=isCen(d)?rawFromV(knobGet(d)):knobGet(d);if(d.rot)d.rot.setAttribute('transform',`rotate(${(-135+270*v).toFixed(1)})`);
+  if(!d.rot&&!d.dots.length){if(!keep)d.raw=knobGet(d);d.el.setAttribute('aria-valuetext',valStr(d));return;}let v=knobGet(d);if(d.endless)v=((v%1)+1)%1;
+  if(!keep&&!d.endless)d.raw=isCen(d)?rawFromV(knobGet(d)):knobGet(d);if(d.rot)d.rot.setAttribute('transform',`rotate(${(d.endless?360*v:-135+270*v).toFixed(1)})`);
   const dot=d.endless||d.det==='list'||d.det==='pattern'||d.det==='roll',ctr=isCen(d);
   d.dots.forEach((c,k)=>{const p=k/14;let lit=dot?Math.abs(p-v)<.036:ctr?(v>=.5?p>=.5&&p<=v+1e-6:p<=.5&&p>=v-1e-6):p<=v+1e-6;let col=lit?V.accent:'#26272d';if(ctr&&k===7)col=Math.abs(v-.5)<.01?'#ffffff':lit?V.accent:'#4a4c55';c.setAttribute('fill',col);});
   d.el.setAttribute('aria-valuetext',valStr(d));}
@@ -2303,14 +2318,21 @@ function buildButton(d){const e=at('btn'+(d.latch?' latch':''),d.x,d.z,d.w,d.d);
   if(d.sh)txt(d.sh,d.x,d.z-d.d/2-.27,.17,V.accent2,'center',.05);}
 function setLed(d,on,dim){if(!d||!d.el)return;d.on=on;d.el.classList.toggle('on',!!on&&!dim);d.el.classList.toggle('dim',!!on&&!!dim);}
 K.forEach(buildKnob);BT.forEach(buildButton);
-const ifxPageEl=txt('SELECT · IFX 1',22.2,.3,.17,P2);
-txt('+ SHIFT = Y-ACHSE (PEGEL)',-20.4,4.2,.16,'#5d606b','center',.08);
-txt('BW = BANDBREITE',-13.05,-6.42,.13,'#5d606b','center',.04);
+const ifxPageEl=txt('SELECT · IFX 1',(IFXON_X(0)+IFXON_X(4))/2,.8,.17,P2);
+txt('+ SHIFT = Y-ACHSE (PEGEL)',-20.4,4.25,.16,'#5d606b','center',.08);
+txt('BW = BANDBREITE',-13.2,-6.42,.13,'#5d606b','center',.04);
 /* Bars (blau) + Oktave des aktuellen Parts (rot) */
 txt('BARS',BARLED_X(0)-.55,BARLED_Z,.15,V.accent2,'right',.1);txt('OKT',BARLED_X(0)-.55,OCTLED_Z,.15,'#ff5a5a','right',.1);
 const barEls=Array.from({length:8},(_,k)=>at('bled',BARLED_X(k),BARLED_Z,.34,.34));
 const octEls=Array.from({length:8},(_,k)=>{const e=at('bled',BARLED_X(k),OCTLED_Z,.34,.34);return e;});
 txt('-4',BARLED_X(0),OCTLED_Z+.42,.12,'#5d606b');txt('+3',BARLED_X(7),OCTLED_Z+.42,.12,'#5d606b');
+/* Anzeige im EMX-Block: Typ + Welle – zeigt sofort, was TYPE und WAVE gerade eingestellt haben */
+at('bezel',OSCLCD.x,OSCLCD.z,OSCLCD.w+.3,OSCLCD.d+.3);const oscLcd=at('osclcd',OSCLCD.x,OSCLCD.z,OSCLCD.w,OSCLCD.d);oscLcd.setAttribute('aria-live','polite');
+oscLcd.innerHTML='<div class="l1"><b></b><i></i></div><div class="l2"><b></b><i></i></div>';const OL=[...oscLcd.querySelectorAll('b,i')];let oscLcdSig='';
+function oscLcdUpdate(){const P=cur.parts[ui.part],sig=ui.part+'|'+P.osc+'|'+P.wave+'|'+P.src;if(sig===oscLcdSig)return;oscLcdSig=sig;
+  const v=P.osc?['TYPE '+pad2(P.osc)+' '+OSCS[P.osc],'PART '+pad2(ui.part+1),pad3((P.wave|0)+1)+' '+String(emxWaveName(P)).slice(0,13),((P.wave|0)+1)+'/'+emxWaves(P.osc).length]
+    :['OSC OFF · SAMPLE','PART '+pad2(ui.part+1),P.src?pad3(P.src)+' '+SRC[P.src].n.slice(0,12):'--- NO SOUND',''];
+  v.forEach((x,k)=>{if(OL[k].textContent!==x)OL[k].textContent=x;});}
 SLOTS.forEach(o=>{const s=at('slot',o.x,o.z,o.w,o.d);s.setAttribute('aria-label','Freier Slot für Add-ons');txt(o.t,o.x,o.z-.12,.2,'#5d606b');txt(o.s,o.x,o.z+.25,.14,'#4a4c55');});
 const padEls=[],padTxt=[];for(let i=0;i<24;i++){const e=at('pad',PADX(i),PADZI(i),PADW,PADD);e.setAttribute('role','button');e.setAttribute('aria-label','Pad '+(i+1));e.style.fontSize=U(.22);
   const r1=document.createElement('span'),r2=document.createElement('span'),a=document.createElement('i'),b=document.createElement('i'),c=document.createElement('i');[a,b,c].forEach(x=>x.style.fontStyle='normal');
@@ -2344,20 +2366,22 @@ new ResizeObserver(sizeDev).observe(dev);sizeDev();
 function syncMidiBtn(){$('#midiBtn').setAttribute('aria-pressed',String(!!MIDI.acc));$('#midiBtn').textContent=MIDI.acc?'MIDI: '+MIDI.ins.length+' rein · '+MIDI.outs.length+' raus':'MIDI verbinden';}
 function syncInBtn(){const on=!!(E&&E.in);$('#inBtn').setAttribute('aria-pressed',String(on));$('#inBtn').textContent=on?'Audio-In aktiv':'Audio-In an';}
 ALLK.forEach(d=>{
-  d.el.addEventListener('pointerdown',e=>{if(!ready)return;e.preventDefault();d.el.setPointerCapture(e.pointerId);d.acc=0;if(d.raw==null)d.raw=isCen(d)?rawFromV(knobGet(d)):knobGet(d);d.drag=e.clientY;if(!d.endless)knobChanged(d);});
+  d.el.addEventListener('pointerdown',e=>{if(!ready)return;e.preventDefault();d.el.setPointerCapture(e.pointerId);d.acc=0;if(d.raw==null)d.raw=isCen(d)?rawFromV(knobGet(d)):knobGet(d);d.drag=e.clientY;if(!d.endless)knobChanged(d);else if(d.wave)waveTurn(0);});
   d.el.addEventListener('pointermove',e=>{if(d.drag==null)return;const dy=d.drag-e.clientY;d.drag=e.clientY;if(dy)turn(d,dy,(ui.shift||e.shiftKey));});
   const end=()=>{if(d.drag!=null){d.drag=null;if(shiftNow())consumeShift();refreshKnob(d);}};d.el.addEventListener('pointerup',end);d.el.addEventListener('pointercancel',end);
-  d.el.addEventListener('wheel',e=>{if(!ready)return;e.preventDefault();const s=-Math.sign(e.deltaY);if(d.endless)valueKnob(s);else if(d.det&&d.det!=='center'){tickKnob(d,s);refreshKnob(d);knobChanged(d);}else turn(d,s*4,ui.shift||e.shiftKey);refreshKnob(d,true);},{passive:false});
+  d.el.addEventListener('wheel',e=>{if(!ready)return;e.preventDefault();const s=-Math.sign(e.deltaY);if(d.endless)endlessTick(d,s);else if(d.det&&d.det!=='center'){tickKnob(d,s);refreshKnob(d);knobChanged(d);}else turn(d,s*4,ui.shift||e.shiftKey);refreshKnob(d,true);},{passive:false});
   d.el.addEventListener('keydown',e=>{if(!ready)return;const s=e.key==='ArrowUp'||e.key==='ArrowRight'?1:e.key==='ArrowDown'||e.key==='ArrowLeft'?-1:0;if(!s)return;e.preventDefault();
-    if(d.endless)valueKnob(s);else if(d.det&&d.det!=='center'){tickKnob(d,s);knobChanged(d);}else turn(d,s*4,e.shiftKey);refreshKnob(d,true);});
+    if(d.endless)endlessTick(d,s);else if(d.det&&d.det!=='center'){tickKnob(d,s);knobChanged(d);}else turn(d,s*4,e.shiftKey);refreshKnob(d,true);});
 });
+/* Räder: VALUE (Menü/Pattern) oder WAVE (Welle des EMX-Oszillators) */
+const endlessTick=(d,s)=>d.wave?waveTurn(s):valueKnob(s);
 function turn(d,dy,fine){
   /* SHIFT-Ebene (Plan): PITCH -> GLIDE, OSC EDIT 1 -> DRUCK, ADSR -> Y-Achse (Pegel / Release-Kurve) */
   if(d.shp&&(fine||shiftNow())){const D=CTRL[d.shp];D.raw=clamp(knobGet(D)+dy*.005);knobSet(D,D.raw);knobChanged(D);return;}
   /* EQ-Regler wechseln ihren Parameter (BW / Band): Startwert jedes Mal frisch holen, sonst springt der Wert */
   if(d.eq!=null){const k=keyOf(d);if(d.rawKey!==k){d.rawKey=k;d.raw=knobGet(d);}}
   if(d.id==='sc'&&fine){const P=cur.parts[ui.part];d.acc+=dy;while(Math.abs(d.acc)>=9){const s=Math.sign(d.acc);d.acc-=s*9;P.scSrc=(P.scSrc+s+16)%16;dirty();}popup('param',{d});return;}
-  if(d.endless){d.acc+=dy;d.raw=(d.raw||0)+dy*.004;refreshKnob(d,true);while(Math.abs(d.acc)>=8){const s=Math.sign(d.acc);d.acc-=s*8;valueKnob(s);}return;}
+  if(d.endless){d.acc+=dy;d.raw=(d.raw||0)+dy*.004;refreshKnob(d,true);while(Math.abs(d.acc)>=8){const s=Math.sign(d.acc);d.acc-=s*8;endlessTick(d,s);}return;}
   if(d.det&&d.det!=='center'){d.acc+=dy;while(Math.abs(d.acc)>=9){const s=Math.sign(d.acc);d.acc-=s*9;tickKnob(d,s);}refreshKnob(d,true);knobChanged(d);return;}
   d.raw=clamp((d.raw??knobGet(d))+dy*(fine?.0012:.005));knobSet(d,isCen(d)?vFromRaw(d.raw):d.raw);refreshKnob(d,true);knobChanged(d);}
 function shiftDown(){ui.wasLatched=ui.shiftLatch;ui.shift=true;ui.shiftT=performance.now();ui.shiftUsed=false;setLed(CTRL.shift,true);}
@@ -2480,7 +2504,7 @@ function frame(t){
   if(ready){const ct=now();while(visQ.length&&visQ[0].t<=ct){const q=visQ.shift();ui.dispStep=q.s;ui.dispT=q.t;}}
   const ct=ready?now():0,s=ui.dispStep%16,bar=curBar(),page=ui.pageSel,P=cur.parts[ui.part];
   const grp={TRIGGER:'parts',MUTE:'mute',ERASE:'erase',SEQUENCER:'steps','STEP JUMP':'steps',KEYBOARD:'notes',CHORD:'notes'}[ui.mode],nbars=cur.last/16;
-  padLabels();
+  padLabels();oscLcdUpdate();
   for(let i=0;i<24;i++){let col='#1c1d22',k=0;
     if(ui.fill&&i>=16){const b=i-16,F=ui.fill;if(b<nbars){col=b===F.src?V.accent2:F.dst.has(b)?'#ffd000':'#8a8d99';k=b===F.src||F.dst.has(b)?75:14;}else{col='#40414a';k=4;}}
     else if(grp==='steps'){if(i<16){if(ui.part>=NSEQ){col='#40414a';k=4;}else{const st=page*16+i,on=cur.steps[ui.part][st],head=ui.playing&&page===bar&&i===s;col=head?'#ffffff':on?PCOL(ui.part):V.accent2;k=head?85:on?40+cur.vel[ui.part][st]/127*40:9;}}
