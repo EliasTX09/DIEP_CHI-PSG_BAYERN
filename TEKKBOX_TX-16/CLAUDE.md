@@ -99,12 +99,14 @@ Nach jeder Änderung testen (Abschnitt 6), dann App bauen und das Artifact aktua
   SHIFT-Funktion in Blau darüber. **Keine Abkürzungen** auf dem Panel (SEQUENCER, KEYBOARD, SUSTAIN, TOUCH SCALE, TEMPO LOCK,
   TUBE MIX, DRIVE A/B, MASTER FX, OCTAVE, BANDWIDTH, EG INTENSITY …). Ausnahme: EMX-Namen am Oszillator bleiben 1:1 (OSC EDIT, PCM+WS …).
   **Symmetrie:** Reihen mittig im Block, gleiche Größen pro Reihe, Blockkanten bündig (Ränder ±28,6, Unterkante über den Pads 8,6).
-- Oben: Display · VALUE/PATTERN + 6 Menütasten (mittig dazwischen) · **TUBE** (TUBE ON, TUBE MIX, DRIVE A, DRIVE B) · **OUTPUT** (MASTER, PHONES) · Röhrenhaube.
+- Oben: Display · VALUE/PATTERN + 6 Menütasten, **TEMPO LOCK unter VALUE/PATTERN** (Nutzerwunsch) · **TUBE** (TUBE ON, TUBE MIX, DRIVE A, DRIVE B) · **OUTPUT** (MASTER, PHONES) · Röhrenhaube.
 - Links unter dem Display: PARAMETRIC EQ (LOW MID HIGH FREQUENCY MIX + BANDWIDTH gleichmäßig), FILTER und AMP EG in denselben 4 Spalten,
-  darunter die **Spiel-Reihe**: TAP · REC · STOP · PLAY/PAUSE · SHIFT · ROLL · SOLO · TEMPO LOCK (gleich groß).
+  darunter die **Transport-Reihe** nur mit TAP · REC · STOP · PLAY/PAUSE · SHIFT (Nutzer: „zu viel nebeneinander“ – ROLL, SOLO, TEMPO LOCK gehören da nicht hin).
 - Mitte: SYNTH OSCILLATOR (blau, bis 8,6: Anzeige, TYPE-Ring, OSC EDIT 1/2), rechts daneben OSC WAVE (Rad) und SAMPLE · PITCH.
 - Rechts: MODULATION (2 × 2, START POINT mittig darunter), AMP (LEVEL, PAN, MONO/POLY mittig darunter),
-  MIX (SIDECHAIN, GLUE DRIVE; darunter BASS GLUE · MASTER FX SEND · ROLL SEND · OCTAVE SEND), INSERT FX (TYPE, EDIT; darunter ◀ SELECT · 1–5 · SELECT ▶).
+  MIX (SIDECHAIN, GLUE DRIVE; darunter BASS GLUE · MASTER FX SEND · ROLL SEND · OCTAVE SEND), darunter eigener Rahmen mit **SOLO** (wie im Plan),
+  INSERT FX (TYPE, EDIT; darunter ◀ SELECT · 1–5 · SELECT ▶).
+- Untere Reihe am Touchpad: GATE ARP · TOUCH SCALE · MASTER FX · HOLD · **ROLL** (links bündig mit dem Touchpad).
 - Pads: Funktionsreihe bündig über dem linken Block (◀ PART, PART ▶, MUTE, ERASE, TRIGGER, SEQUENCER, KEYBOARD, CHORD, STEP JUMP),
   rechts über den 4 Spalten ◀ BAR · OCTAVE − · OCTAVE + · BAR ▶, darüber mittig die LEDs BAR (blau) und OCTAVE (rot).
   OCTAVE − / + = Oktave des aktuellen Parts (KEYBOARD/CHORD = Tastatur, SOLO/OCTAVE SEND halten = deren Parts, SHIFT = Halbton).
@@ -167,3 +169,5 @@ Nach jeder Änderung testen (Abschnitt 6), dann App bauen und das Artifact aktua
   WAVE-Rad läuft am Stück durch alle 258, 7"-Seite mit Liste, Pattern-Format 1.4.
 - **Rev 2.3 (2026-10-10):** Panel aufgeräumt nach Feedback („unklar, Weiß auf den Tasten, Abkürzungen, unsymmetrisch“): keine Schrift auf Tasten,
   alles ausgeschrieben, Spiel-Reihe unten links, TUBE/OUTPUT getrennt, MIX/INSERT FX in zwei Reihen, Pad-Reihen bündig und mittig.
+- **Rev 2.4 (2026-10-10):** Transport-Reihe entzerrt (nur TAP, REC, STOP, PLAY/PAUSE, SHIFT), ROLL neben HOLD in die Touchpad-Reihe,
+  SOLO unter MIX (eigener Rahmen, wie im Plan), TEMPO LOCK unter VALUE/PATTERN – so vom Nutzer gewählt.

@@ -288,7 +288,7 @@ function buildButton(d){const e=at('btn'+(d.latch?' latch':''),d.x,d.z,d.w,d.d);
   if(d.sh)txt(d.sh,d.x,d.z-d.d/2-.27,.18,V.accent2,'center',.05);}
 function setLed(d,on,dim){if(!d||!d.el)return;d.on=on;d.el.classList.toggle('on',!!on&&!dim);d.el.classList.toggle('dim',!!on&&!!dim);}
 K.forEach(buildKnob);BT.forEach(buildButton);
-const ifxPageEl=txt('EDIT · FX 1',IFXROW_X(3),4.7,.19,P2);
+const ifxPageEl=txt('EDIT · FX 1',IFXROW_X(3),4.35,.19,P2);
 /* Bars (blau) + Oktave des aktuellen Parts (rot) */
 txt('BAR',BARLED_X(0)-.5,BARLED_Z,.17,V.accent2,'right',.1);txt('OCTAVE',BARLED_X(0)-.5,OCTLED_Z,.17,'#ff5a5a','right',.1);
 const barEls=Array.from({length:8},(_,k)=>at('bled',BARLED_X(k),BARLED_Z,.34,.34));
