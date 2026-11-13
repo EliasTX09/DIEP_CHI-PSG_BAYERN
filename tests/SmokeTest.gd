@@ -15,6 +15,8 @@ func _ready() -> void:
 	_stage_catalog()
 	_stage_game_manager()
 	_stage_sound()
+	await _stage_courses()
+	await _stage_physics()
 	_finish()
 
 func check(cond: bool, label: String) -> void:
@@ -39,10 +41,12 @@ func _stage_environment() -> void:
 	var v := Engine.get_version_info()
 	print("[SMOKE] Godot ", v["string"])
 	print("[SMOKE] physics_engine (Setting) = ", ProjectSettings.get_setting("physics/3d/physics_engine"))
-	print("[SMOKE] PhysicsServer3D (Klasse) = ", PhysicsServer3D.get_class())
+	var ps_obj: Object = Engine.get_singleton("PhysicsServer3D")
+	var ps_class: String = ps_obj.get_class() if ps_obj != null else "?"
+	print("[SMOKE] PhysicsServer3D (Klasse) = ", ps_class)
 	print("[SMOKE] rendering_method = ", ProjectSettings.get_setting("rendering/renderer/rendering_method"))
 	check(int(v["major"]) == 4 and int(v["minor"]) >= 5, "Godot >= 4.5")
-	check(str(PhysicsServer3D.get_class()).contains("Jolt"), "Jolt-Physik ist aktiv")
+	check(ps_class.contains("Jolt"), "Jolt-Physik ist aktiv")
 	check(str(ProjectSettings.get_setting("rendering/renderer/rendering_method")) == "mobile", "Mobile-Renderer konfiguriert")
 	check(int(ProjectSettings.get_setting("display/window/handheld/orientation")) == DisplayServer.SCREEN_SENSOR_LANDSCAPE,
 		"Orientierung = Sensor-Querformat")
@@ -212,3 +216,112 @@ func _stage_sound() -> void:
 		SoundManager.play(s, 0.7)
 	SoundManager.set_wind(0.8)
 	check(true, "Sounds abgespielt")
+
+# ---------------------------------------------------------------- Bahnen
+
+func _frames(n: int) -> void:
+	for i in n:
+		await get_tree().physics_frame
+
+func _test_profile() -> Dictionary:
+	var prof: Dictionary = GameManager.make_shot_profile(Catalog.START_CLUB, 1, "standard")
+	prof["scatter_deg"] = 0.0
+	return prof
+
+func _new_ball(c: Course3D) -> Ball3D:
+	var ball := Ball3D.new()
+	c.add_child(ball)
+	ball.setup(c, "test", _test_profile(), "standard", "none", false)
+	ball.sound_gain = 0.0
+	return ball
+
+## Wartet, bis der Ball nicht mehr rollt/fliegt (oder max_seconds Spielzeit um sind).
+func _wait_ball(ball: Ball3D, max_seconds: float) -> void:
+	var ticks: int = int(max_seconds * 60.0)
+	await _frames(3)
+	for i in ticks:
+		if ball.state != Ball3D.State.MOVING and ball.state != Ball3D.State.OUT:
+			return
+		await get_tree().physics_frame
+
+func _stage_courses() -> void:
+	print("[SMOKE] Stage: Bahnen bauen")
+	var ids: Array[String] = Catalog.all_course_ids()
+	ids.append("daily")
+	for id in ids:
+		var c: Course3D = CourseBuilder3D.build(id, 4242, false)
+		add_child(c)
+		await _frames(3)
+		check(c.path_points.size() > 8 and c.total_length() > 15.0, "%s: Mittellinie vorhanden" % id)
+		check(c.floor_body != null and c.floor_body.get_child_count() > 0, "%s: Boden-Kollision" % id)
+		check(c.par >= 1 and c.par <= 5 and c.title != "", "%s: Titel/Par" % id)
+		var space := c.get_world_3d().direct_space_state
+		var q := PhysicsRayQueryParameters3D.create(c.tee.origin, c.tee.origin + Vector3.DOWN * 2.0, 1)
+		var hit: Dictionary = space.intersect_ray(q)
+		check(not hit.is_empty() and absf((hit["position"] as Vector3).y - (c.tee.origin.y - 0.32)) < 0.08, "%s: Tee steht auf dem Boden" % id)
+		var q2 := PhysicsRayQueryParameters3D.create(c.hole_pos + Vector3.UP, c.hole_pos + Vector3.DOWN * 2.0, 1)
+		var hh: Dictionary = space.intersect_ray(q2)
+		check(not hh.is_empty() and absf((hh["position"] as Vector3).y - (c.hole_pos.y - Course3D.CUP_DEPTH)) < 0.08, "%s: Loch ist offen (Becherboden)" % id)
+		var q3 := PhysicsRayQueryParameters3D.create(c.hole_pos + Vector3(1.2, 1.0, 0.0), c.hole_pos + Vector3(1.2, -2.0, 0.0), 1)
+		var hg: Dictionary = space.intersect_ray(q3)
+		check(not hg.is_empty() and absf((hg["position"] as Vector3).y - c.hole_pos.y) < 0.05, "%s: Gruen rund ums Loch" % id)
+		check(c.kill_y < c.bounds.position.y - 1.0, "%s: Kill-Hoehe unter der Bahn" % id)
+		# Ball direkt ueber dem Loch fallen lassen -> muss "eingelocht" melden
+		var ball := _new_ball(c)
+		ball.place_on_tee(Transform3D(Basis.IDENTITY, c.hole_pos + Vector3(0.15, 0.6, 0.0)))
+		await _frames(2)
+		ball.unfreeze()
+		ball.shoot(Vector3.FORWARD, 0.02, false, Vector2.ZERO)
+		await _wait_ball(ball, 3.0)
+		check(ball.state == Ball3D.State.HOLED, "%s: Ball faellt ins Loch -> HOLED (State %d)" % [id, ball.state])
+		print("[SMOKE] %s '%s' Par %d, Laenge %.0f m, %d Gadgets, %d Hindernisse" % [id, c.title, c.par, c.total_length(), c.gadgets.size(), c.obstacles.size()])
+		c.queue_free()
+		await _frames(2)
+
+# ---------------------------------------------------------------- Physik: Vorhersage gegen echten Ball
+
+func _shot_case(c: Course3D, label: String, dir: Vector3, power: float, chip: bool, spin: Vector2, tolerance: float) -> void:
+	var prof := _test_profile()
+	var ball := _new_ball(c)
+	ball.place_on_tee(c.tee)
+	await _frames(3)
+	ball.unfreeze()
+	var space := c.get_world_3d().direct_space_state
+	var pred: Dictionary = ShotSim.predict_shot(c, space, ball.global_position, dir, power, chip, spin, prof, 12.0)
+	var ok: bool = ball.shoot(dir, power, chip, spin)
+	check(ok, label + ": Schlag ausgeloest")
+	await _wait_ball(ball, 16.0)
+	check(ball.state == Ball3D.State.IDLE or ball.state == Ball3D.State.HOLED, label + ": Schlag endet (State %d)" % ball.state)
+	var end_real: Vector3 = ball.global_position
+	var end_pred: Vector3 = pred["end_pos"]
+	var err: float = end_real.distance_to(end_pred)
+	var travelled: float = end_real.distance_to(c.tee.origin)
+	print("[SMOKE] %s: echt %.1f m weit, Vorhersage-Abweichung %.2f m (holed=%s/%s, Zeit %.1f s)" % [label, travelled, err, ball.state == Ball3D.State.HOLED, pred["holed"], float(pred["time"])])
+	check(travelled > 1.0, label + ": Ball hat sich bewegt")
+	check(err < tolerance, label + ": Vorhersage stimmt (%.2f m < %.1f m)" % [err, tolerance])
+	ball.queue_free()
+	await _frames(2)
+
+func _stage_physics() -> void:
+	print("[SMOKE] Stage: Ball-Physik")
+	var c: Course3D = CourseBuilder3D.build("e1", 0, false)
+	add_child(c)
+	await _frames(3)
+	var fwd: Vector3 = -c.tee.basis.z
+	await _shot_case(c, "Putt 40%", fwd, 0.4, false, Vector2.ZERO, 2.0)
+	await _shot_case(c, "Putt 70% schraeg", fwd.rotated(Vector3.UP, 0.12), 0.7, false, Vector2.ZERO, 4.0)
+	await _shot_case(c, "Chip 60%", fwd, 0.6, true, Vector2.ZERO, 5.0)
+	await _shot_case(c, "Chip 60% Backspin", fwd, 0.6, true, Vector2(0.0, -1.0), 5.0)
+	await _shot_case(c, "Putt 50% Sidespin", fwd, 0.5, false, Vector2(1.0, 0.0), 4.0)
+	# Out-of-Bounds: seitlich ueber die Bande chippen -> Strafschlag + Respawn auf dem Tee
+	var ball := _new_ball(c)
+	ball.place_on_tee(c.tee)
+	await _frames(3)
+	ball.unfreeze()
+	ball.shoot(c.tee.basis.x, 0.9, true, Vector2.ZERO)
+	await _frames(20)
+	await _wait_ball(ball, 14.0)
+	check(ball.state == Ball3D.State.IDLE and ball.strokes == 2, "Out: Strafschlag (Schlaege=%d, State %d)" % [ball.strokes, ball.state])
+	check(ball.global_position.distance_to(c.tee.origin) < 0.5, "Out: Respawn an letzter sicherer Position")
+	c.queue_free()
+	await _frames(2)
