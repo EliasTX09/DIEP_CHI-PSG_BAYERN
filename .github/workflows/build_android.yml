@@ -314,3 +314,39 @@ jobs:
           $P -f supabase_schema.sql
           $P -f tests/schema_test.sql | tee schema_test.log
           grep -q "SCHEMA TEST: PASS" schema_test.log
+
+  # --------------------------------------------------------------------------
+  # Web-Portal (webapp/): Browser-Test bei Handy-Breite mit simuliertem Supabase
+  # --------------------------------------------------------------------------
+  web-portal-check:
+    name: Web-Portal im Browser testen
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Syntax pruefen und Playwright installieren
+        run: |
+          node --check webapp/app.js
+          node --check webapp/config.js
+          npm install --no-save --no-package-lock playwright@1.63.0
+          npx playwright install --with-deps chromium
+
+      - name: Portal testen (Registrieren, Profilbild, Freunde, Spiel-Code, XSS-Schutz)
+        run: |
+          mkdir -p ci_out
+          PORTAL_SHOTS=ci_out node tests/web/portal_test.js | tee ci_out/portal.log
+          grep -q "PORTAL TEST: PASS" ci_out/portal.log
+
+      - name: Portal-Screenshots hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portal-screenshots
+          path: ci_out/*.png
+          if-no-files-found: ignore

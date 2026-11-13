@@ -1,0 +1,52 @@
+# Veroeffentlicht das Web-Portal (Ordner webapp/) auf GitHub Pages.
+# Nur manuell (Actions -> "Web-Portal veroeffentlichen" -> Run workflow), damit eine bestehende
+# GitHub-Pages-Seite dieses Repositorys nicht versehentlich ersetzt wird.
+# Voraussetzung: Settings -> Pages -> Source: "GitHub Actions". Secrets SUPABASE_URL und SUPABASE_ANON_KEY.
+name: Web-Portal veroeffentlichen
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Supabase-Zugang in config.js eintragen
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::warning::Secrets SUPABASE_URL/SUPABASE_ANON_KEY fehlen - das Portal zeigt einen Einrichtungs-Hinweis."
+          else
+            node -e 'const fs=require("fs");fs.writeFileSync("webapp/config.js","window.GOLF_CONFIG = "+JSON.stringify({supabaseUrl:process.env.SUPABASE_URL,anonKey:process.env.SUPABASE_ANON_KEY})+";\n")'
+          fi
+          rm -f webapp/.gdignore
+          touch webapp/.nojekyll
+
+      - name: Pages einrichten
+        uses: actions/configure-pages@v5
+
+      - name: Portal-Dateien hochladen
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: webapp
+
+      - name: Veroeffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4

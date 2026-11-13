@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1530">
+  <meta name="referrer" content="no-referrer">
+  <title>Golf Battle 3D – Account</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-ball" aria-hidden="true"></span>
+      <span class="brand-text">Golf Battle <b>3D</b></span>
+    </div>
+    <button id="logoutBtn" class="btn btn-ghost hidden" type="button">Abmelden</button>
+  </header>
+
+  <main id="app">
+    <section id="setupNotice" class="card notice hidden">
+      <h2>Portal noch nicht eingerichtet</h2>
+      <p>In <code>webapp/config.js</code> fehlen Supabase-URL und anon-Key. Trage sie dort ein oder setze die GitHub-Secrets
+        <code>SUPABASE_URL</code> und <code>SUPABASE_ANON_KEY</code> und starte den Workflow „Web-Portal veröffentlichen“.</p>
+    </section>
+
+    <!-- Anmelden / Registrieren -->
+    <section id="authView" class="card hidden">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="login" role="tab" type="button">Einloggen</button>
+        <button class="tab" data-tab="register" role="tab" type="button">Registrieren</button>
+      </div>
+      <form id="loginForm" class="form" autocomplete="on">
+        <label>E-Mail<input name="email" type="email" required autocomplete="email" maxlength="254"></label>
+        <label>Passwort<input name="password" type="password" required minlength="6" autocomplete="current-password"></label>
+        <button class="btn btn-primary" type="submit">Einloggen</button>
+        <button id="forgotBtn" class="link" type="button">Passwort vergessen?</button>
+      </form>
+      <form id="registerForm" class="form hidden" autocomplete="on">
+        <label>Spielername<input name="name" type="text" required minlength="3" maxlength="16" pattern="[^<>]{3,16}" autocomplete="nickname"></label>
+        <label>E-Mail<input name="email" type="email" required autocomplete="email" maxlength="254"></label>
+        <label>Passwort<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
+        <button class="btn btn-primary" type="submit">Account erstellen</button>
+        <p class="hint">Nach dem Registrieren bekommst du ggf. eine Bestätigungs-Mail. Danach hier einloggen.</p>
+      </form>
+    </section>
+
+    <!-- Neues Passwort nach Reset-Mail -->
+    <section id="recoveryView" class="card hidden">
+      <h2>Neues Passwort</h2>
+      <form id="recoveryForm" class="form">
+        <label>Neues Passwort<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
+        <button class="btn btn-primary" type="submit">Speichern</button>
+      </form>
+    </section>
+
+    <!-- Eingeloggt -->
+    <section id="profileView" class="hidden">
+      <div class="card profile">
+        <div class="avatar-wrap">
+          <img id="avatarImg" class="avatar hidden" alt="Profilbild">
+          <div id="avatarInitial" class="avatar avatar-initial">?</div>
+          <label class="avatar-edit" title="Profilbild ändern">
+            <input id="avatarInput" type="file" accept="image/png,image/jpeg,image/webp">
+            <span>Bild</span>
+          </label>
+        </div>
+        <div class="profile-info">
+          <div id="profileName" class="profile-name">…</div>
+          <div class="profile-meta">
+            <span class="pill pill-gold">🏆 <span id="profileTrophies">0</span></span>
+            <span class="pill">Code <b id="profileCode">—</b></span>
+          </div>
+          <div id="profileEmail" class="muted"></div>
+        </div>
+      </div>
+
+      <div class="card highlight">
+        <h2>Spiel verbinden</h2>
+        <p>Erzeuge einen Code und gib ihn im Spiel unter <b>Profil → Spiel-Code</b> ein. Der Code gilt 10 Minuten und nur einmal.</p>
+        <button id="codeBtn" class="btn btn-primary btn-big" type="button">Spiel-Code erzeugen</button>
+        <div id="codeBox" class="code-box hidden">
+          <div id="codeValue" class="code-value"></div>
+          <div class="code-actions">
+            <button id="copyCodeBtn" class="btn btn-ghost" type="button">Kopieren</button>
+            <span id="codeTimer" class="muted"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Spielername</h2>
+        <form id="nameForm" class="form row">
+          <input id="nameInput" name="name" type="text" required minlength="3" maxlength="16" pattern="[^<>]{3,16}">
+          <button class="btn btn-secondary" type="submit">Speichern</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Freunde</h2>
+        <form id="searchForm" class="form row">
+          <input id="searchInput" type="search" placeholder="Name oder Freundes-Code" minlength="2" maxlength="32">
+          <button class="btn btn-secondary" type="submit">Suchen</button>
+        </form>
+        <ul id="searchResults" class="list"></ul>
+        <h3 id="requestsTitle" class="hidden">Anfragen</h3>
+        <ul id="requestList" class="list"></ul>
+        <h3>Deine Freunde</h3>
+        <ul id="friendList" class="list"></ul>
+        <p id="friendsEmpty" class="muted hidden">Noch keine Freunde – suche nach Namen oder teile deinen Code.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Passwort bestaetigen fuer den Spiel-Code -->
+  <dialog id="codeDialog">
+    <form id="codeForm" class="form" method="dialog">
+      <h2>Passwort bestätigen</h2>
+      <p class="muted">Für das Spiel wird eine eigene Anmeldung erstellt. Dein Browser bleibt eingeloggt.</p>
+      <label>Passwort<input name="password" type="password" required minlength="6" autocomplete="current-password"></label>
+      <div class="row">
+        <button class="btn btn-ghost" value="cancel" type="button" id="codeCancel">Abbrechen</button>
+        <button class="btn btn-primary" type="submit">Code erzeugen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <footer class="footer muted">Golf Battle 3D · Account-Portal · Keine Werbung, kein Tracking</footer>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
