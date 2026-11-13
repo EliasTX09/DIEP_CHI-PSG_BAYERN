@@ -7,7 +7,12 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 
 > Engine: **Godot 4.5** (GDScript, Mobile-Renderer, Jolt Physics) · Backend: **Supabase** (optional) ·
 > Build: **GitHub Actions** → `GolfBattle3D.apk`
+> Hochformat (einhändig) · Web-Portal für Accounts in [`webapp/`](webapp) (GitHub Pages)
 > Die `index.html` im Repo-Root gehört nicht zum Spiel.
+
+> **Umbau-Stand:** Das Spiel läuft seit dieser Version im **Hochformat**. Spielszene, Physik und Bots sind fertig;
+> Hauptmenü und HUD sind noch für Querformat angeordnet und werden im nächsten Schritt neu gebaut
+> (neues Hochformat-Menü mit Tabs, Battle Pass, Bergkulissen mit Shortcuts, Bahn-Trophäen, Flyover).
 
 ---
 
@@ -18,13 +23,16 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 1. Auf [supabase.com](https://supabase.com) ein kostenloses Projekt anlegen.
 2. **SQL Editor → New query**: den kompletten Inhalt von [`supabase_schema.sql`](supabase_schema.sql) einfügen
    und **Run** drücken. Das Skript ist wiederholbar (zweimal ausführen schadet nicht) und legt an:
-   `profiles`, `clubs`, `inventory`, `friends`, `lobbies`, `lobby_invites`, `match_results`
-   inklusive Row-Level-Security.
+   `profiles`, `clubs`, `inventory`, `friends`, `lobbies`, `lobby_invites`, `match_results`, `game_link_codes`
+   inklusive Row-Level-Security, dazu den Storage-Bucket **`avatars`** für Profilbilder (öffentlich lesbar, max. 512 KB).
 3. **Authentication → Sign In / Providers**:
    - **„Allow anonymous sign-ins“ einschalten** (für den Sofort-Gast-Login per Geräte-ID).
    - **Email** aktiviert lassen (zum Verknüpfen des Gast-Accounts mit E-Mail + Passwort).
      Für schnelle Tests kannst du „Confirm email“ ausschalten.
-4. **Project Settings → API**: die **Project URL** und den **anon public**-Key kopieren.
+4. **Authentication → URL Configuration**: als **Site URL** und unter **Redirect URLs** die Adresse deines
+   Web-Portals eintragen (z.B. `https://<dein-name>.github.io/<repo>/`), damit Bestätigungs- und
+   Passwort-Mails zurück aufs Portal führen.
+5. **Project Settings → API**: die **Project URL** und den **anon public**-Key kopieren.
    ⚠️ **Niemals** den `service_role`-Key verwenden – der gehört nie in eine App.
 
 ### 2. Zugangsdaten eintragen – eine der beiden Varianten
@@ -36,6 +44,7 @@ GitHub → dein Repo → **Settings → Secrets and variables → Actions → Ne
 |---|---|
 | `SUPABASE_URL` | `https://xxxx.supabase.co` |
 | `SUPABASE_ANON_KEY` | dein anon public Key |
+| `WEB_PORTAL_URL` (optional) | Adresse des Web-Portals; ohne Angabe: `https://<besitzer>.github.io/<repo>/` |
 
 Der Workflow schreibt sie beim Build in `config/backend.cfg`.
 
@@ -72,10 +81,32 @@ gegen eine echte PostgreSQL-Datenbank.
    **GolfBattle3D-apk** klicken (ZIP entpacken) – oder bei Builds von `main` unter **Releases** die APK laden.
 2. APK aufs Handy kopieren (oder direkt am Handy herunterladen) und antippen.
 3. Android fragt nach **„Installation aus unbekannten Quellen“** → für den Browser/Dateimanager erlauben.
-4. Installieren, starten – fertig. Das Spiel läuft immer im Querformat.
+4. Installieren, starten – fertig. Das Spiel läuft im Hochformat.
 
 Voraussetzungen am Gerät: Android 7+ mit **arm64** (praktisch alle Geräte seit ca. 2017).
 Der Mobile-Renderer nutzt Vulkan; auf Geräten ohne Vulkan wechselt Godot automatisch auf OpenGL.
+
+### 5. Web-Portal veröffentlichen (Account, Profilbild, Freunde)
+
+Das Portal liegt in [`webapp/`](webapp) – reines HTML/CSS/JavaScript ohne externe Bibliotheken.
+
+1. GitHub → **Settings → Pages → Source: „GitHub Actions“** (falls auf GitHub Pages dieses Repositorys schon
+   eine andere Seite läuft: Achtung, das Portal ersetzt sie – dann lieber ein eigenes Repository dafür nutzen).
+2. Die Secrets `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen (wie oben).
+3. **Actions → „Web-Portal veröffentlichen“ → Run workflow** (läuft bewusst nur manuell und vom Standard-Branch).
+
+**So verbindet man das Spiel mit dem Web-Account:**
+1. Im Spiel: **Profil → „Account verknüpfen / Registrieren“** öffnet das Portal im Browser.
+2. Dort registrieren bzw. einloggen, Profilbild hochladen, Freunde verwalten.
+3. **„Spiel-Code erzeugen“** (Passwort bestätigen) → 8-stelliger Code, 10 Minuten und nur einmal gültig.
+4. Code im Spiel unter **Profil → Spiel-Code → Einlösen** eingeben. Das Spiel erhält dabei eine **eigene** Anmeldung
+   (die Browser-Sitzung wird nie weitergegeben) und speichert sie verschleiert in `user://auth.json`.
+5. Hatte das Spiel schon Fortschritt als Gast und der Web-Account ebenfalls, wird der Stand des Accounts geladen
+   und der Gast-Stand als Sicherung (`user://save_backup_*.json`) abgelegt – es geht nichts still verloren.
+   Ist der Web-Account neu, übernimmt er den Gast-Fortschritt.
+
+Ein Direkt-Sprung vom Browser zurück ins Spiel (Deep-Link) ist **nicht** eingebaut – dafür bräuchte die APK
+einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
 
 ---
 
@@ -112,21 +143,25 @@ Der Mobile-Renderer nutzt Vulkan; auf Geräten ohne Vulkan wechselt Godot automa
 ## Projektstruktur
 
 ```
-project.godot                     Godot 4.5, Mobile-Renderer, Jolt Physics, Querformat, MSAA, Schatten
+project.godot                     Godot 4.5, Mobile-Renderer, Jolt Physics, Hochformat (720 x 1280), MSAA, Schatten
 export_presets.cfg                Android-Export (arm64, INTERNET, ACCESS_NETWORK_STATE, VIBRATE)
-supabase_schema.sql               Tabellen + RLS-Policies + Trigger
-config/backend.cfg                Supabase-URL + anon-Key (Platzhalter = Offline-Modus)
-.github/workflows/build_android.yml
+supabase_schema.sql               Tabellen, RLS-Policies, Trigger, Spiel-Code-Funktionen, Storage-Bucket "avatars"
+config/backend.cfg                Supabase-URL + anon-Key + Web-Portal-Adresse (Platzhalter = Offline-Modus)
+.github/workflows/build_android.yml   Tests + APK + Schema-Test + Portal-Browsertest
+.github/workflows/pages.yml           Web-Portal auf GitHub Pages veröffentlichen (manuell)
+webapp/                           Web-Portal: index.html, app.js, style.css, config.js
 scenes/                           MainMenu3D.tscn, Game.tscn, GameHUD.tscn
 shaders/                          15 eigene Shader (Wasser, Lava, Himmel, Neon, Portal, Ball-Skins …)
 scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen, Ligen),
-                                  NetworkManager (Supabase REST + Realtime), SoundManager (Synthesizer)
+                                  AuthManager (Login, Session, Web-Code), ProfileManager (Profilbild),
+                                  NetworkManager (Profil-Sync, Freunde, Lobbys, Realtime), SoundManager (Synthesizer)
 scripts/data/Catalog.gd           Alle Spieldaten (Schläger, Bälle, Truhen, Ligen, Welten)
 scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D, TrackKit, WorldTheme, Gadgets,
                                   Obstacles, ShotSim (Vorhersage), BotBrain (KI), Match3D (Spielablauf)
 scripts/fx/                       Materialien, Partikel, Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons
 scripts/ui/                       MainMenu3D, MenuPages, GameHUD, UIKit, UIIcon, UIAvatar
-tests/                            Smoke-Test, Screenshot-Runner, Physik-Fingerabdruck, SQL-Tests
+tests/                            Smoke-Test, Schein-Supabase-Server, Screenshot-Runner, Physik-Fingerabdruck,
+                                  SQL-Tests, web/portal_test.js (Browser-Test)
 docs/ARCHITECTURE.md              Architektur und Schnittstellen
 ```
 
@@ -142,7 +177,11 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | 3D-Menü und alle Menü-Seiten | in CI geprüft (Aufbau + Kernaktionen) |
 | Darstellung aller Welten, HUD und Menü | per Software-Rendering in CI gerendert und angesehen |
 | SQL-Schema + RLS-Regeln | in CI gegen PostgreSQL 16 getestet |
-| Supabase-Login, Freunde, Lobbys, Realtime-Multiplayer | geschrieben nach Supabase-Doku, **nicht gegen ein echtes Supabase-Projekt getestet** |
+| Login-Ablauf im Spiel (Gast, Web-Code, Profil-Abgleich, Profilbild) | in CI gegen einen **lokalen Schein-Server** getestet – prüft das Spiel, nicht den echten Supabase-Server |
+| Spiel-Codes, Profilbild-Pfade, Storage-Regeln | in CI gegen PostgreSQL 16 getestet (Supabase-Storage nachgebildet) |
+| Web-Portal (Registrieren, Profilbild, Freunde, Spiel-Code, XSS-Schutz, Handy-Breite) | in CI im Browser (Chromium) gegen simulierte Supabase-Antworten getestet |
+| Supabase-Login, Freunde, Lobbys, Realtime, Portal gegen ein **echtes** Supabase-Projekt | **nicht getestet** |
+| Hochformat-Menü und -HUD | **noch nicht umgebaut** (Querformat-Anordnung, nächster Schritt) |
 | Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen) |
 | APK-Export + Artifact `GolfBattle3D-apk` | in CI gebaut (Entwicklungs-Branch) |
 | GitHub-Release-Schritt | läuft nur auf `main` – **erst nach dem Merge geprüft** |

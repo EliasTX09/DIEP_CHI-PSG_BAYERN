@@ -63,6 +63,20 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 - `MenuPages` – alle Seiten als modale Fenster (`open(page_id)`, `refresh()`): play, lobby, clubs, cosmetics, friends,
   leaderboard, shop, trophies, settings; dazu Truhen-Dialog, Belohnungsfenster und Rückfragen.
 
+## Anmeldung (AuthManager, ProfileManager, Web-Portal)
+- `AuthManager` ist der einzige Besitzer von `user_id`, Access-/Refresh-Token und E-Mail und führt alle
+  Supabase-HTTP-Aufrufe aus (`request()`, erneuert die Session bei 401 einmal). `NetworkManager` liest diese Werte
+  nur über Getter. Signale: `auth_changed`, `status_changed`, `account_changing` (vor einem Wechsel → Lobby verlassen).
+- Session-Speicher: nur das Refresh-Token, in `user://auth.json`, verschlüsselt mit einem geräte­bezogenen Schlüssel
+  (Verschleierung). Alte `session.json` wird übernommen und gelöscht; eine unlesbare Datei gilt als „keine Session“.
+- Web-Code-Ablauf: Portal → eigener Passwort-Login nur für das Spiel → `create_game_link_code(refresh_token)` →
+  Code (8 Zeichen, 10 min, einmalig) → Spiel `redeem_game_link_code(code)` (als anon) → Refresh-Token →
+  `grant_type=refresh_token` → eigene Spiel-Session. Die Tabelle `game_link_codes` hat RLS ohne Policies.
+- Spielstand beim Account-Wechsel: `GameManager.adopt_account_save(account, remote)` – Server leer → Upload;
+  gleicher Account → neuere Revision gewinnt; anderer Account mit Stand → laden, lokalen Fortschritt vorher sichern.
+- `ProfileManager` lädt das Profilbild nur über `<supabase-url>/storage/v1/object/public/avatars/<uid>/avatar-<n>.<ext>`
+  (Pfad per Regex und DB-Constraint geprüft, max. 512 KB, PNG/JPEG/WebP nach Magic-Bytes) und cacht es lokal.
+
 ## Netzwerk
 Jeder Client simuliert nur seine eigenen Bälle (der Host zusätzlich die Bots) und sendet Position/Schläge
 per Supabase-Realtime-Broadcast; fremde Bälle werden interpoliert (`RemoteBall3D`).
