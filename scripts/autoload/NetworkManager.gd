@@ -166,16 +166,16 @@ func _req(method: int, path: String, body: Variant = null, auth: bool = true, ex
 			message = "Fehler %d" % code
 	return {"ok": ok, "code": code, "data": parsed, "message": message}
 
-func _get(path: String) -> Dictionary:
+func _api_get(path: String) -> Dictionary:
 	return await _req(HTTPClient.METHOD_GET, path)
 
-func _post(path: String, body: Variant, prefer: String = "return=representation") -> Dictionary:
+func _api_post(path: String, body: Variant, prefer: String = "return=representation") -> Dictionary:
 	return await _req(HTTPClient.METHOD_POST, path, body, true, ["Prefer: " + prefer])
 
-func _patch(path: String, body: Variant) -> Dictionary:
+func _api_patch(path: String, body: Variant) -> Dictionary:
 	return await _req(HTTPClient.METHOD_PATCH, path, body, true, ["Prefer: return=minimal"])
 
-func _delete(path: String) -> Dictionary:
+func _api_delete(path: String) -> Dictionary:
 	return await _req(HTTPClient.METHOD_DELETE, path)
 
 static func _now_iso() -> String:
@@ -308,7 +308,7 @@ func _profile_row() -> Dictionary:
 	}
 
 func _pull_profile() -> void:
-	var r: Dictionary = await _get("/rest/v1/profiles?id=eq.%s&select=*" % user_id)
+	var r: Dictionary = await _api_get("/rest/v1/profiles?id=eq.%s&select=*" % user_id)
 	if bool(r["ok"]) and r["data"] is Array and (r["data"] as Array).size() > 0:
 		var row: Dictionary = (r["data"] as Array)[0]
 		friend_code = str(row.get("friend_code", ""))
@@ -324,7 +324,7 @@ func push_profile() -> void:
 	_push_timer = -1.0
 	if not is_online():
 		return
-	var r: Dictionary = await _post("/rest/v1/profiles?on_conflict=id", _profile_row(), "resolution=merge-duplicates,return=representation")
+	var r: Dictionary = await _api_post("/rest/v1/profiles?on_conflict=id", _profile_row(), "resolution=merge-duplicates,return=representation")
 	if bool(r["ok"]) and r["data"] is Array and (r["data"] as Array).size() > 0:
 		friend_code = str(((r["data"] as Array)[0] as Dictionary).get("friend_code", friend_code))
 	if not _push_inventory:
@@ -337,7 +337,7 @@ func push_profile() -> void:
 		clubs.append({"user_id": user_id, "club_id": str(id), "level": int(c.get("level", 1)), "cards": int(c.get("cards", 0)),
 			"equipped": str(id) == GameManager.equipped_club()})
 	if clubs.size() > 0:
-		await _post("/rest/v1/clubs?on_conflict=user_id,club_id", clubs, "resolution=merge-duplicates,return=minimal")
+		await _api_post("/rest/v1/clubs?on_conflict=user_id,club_id", clubs, "resolution=merge-duplicates,return=minimal")
 	var items: Array = []
 	var owned: Dictionary = GameManager.data.get("owned", {})
 	for kind in owned.keys():
@@ -345,16 +345,16 @@ func push_profile() -> void:
 			var eq: bool = GameManager.equipped(str(kind)) == str(item_id) or (str(kind) == "frame" and GameManager.avatar_frame() == str(item_id))
 			items.append({"user_id": user_id, "item_type": str(kind), "item_id": str(item_id), "equipped": eq})
 	if items.size() > 0:
-		await _post("/rest/v1/inventory?on_conflict=user_id,item_type,item_id", items, "resolution=merge-duplicates,return=minimal")
+		await _api_post("/rest/v1/inventory?on_conflict=user_id,item_type,item_id", items, "resolution=merge-duplicates,return=minimal")
 
 func _ping_presence() -> void:
-	_patch("/rest/v1/profiles?id=eq.%s" % user_id, {"last_seen": _now_iso()})
+	_api_patch("/rest/v1/profiles?id=eq.%s" % user_id, {"last_seen": _now_iso()})
 
 ## Traegt ein beendetes Online-Match in match_results ein.
 func report_match_result(summary: Dictionary, rewards: Dictionary, config: Dictionary) -> void:
 	if not is_online():
 		return
-	_post("/rest/v1/match_results", {
+	_api_post("/rest/v1/match_results", {
 		"user_id": user_id,
 		"lobby_code": str(lobby.get("code", "")),
 		"mode": str(config.get("mode", "quick")),
@@ -381,7 +381,7 @@ func refresh_friends() -> void:
 		friends.clear()
 		friends_updated.emit()
 		return
-	var r: Dictionary = await _get("/rest/v1/friends?select=id,user_id,friend_id,status&or=(user_id.eq.%s,friend_id.eq.%s)" % [user_id, user_id])
+	var r: Dictionary = await _api_get("/rest/v1/friends?select=id,user_id,friend_id,status&or=(user_id.eq.%s,friend_id.eq.%s)" % [user_id, user_id])
 	if not bool(r["ok"]) or not (r["data"] is Array):
 		return
 	var rows: Array = r["data"]
@@ -392,7 +392,7 @@ func refresh_friends() -> void:
 			ids.append(other)
 	var profiles := {}
 	if ids.size() > 0:
-		var pr: Dictionary = await _get("/rest/v1/profiles?select=id,username,trophies,avatar_frame,avatar_color,last_seen&id=in.(%s)" % ",".join(ids))
+		var pr: Dictionary = await _api_get("/rest/v1/public_profiles?select=id,username,trophies,avatar_frame,avatar_color,last_seen&id=in.(%s)" % ",".join(ids))
 		if bool(pr["ok"]) and pr["data"] is Array:
 			for p in (pr["data"] as Array):
 				profiles[str(p["id"])] = p
@@ -420,7 +420,7 @@ func search_players(query: String) -> Array:
 	if not is_online() or q.length() < 2:
 		return []
 	var enc: String = q.uri_encode()
-	var r: Dictionary = await _get("/rest/v1/profiles?select=id,username,trophies,avatar_frame,avatar_color,friend_code&or=(username.ilike.*%s*,friend_code.eq.%s)&id=neq.%s&limit=12" % [enc, q.to_upper().uri_encode(), user_id])
+	var r: Dictionary = await _api_get("/rest/v1/public_profiles?select=id,username,trophies,avatar_frame,avatar_color,friend_code&or=(username.ilike.*%s*,friend_code.eq.%s)&id=neq.%s&limit=12" % [enc, q.to_upper().uri_encode(), user_id])
 	var out: Array = []
 	if bool(r["ok"]) and r["data"] is Array:
 		for p in (r["data"] as Array):
@@ -431,23 +431,23 @@ func search_players(query: String) -> Array:
 func send_friend_request(other_id: String) -> Dictionary:
 	if not is_online() or other_id == user_id:
 		return {"ok": false, "message": "Nicht möglich."}
-	var r: Dictionary = await _post("/rest/v1/friends", {"user_id": user_id, "friend_id": other_id, "status": "pending"}, "return=minimal")
+	var r: Dictionary = await _api_post("/rest/v1/friends", {"user_id": user_id, "friend_id": other_id, "status": "pending"}, "return=minimal")
 	refresh_friends()
 	return {"ok": bool(r["ok"]), "message": "Anfrage gesendet." if bool(r["ok"]) else "Bereits befreundet oder angefragt."}
 
 func accept_friend(row_id: Variant) -> void:
-	await _patch("/rest/v1/friends?id=eq.%s" % str(row_id), {"status": "accepted"})
+	await _api_patch("/rest/v1/friends?id=eq.%s" % str(row_id), {"status": "accepted"})
 	refresh_friends()
 
 func remove_friend(row_id: Variant) -> void:
-	await _delete("/rest/v1/friends?id=eq.%s" % str(row_id))
+	await _api_delete("/rest/v1/friends?id=eq.%s" % str(row_id))
 	refresh_friends()
 
 ## Laedt einen Freund in die aktuelle Lobby ein.
 func invite_friend(friend_id: String) -> Dictionary:
 	if not in_lobby() or not is_online():
 		return {"ok": false, "message": "Erstelle zuerst eine Lobby."}
-	var r: Dictionary = await _post("/rest/v1/lobby_invites", {"from_id": user_id, "to_id": friend_id, "code": str(lobby["code"])}, "return=minimal")
+	var r: Dictionary = await _api_post("/rest/v1/lobby_invites", {"from_id": user_id, "to_id": friend_id, "code": str(lobby["code"])}, "return=minimal")
 	return {"ok": bool(r["ok"]), "message": "Einladung gesendet." if bool(r["ok"]) else str(r["message"])}
 
 func refresh_invites() -> void:
@@ -455,7 +455,7 @@ func refresh_invites() -> void:
 		invites.clear()
 		invites_updated.emit()
 		return
-	var r: Dictionary = await _get("/rest/v1/lobby_invites?select=id,code,from_id,created_at&to_id=eq.%s&order=created_at.desc&limit=5" % user_id)
+	var r: Dictionary = await _api_get("/rest/v1/lobby_invites?select=id,code,from_id,created_at&to_id=eq.%s&order=created_at.desc&limit=5" % user_id)
 	if not bool(r["ok"]) or not (r["data"] is Array):
 		return
 	var out: Array = []
@@ -471,14 +471,14 @@ func refresh_invites() -> void:
 	invites_updated.emit()
 
 func dismiss_invite(invite_id: Variant) -> void:
-	await _delete("/rest/v1/lobby_invites?id=eq.%s" % str(invite_id))
+	await _api_delete("/rest/v1/lobby_invites?id=eq.%s" % str(invite_id))
 	refresh_invites()
 
 ## Rangliste nach Trophaeen. Offline: lokale Liste aus Bot-Namen + eigenem Stand.
 func refresh_leaderboard() -> void:
 	var out: Array = []
 	if is_online():
-		var r: Dictionary = await _get("/rest/v1/profiles?select=id,username,trophies,avatar_frame,avatar_color&order=trophies.desc&limit=50")
+		var r: Dictionary = await _api_get("/rest/v1/public_profiles?select=id,username,trophies,avatar_frame,avatar_color&order=trophies.desc&limit=50")
 		if bool(r["ok"]) and r["data"] is Array:
 			for p in (r["data"] as Array):
 				out.append({"name": str(p.get("username", "Spieler")), "trophies": int(p.get("trophies", 0)),
@@ -537,7 +537,7 @@ func create_lobby(world_id: String, rounds: int, is_public: bool = false) -> voi
 	leave_lobby()
 	var code: String = _random_code()
 	var row := {"code": code, "host_id": user_id, "world": world_id, "rounds": rounds, "is_public": is_public, "status": "open", "player_count": 1}
-	var r: Dictionary = await _post("/rest/v1/lobbies", row, "return=minimal")
+	var r: Dictionary = await _api_post("/rest/v1/lobbies", row, "return=minimal")
 	if not bool(r["ok"]):
 		lobby_error.emit("Lobby konnte nicht erstellt werden: " + str(r["message"]))
 		return
@@ -554,7 +554,7 @@ func join_lobby(code_in: String) -> void:
 		lobby_error.emit("Der Raum-Code hat 4 Zeichen.")
 		return
 	leave_lobby()
-	var r: Dictionary = await _get("/rest/v1/lobbies?code=eq.%s&select=*" % code.uri_encode())
+	var r: Dictionary = await _api_get("/rest/v1/lobbies?code=eq.%s&select=*" % code.uri_encode())
 	if not bool(r["ok"]) or not (r["data"] is Array) or (r["data"] as Array).is_empty():
 		lobby_error.emit("Lobby %s nicht gefunden." % code)
 		return
@@ -575,7 +575,9 @@ func quick_match(world_id: String, rounds: int) -> void:
 	if not is_online():
 		start_bot_match(world_id, rounds)
 		return
-	var r: Dictionary = await _get("/rest/v1/lobbies?is_public=eq.true&status=eq.open&player_count=lt.%d&world=eq.%s&rounds=eq.%d&order=created_at.desc&limit=1" % [Catalog.MAX_PLAYERS, world_id.uri_encode(), rounds])
+	# nur frische Lobbys (juenger als 5 Minuten), damit niemand in einem verwaisten Raum landet
+	var fresh: String = Time.get_datetime_string_from_unix_time(int(Time.get_unix_time_from_system()) - 300) + "Z"
+	var r: Dictionary = await _api_get("/rest/v1/lobbies?is_public=eq.true&status=eq.open&player_count=lt.%d&world=eq.%s&rounds=eq.%d&created_at=gt.%s&order=created_at.desc&limit=1" % [Catalog.MAX_PLAYERS, world_id.uri_encode(), rounds, fresh])
 	if bool(r["ok"]) and r["data"] is Array and (r["data"] as Array).size() > 0:
 		var row: Dictionary = (r["data"] as Array)[0]
 		lobby = {"code": str(row["code"]), "host_id": str(row.get("host_id", "")), "world": world_id, "rounds": rounds, "is_public": true}
@@ -603,7 +605,7 @@ func set_lobby_settings(world_id: String, rounds: int) -> void:
 	lobby["world"] = world_id
 	lobby["rounds"] = rounds
 	_broadcast("settings", {"world": world_id, "rounds": rounds})
-	_patch("/rest/v1/lobbies?code=eq.%s" % str(lobby["code"]), {"world": world_id, "rounds": rounds})
+	_api_patch("/rest/v1/lobbies?code=eq.%s" % str(lobby["code"]), {"world": world_id, "rounds": rounds})
 	lobby_updated.emit()
 
 ## Host: startet das Match fuer alle in der Lobby.
@@ -631,7 +633,7 @@ func start_lobby_match() -> void:
 	var mode: String = "quick" if bool(lobby.get("is_public", false)) else "private"
 	var config: Dictionary = GameManager.make_match_config(mode, str(lobby["world"]), int(lobby["rounds"]), entries, seed_value, true)
 	_broadcast("start", {"config": config})
-	_patch("/rest/v1/lobbies?code=eq.%s" % str(lobby["code"]), {"status": "started"})
+	_api_patch("/rest/v1/lobbies?code=eq.%s" % str(lobby["code"]), {"status": "started"})
 	_begin_match(config)
 
 ## Setzt je Client die Rollen: eigener Spieler = "local", Bots simuliert der Host, alle anderen sind "remote".
@@ -663,7 +665,7 @@ func leave_lobby() -> void:
 	roster.clear()
 	_quick_timer = -1.0
 	if was_host and is_online():
-		_delete("/rest/v1/lobbies?code=eq.%s" % code)
+		_api_delete("/rest/v1/lobbies?code=eq.%s" % code)
 	lobby_left.emit("")
 	lobby_updated.emit()
 
@@ -810,7 +812,7 @@ func _rebuild_roster() -> void:
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a["id"]) < str(b["id"]))
 	roster = out
 	if is_host() and is_online() and in_lobby():
-		_patch("/rest/v1/lobbies?code=eq.%s" % str(lobby["code"]), {"player_count": roster.size(), "host_id": user_id})
+		_api_patch("/rest/v1/lobbies?code=eq.%s" % str(lobby["code"]), {"player_count": roster.size(), "host_id": user_id})
 		lobby["host_id"] = user_id
 	lobby_updated.emit()
 

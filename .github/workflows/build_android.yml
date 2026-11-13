@@ -203,11 +203,13 @@ jobs:
           SHOT_FILTER: ${{ inputs.shot_filter }}
         run: |
           set -o pipefail
+          # Wie auf dem Handy: Vulkan + Mobile-Renderer (ohne Angabe wuerde Godot hier Forward+ nehmen).
           DRIVER=vulkan
-          if ! vulkaninfo --summary > /dev/null 2>&1; then DRIVER=opengl3; fi
-          echo "Rendering-Treiber: $DRIVER"
+          METHOD="--rendering-method mobile"
+          if ! vulkaninfo --summary > /dev/null 2>&1; then DRIVER=opengl3; METHOD="--rendering-method gl_compatibility"; fi
+          echo "Rendering-Treiber: $DRIVER $METHOD"
           timeout 1200 xvfb-run -a -s "-screen 0 1280x720x24" "$RUNNER_TEMP/godot/godot" \
-            --rendering-driver "$DRIVER" --resolution 1280x720 --fixed-fps 30 --audio-driver Dummy \
+            --rendering-driver "$DRIVER" $METHOD --resolution 1280x720 --fixed-fps 30 --audio-driver Dummy \
             res://tests/Shots.tscn -- "--shots=${SHOT_FILTER}" 2>&1 | tee ci_out/visual.log
           grep -q "\[SHOTS\] DONE" ci_out/visual.log || { echo "::error::Screenshot-Lauf nicht beendet"; exit 1; }
           if grep -E "SHADER ERROR|SCRIPT ERROR|Parse Error|\[SHOTS\]\[FAIL\]" ci_out/visual.log; then
@@ -242,3 +244,35 @@ jobs:
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
+
+  schema-check:
+    name: Supabase-Schema gegen Postgres pruefen
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Schema einspielen (zweimal = wiederholbar) und RLS-Verhalten testen
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -e
+          P="psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q"
+          $P -f tests/schema_stub.sql
+          $P -f supabase_schema.sql
+          $P -f supabase_schema.sql
+          $P -f tests/schema_test.sql | tee schema_test.log
+          grep -q "SCHEMA TEST: PASS" schema_test.log
