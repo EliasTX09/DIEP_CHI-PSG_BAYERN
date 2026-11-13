@@ -371,7 +371,7 @@ func _page_lobby(body: VBoxContainer) -> void:
 			continue
 		any_friend = true
 		var h := _row_panel(flist)
-		var dot := UIKit.label("●", 18, UIKit.GREEN if bool(f["online"]) else UIKit.GREY)
+		var dot := UIKit.label("•", 30, UIKit.GREEN if bool(f["online"]) else UIKit.GREY)
 		h.add_child(dot)
 		var l := UIKit.label(str(f["name"]), 20)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -433,7 +433,7 @@ func _club_card(id: String) -> Button:
 	if owned:
 		text += "\nLv %d" % GameManager.club_level(id)
 		if GameManager.can_upgrade_club(id):
-			text += "  ▲"
+			text += "  UP!"
 	else:
 		text += "\ngesperrt"
 	var b := UIKit.button(text, col.darkened(0.45) if owned else Color(0.12, 0.13, 0.18), func() -> void:

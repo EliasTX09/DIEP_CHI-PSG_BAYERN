@@ -437,6 +437,8 @@ func _bot_playthrough(id: String, verbose: bool) -> Dictionary:
 	var shot_from := Vector3.ZERO
 	var strokes_before := 0
 	var pending := false
+	var track := PackedStringArray()
+	var frame_no := 0
 	while t < 240.0 and ball.state != Ball3D.State.HOLED and ball.strokes < Ball3D.MAX_STROKES:
 		brain.update(1.0 / 60.0)
 		if brain.wants_cpu():
@@ -446,10 +448,17 @@ func _bot_playthrough(id: String, verbose: bool) -> Dictionary:
 			shot_from = brain._shot_from
 			strokes_before = ball.strokes - 1
 			pending = true
+			track.clear()
 		elif pending and ball.state != Ball3D.State.MOVING and ball.state != Ball3D.State.OUT:
 			pending = false
 			if verbose:
 				_log_bot_shot(id, c, ball, brain, shot_from, strokes_before)
+				if ball.strokes - strokes_before >= 2:
+					print("[SMOKE]     Flugbahn bis OUT: ", " ".join(track))
+		if pending and ball.state == Ball3D.State.MOVING and frame_no % 15 == 0 and track.size() < 40:
+			var bp: Vector3 = ball.global_position
+			track.append("(%.1f,%.1f,%.1f|%.0f)" % [bp.x, bp.y, bp.z, ball.linear_velocity.length()])
+		frame_no += 1
 		await get_tree().process_frame
 		t += 1.0 / 60.0
 	if ball.state == Ball3D.State.MOVING or ball.state == Ball3D.State.OUT:
@@ -603,12 +612,13 @@ func _stage_input() -> void:
 	_touch(0, screen, true)
 	await _process_frames(2)
 	print("[SMOKE] Zielen nach Touch-Down: aiming=%s, Touches=%s" % [m._aiming, m._touches])
+	# Headless ist der Viewport quadratisch (1280 x 1280) -> weiter ziehen als auf einem 16:9-Handy
 	for i in 8:
-		_drag(0, screen + Vector2(0.0, 18.0 * float(i + 1)), Vector2(0.0, 18.0))
+		_drag(0, screen + Vector2(0.0, 40.0 * float(i + 1)), Vector2(0.0, 40.0))
 		await _process_frames(1)
 	check(m._aiming and m._aim_power > 0.3, "Ziehen am Ball spannt den Schlag (Kraft %.2f)" % m._aim_power)
 	check(m._dots.visible and m._arrow.visible, "Kraftpfeil und Flugbahn-Vorschau sichtbar")
-	_touch(0, screen + Vector2(0.0, 144.0), false)
+	_touch(0, screen + Vector2(0.0, 320.0), false)
 	await _process_frames(4)
 	check(ball.strokes == 1 and ball.state == Ball3D.State.MOVING, "Loslassen fuehrt den Schlag aus")
 	await _wait_ball(ball, 16.0)

@@ -258,6 +258,8 @@ func _score(res: Dictionary, cand: Dictionary) -> float:
 		return 100000.0 - float(res.get("time", 0.0)) - penalty * 200.0
 	if bool(res.get("out", false)):
 		return -500.0 - penalty
+	if bool(res.get("obstacle_hit", false)):
+		return -450.0 - penalty   # vom Hammer/der Windmuehle erwischt -> in echt meist im Wasser
 	var end_pos: Vector3 = res["end_pos"]
 	var total: float = course.total_length()
 	var progress: float = course.progress_at(end_pos)

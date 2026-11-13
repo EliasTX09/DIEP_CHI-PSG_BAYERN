@@ -100,8 +100,8 @@ static func _boost_here(c: Course3D, k: TrackKit, th: WorldTheme, target_speed: 
 	pad.transform = k.frame(Vector3(0.0, 0.0, pad_length * 0.5))
 	c.add_gadget(pad)
 
-static func _sand(c: Course3D, k: TrackKit, local: Vector3, size: Vector2) -> void:
-	var s := Gadgets.SandTrap.new(size)
+static func _sand(c: Course3D, k: TrackKit, local: Vector3, size: Vector2, decel_factor: float = 4.5) -> void:
+	var s := Gadgets.SandTrap.new(size, decel_factor)
 	s.transform = k.frame(local)
 	c.add_gadget(s)
 
@@ -356,7 +356,9 @@ static func _n3(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	_boost_here(c, k, th, 28.0, 3.0)
 	k.straight(2.0)
 	_loop(c, k, 4.0)
-	k.straight(8.0)
+	# Bremsfeld: nach dem Looping ist der Ball sehr schnell (~27 m/s) - erst abbremsen, dann die Steilkurve
+	_sand(c, k, Vector3(0.0, 0.0, -4.5), Vector2(k.width - 0.3, 8.0), 3.5)
+	k.straight(9.0)
 	# Steilkurve nach dem Looping: hohe Banden, damit schnelle Baelle nicht hinausfliegen
 	k.set_wall_height(2.2)
 	k.turn(180.0, 8.0, 22.0)

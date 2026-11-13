@@ -302,10 +302,20 @@ func _contact_normal(center: Vector3, fallback: Vector3) -> Vector3:
 	if info.is_empty():
 		return fallback.normalized()
 	var d: Vector3 = center - (info["point"] as Vector3)
+	var n_out: Vector3
 	if d.length() > 0.01:
-		return d.normalized()
-	var nn: Vector3 = info["normal"]
-	return nn.normalized() if nn.length() > 0.01 else fallback.normalized()
+		n_out = d.normalized()
+	else:
+		var nn: Vector3 = info["normal"]
+		n_out = nn.normalized() if nn.length() > 0.01 else fallback.normalized()
+	# Beruehrung mit beweglichem Hindernis (Hammer, Windmuehle, Schiebeblock) oder der Seite einer Faehre:
+	# in echt wird der Ball dabei weggeschleudert - das kann die Vorhersage nicht exakt, also markieren.
+	var rid: RID = info.get("rid", RID())
+	if rid.is_valid():
+		var layer: int = PhysicsServer3D.body_get_collision_layer(rid)
+		if (layer & Obstacles.LAYER_OBSTACLE) != 0 or ((layer & Obstacles.LAYER_PLATFORM) != 0 and n_out.y < 0.55):
+			result["obstacle_hit"] = true
+	return n_out
 
 ## Faellt der Ball ins Loch? (Naeherung der echten Becher-Physik: nah genug an der Lochmitte und nicht zu schnell.)
 static func _cup_capture(course: Course3D, p: Vector3, v: Vector3, grounded: bool) -> bool:
