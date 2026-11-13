@@ -144,6 +144,10 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | SQL-Schema + RLS-Regeln | in CI gegen PostgreSQL 16 getestet |
 | Supabase-Login, Freunde, Lobbys, Realtime-Multiplayer | geschrieben nach Supabase-Doku, **nicht gegen ein echtes Supabase-Projekt getestet** |
 | Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen) |
+| APK-Export + Artifact `GolfBattle3D-apk` | in CI gebaut (Entwicklungs-Branch) |
+| GitHub-Release-Schritt | läuft nur auf `main` – **erst nach dem Merge geprüft** |
+
+Bekannte Warnung: Jolt meldet in der CI gelegentlich „job system exceeded the maximum number of jobs“ (Godot-interne Meldung, bisher ohne erkennbare Auswirkung auf die Tests).
 
 Bekannte Grenzen: Online-Matches sind „Client-autoritativ“ (jeder meldet seine eigenen Schläge) – für ein Spiel unter
 Freunden okay, gegen Cheater nicht abgesichert. Es gibt keine Echtgeld-Käufe; Gems verdient man im Spiel.
