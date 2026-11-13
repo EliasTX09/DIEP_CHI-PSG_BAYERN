@@ -1,92 +1,158 @@
-# ⛳ Fairway Clash – Multiplayer-Minigolf (Android, Godot 4)
+# ⛳ Golf Battle 3D – Arcade-Multiplayer-Minigolf für Android (Godot 4)
 
-Kompetitives Arcade-Minigolf im Stil von *Golf Battle*: Drag-and-Release-Steuerung mit Flugbahn-Vorschau,
-Echtzeit-Duelle, Freunde, Upgrades, Ghost-Läufe, Windböen, Boost-Pads, Windmühlen und Magnetfelder.
+Echtes 3D-Arcade-Minigolf: 15 Bahnen in 4 Welten, Loopings, Kanonen, Teleporter, Hämmer, Lava und Wasser,
+bis zu 6 Spieler gleichzeitig, Bots für den Offline-Modus, Schlägertasche mit Upgrades, Truhen, Ligen
+und ein täglicher „Golden Shot“. **Alles** – Bahnen, Modelle, Effekte, Shader und Sounds – wird per Code erzeugt.
+Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 
-> Engine: **Godot 4.3** (GDScript, GL-Compatibility-Renderer) · Backend: **Supabase** (optional) · CI: **GitHub Actions**
-> Der Code liegt in [`minigolf/`](minigolf). Die `index.html` im Repo-Root gehört nicht zum Spiel.
+> Engine: **Godot 4.5** (GDScript, Mobile-Renderer, Jolt Physics) · Backend: **Supabase** (optional) ·
+> Build: **GitHub Actions** → `GolfBattle3D.apk`
+> Die `index.html` im Repo-Root gehört nicht zum Spiel.
 
-## Status – was funktioniert, was ist Gerüst?
+---
 
-| Bereich | Stand |
+## Schnellstart in 4 Schritten
+
+### 1. Supabase einrichten (optional – ohne Backend läuft das Spiel offline mit Bots)
+
+1. Auf [supabase.com](https://supabase.com) ein kostenloses Projekt anlegen.
+2. **SQL Editor → New query**: den kompletten Inhalt von [`supabase_schema.sql`](supabase_schema.sql) einfügen
+   und **Run** drücken. Das Skript ist wiederholbar (zweimal ausführen schadet nicht) und legt an:
+   `profiles`, `clubs`, `inventory`, `friends`, `lobbies`, `lobby_invites`, `match_results`
+   inklusive Row-Level-Security.
+3. **Authentication → Sign In / Providers**:
+   - **„Allow anonymous sign-ins“ einschalten** (für den Sofort-Gast-Login per Geräte-ID).
+   - **Email** aktiviert lassen (zum Verknüpfen des Gast-Accounts mit E-Mail + Passwort).
+     Für schnelle Tests kannst du „Confirm email“ ausschalten.
+4. **Project Settings → API**: die **Project URL** und den **anon public**-Key kopieren.
+   ⚠️ **Niemals** den `service_role`-Key verwenden – der gehört nie in eine App.
+
+### 2. Zugangsdaten eintragen – eine der beiden Varianten
+
+**Variante A (empfohlen): GitHub Secrets** – dann stehen die Werte nicht im Repository.
+GitHub → dein Repo → **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Name | Wert |
 |---|---|
-| Ball-Physik, Wände, Reibung, Einlochen, Flugbahn-Vorschau | geschrieben (eigene kinematische Physik) |
-| Hazards: Wind/Böen, Boost, Windmühle, Magnet, Wasser | geschrieben |
-| Quick-Deathmatch (3 Bahnen, Sudden-Death „Nearest to the Pin“) | geschrieben, State-Machine in `GameManager.gd` |
-| Offline-Modus (Bots, lokaler Speicherstand, eigener Ghost) | geschrieben |
-| Shop, Schläger-Upgrades, Trails, Loch-FX | geschrieben |
-| Account (E-Mail, Gast, Gast→Account), Freunde, Einladungen, Ghosts (Supabase REST) | geschrieben, **nicht gegen ein Live-Projekt getestet** |
-| Echtzeit-Multiplayer (Supabase Realtime Broadcast/Presence) | geschrieben, **Protokoll ungetestet** – isoliert in `NetworkManager.gd` |
+| `SUPABASE_URL` | `https://xxxx.supabase.co` |
+| `SUPABASE_ANON_KEY` | dein anon public Key |
 
-Die GDScript-Dateien wurden mit einem Parser auf Syntax geprüft, aber **noch nicht in der Godot-Engine ausgeführt**.
-Erwarte beim ersten Start Kleinigkeiten (Balancing, Layout, vereinzelte Laufzeitfehler). Ob der CI-Build durchläuft,
-siehst du im *Actions*-Tab.
+Der Workflow schreibt sie beim Build in `config/backend.cfg`.
+
+**Variante B:** direkt in [`config/backend.cfg`](config/backend.cfg) eintragen:
+
+```ini
+[supabase]
+url="https://xxxx.supabase.co"
+anon_key="eyJhbGciOi..."
+```
+
+Solange dort die Platzhalter stehen, startet das Spiel im **Offline-Modus** (Bots, lokaler Speicherstand).
+
+### 3. Auf GitHub pushen
+
+Der Workflow [`.github/workflows/build_android.yml`](.github/workflows/build_android.yml) läuft bei jedem Push auf
+`main` (und auf Entwicklungs-Branches `ccr-*`) sowie manuell über **Actions → Build Android APK → Run workflow**.
+Er
+
+1. nutzt Godot 4.5.2 mit Export-Templates, Android-SDK und Java 17 (Docker-Image `barichello/godot-ci:4.5.2`),
+2. erzeugt einen Debug-Keystore,
+3. importiert das Projekt und bricht bei jedem Skriptfehler ab,
+4. beweist, dass wirklich **Jolt Physics** rechnet (Physik-Fingerabdruck),
+5. führt einen Headless-Smoke-Test aus (Logik, Physik, alle Bahnen, Bots, komplette Partie, Touch-Gesten, Menü),
+6. exportiert **`GolfBattle3D.apk`** und lädt sie als **Artifact** hoch,
+7. veröffentlicht sie bei Pushes auf `main` zusätzlich als **GitHub Release** (`build-<Nummer>`).
+
+Parallel laufen ein Shader-Check mit Software-Rendering (inkl. Screenshots) und ein Test des SQL-Schemas
+gegen eine echte PostgreSQL-Datenbank.
+
+### 4. APK herunterladen und installieren
+
+1. GitHub → **Actions** → letzter grüner Lauf von „Build Android APK“ → unten bei **Artifacts** auf
+   **GolfBattle3D-apk** klicken (ZIP entpacken) – oder bei Builds von `main` unter **Releases** die APK laden.
+2. APK aufs Handy kopieren (oder direkt am Handy herunterladen) und antippen.
+3. Android fragt nach **„Installation aus unbekannten Quellen“** → für den Browser/Dateimanager erlauben.
+4. Installieren, starten – fertig. Das Spiel läuft immer im Querformat.
+
+Voraussetzungen am Gerät: Android 7+ mit **arm64** (praktisch alle Geräte seit ca. 2017).
+Der Mobile-Renderer nutzt Vulkan; auf Geräten ohne Vulkan wechselt Godot automatisch auf OpenGL.
+
+---
+
+## Steuerung
+
+| Geste | Wirkung |
+|---|---|
+| Am Ball ziehen und loslassen | Schlag (Slingshot: nach hinten ziehen = nach vorn schießen). 3D-Kraftpfeil + echte Flugbahn-Vorschau inkl. Banden und Rampen |
+| Ein Finger irgendwo sonst | Kamera 360° drehen und neigen |
+| Zwei Finger | Pinch-Zoom |
+| Auge-Button | Vogelperspektive |
+| „ROLLEN / CHIP“ | Putt am Boden oder Chip-Schlag in die Luft |
+| Spin-Widget | Topspin, Backspin, Seiten-Effet |
+| Smiley-Button | Emotes & Quick-Chat („Nice Shot!“, „Oops!“, 🔥, 😂 …) |
+| Android-Zurück | schließt Fenster bzw. fragt vor dem Beenden |
+
+## Inhalte
+
+- **Welten & Bahnen (15 + Daily):** Emerald Valley (5), Volcano Canyon (4), Cyber Neon City (3), Pirate Cove / Sky Ruins (3),
+  jede Welt mit eigenem Himmel, Licht, Nebel und Shadern (Wasser, Lava, Neon-Hologramm, Holzplanken, Wasserfall …).
+- **Bahn-Baukasten:** Rampen, Steilkurven, Spiralen, Loopings, Brücken, Lücken, Boost-Pads, Windzonen, Teleporter,
+  Kanonen, Laser-Tore, Sandbunker, Windmühlen, Pendel-Hämmer, Schiebeblöcke, fahrende Plattformen.
+- **Multiplayer:** Gast-Login per Geräte-ID, Verknüpfen mit E-Mail/Passwort, Spielername, Avatar-Farbe und -Rahmen,
+  bis zu 6 Spieler gleichzeitig (alle schlagen parallel), Live-Rangliste, Emotes, Freunde (Suche per Name oder
+  Freundes-Code, Anfragen, Online-Status), private Lobby mit 4-stelligem Raum-Code oder Einladung, Welt und 3/5/9 Runden.
+- **Progression:** 16 Schläger (4 Kategorien × 4 Seltenheiten, Werte Power/Accuracy/Spin/Guide, Upgrades mit Coins + Karten),
+  6 Bälle mit kleinen Boni, 6 Trails, 5 Loch-Explosionen mit Screen-Shake und Bass, 4 Truhen-Slots mit Timern
+  (oder sofort per Gems), Trophäen, 5 Ligen und Trophäen-Pfad.
+- **Extras:** Style-Punkte („Air Time!“, „Bank Shot!“, „Close Call!“, Hole-in-One) mit Bonus-Coins,
+  Golden Shot (ein Schlag pro Tag, Belohnung nach Abstand zur Fahne), Replay des besten Schlags in Zeitlupe.
+- **Sound:** prozeduraler Synthesizer (`AudioStreamGenerator`) – Abschlag je nach Kraft, Abpraller auf Holz/Stein/Metall,
+  Wind bei hohen Sprüngen, Wasser-/Lava-Platscher, Loch-Sound + Fanfare, UI-Klicks, Truhen-Jingle.
 
 ## Projektstruktur
 
 ```
-.github/workflows/build_android.yml   # CI: exportiert die Debug-APK
-backend/schema.sql                    # Supabase-Tabellen + Row-Level-Security
-docs/BACKEND_SETUP.md                 # Schritt-für-Schritt Backend-Anbindung
-minigolf/
-├─ project.godot  export_presets.cfg  icon.svg
-├─ config/backend.example.cfg         # Vorlage für Supabase-Zugangsdaten
-├─ scenes/                            # Main.tscn, Game.tscn (Nodes werden im Code gebaut)
-└─ scripts/
-   ├─ core/      BackendConfig · SupabaseClient (Auth+REST) · NetworkManager (Realtime)
-   │             GameManager (State-Machine) · Progression · Catalog · MatchRules · CourseData · GhostRecorder
-   ├─ game/      Ball · Course · GameScene · AimController · RemoteBall · Cosmetics
-   ├─ hazards/   Hazard · WindZone · BoostPad · Windmill · MagnetField · WaterHazard
-   └─ ui/        Main (Router) · MainMenu · LoginScreen · ShopScreen · LobbyScreen · Hud · UIKit
+project.godot                     Godot 4.5, Mobile-Renderer, Jolt Physics, Querformat, MSAA, Schatten
+export_presets.cfg                Android-Export (arm64, INTERNET, ACCESS_NETWORK_STATE, VIBRATE)
+supabase_schema.sql               Tabellen + RLS-Policies + Trigger
+config/backend.cfg                Supabase-URL + anon-Key (Platzhalter = Offline-Modus)
+.github/workflows/build_android.yml
+scenes/                           MainMenu3D.tscn, Game.tscn, GameHUD.tscn
+shaders/                          15 eigene Shader (Wasser, Lava, Himmel, Neon, Portal, Ball-Skins …)
+scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen, Ligen),
+                                  NetworkManager (Supabase REST + Realtime), SoundManager (Synthesizer)
+scripts/data/Catalog.gd           Alle Spieldaten (Schläger, Bälle, Truhen, Ligen, Welten)
+scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D, TrackKit, WorldTheme, Gadgets,
+                                  Obstacles, ShotSim (Vorhersage), BotBrain (KI), Match3D (Spielablauf)
+scripts/fx/                       Materialien, Partikel, Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons
+scripts/ui/                       MainMenu3D, MenuPages, GameHUD, UIKit, UIIcon, UIAvatar
+tests/                            Smoke-Test, Screenshot-Runner, Physik-Fingerabdruck, SQL-Tests
+docs/ARCHITECTURE.md              Architektur und Schnittstellen
 ```
 
-## Spielprinzip
-- **Steuerung:** Finger irgendwo aufsetzen, nach hinten ziehen (Länge = Kraft), loslassen. Die gestrichelte Linie zeigt die Bahn.
-  Der **Spin-Slider** unten lässt den Ball kurven (Stärke je nach Schläger).
-- **Match:** 3 Bahnen, alle spielen gleichzeitig (45 s pro Bahn; nicht eingelocht = Par + 3). Wenigstens Schläge nach 3 Bahnen gewinnt;
-  bei Gleichstand entscheidet ein **Sudden-Death-Pin-Schuss** (wer am nächsten am Pin liegt).
-- **Ghost-Challenge:** Du trittst gegen deinen besten Lauf und – eingeloggt – den besten Lauf deiner Freunde an.
-- **Progression:** Coins für Platzierungen → Schläger kaufen/upgraden (Kraft, Führung = Windresistenz + Zielhilfe, Spin), Bälle, Trails, Loch-Effekte.
+## Ehrlicher Status
 
-## Lokal einrichten
-1. [Godot **4.3**](https://godotengine.org/download/archive/4.3-stable/) installieren (Standard-Version, kein .NET).
-2. Repo klonen und das Projekt öffnen:
-   ```bash
-   git clone https://github.com/EliasTX09/DIEP_CHI-PSG_BAYERN.git
-   cd DIEP_CHI-PSG_BAYERN
-   # Godot -> Import -> minigolf/project.godot
-   ```
-3. **F5** startet das Spiel am Desktop (Maus = Touch). Ohne Backend läuft der Offline-Modus.
-4. Backend (optional, für Accounts/Freunde/Multiplayer): [`docs/BACKEND_SETUP.md`](docs/BACKEND_SETUP.md).
+| Bereich | Stand |
+|---|---|
+| Import, alle Skripte und Shader kompilieren | in CI geprüft |
+| Jolt Physics aktiv | in CI per Physik-Fingerabdruck nachgewiesen |
+| Ball-Physik vs. Vorhersage, Out-of-Bounds, Einlochen auf allen Bahnen | in CI geprüft (Smoke-Test) |
+| Bots spielen alle 15 Bahnen | in CI geprüft |
+| Komplette Partie mit Bots inkl. Belohnungen, Golden Shot, Touch-Gesten | in CI geprüft |
+| 3D-Menü und alle Menü-Seiten | in CI geprüft (Aufbau + Kernaktionen) |
+| Darstellung aller Welten, HUD und Menü | per Software-Rendering in CI gerendert und angesehen |
+| SQL-Schema + RLS-Regeln | in CI gegen PostgreSQL 16 getestet |
+| Supabase-Login, Freunde, Lobbys, Realtime-Multiplayer | geschrieben nach Supabase-Doku, **nicht gegen ein echtes Supabase-Projekt getestet** |
+| Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen) |
 
-## Auf ein Android-Gerät bringen
+Bekannte Grenzen: Online-Matches sind „Client-autoritativ“ (jeder meldet seine eigenen Schläge) – für ein Spiel unter
+Freunden okay, gegen Cheater nicht abgesichert. Es gibt keine Echtgeld-Käufe; Gems verdient man im Spiel.
 
-**A) Fertige APK aus GitHub Actions** (einfachster Weg)
-1. Push nach GitHub → *Actions* → Workflow **Build Android APK** → Run öffnen → Artifact **FairwayClash-debug-apk** laden.
-2. ZIP entpacken, `FairwayClash.apk` aufs Handy kopieren, „Installation aus unbekannten Quellen“ erlauben, installieren.
-   Oder per USB: `adb install FairwayClash.apk`.
-3. Für Releases: *Release veröffentlichen* → die APK wird automatisch angehängt.
-4. Mit Backend: Secrets `SUPABASE_URL` und `SUPABASE_ANON_KEY` anlegen (siehe Backend-Doku).
+## Hinweise
 
-**B) Direkt aus dem Godot-Editor**
-1. *Editor → Editor Settings → Export → Android*: Android SDK Path, JDK Path, Debug-Keystore setzen
-   ([offizielle Anleitung](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_android.html)).
-2. *Project → Install Android Build Template* ist **nicht** nötig (kein Gradle-Build).
-3. Handy per USB (USB-Debugging an) verbinden → Button **Remote Deploy** (Android-Symbol oben rechts) oder *Project → Export → Android → Export Project*.
-
-> Der CI-Build ist eine **Debug-APK** (kein Secret nötig). Für den Play Store brauchst du eine Release-Signatur
-> (`keystore/release*` in `export_presets.cfg`, Passwörter nur als Secrets / Env-Variablen).
-
-## Architektur in Kürze
-- **Ball.gd** – `Ball.step()` ist eine reine statische Funktion (Integration, Reibung, Spin, Kreis-Segment-Kollision in Substeps) und wird von
-  Spiel *und* Vorschau genutzt. Einlochen nur unter `SINK_SPEED`, schnelle Bälle springen über das Loch.
-- **GameManager.gd** – `IDLE → LOADING_MAP → SHOT_PHASE → HOLE_RESULT → … → [SUDDEN_DEATH] → MATCH_RESULT`; reine Regeln in `MatchRules.gd`.
-- **Netzwerk** – jeder Client simuliert seinen eigenen Ball und sendet Schüsse + Position (10 Hz) per Realtime-Broadcast; Gegner werden interpoliert.
-  Host = kleinste User-ID im Raum. Kein serverseitiges Anti-Cheat.
-- **Neue Bahnen** – einfach einen Eintrag in `CourseData.gd` ergänzen (Polygon-Rand, Hindernisse, Tee, Loch, Hazards).
-
-## Bekannte Grenzen / Nächste Schritte
-- Coins/Upgrades werden vom Client vergeben (manipulierbar) → Kaufen/Belohnen über Supabase-RPC/Edge Function absichern.
-- Realtime-Protokoll gegen ein echtes Projekt testen; ggf. auf private Channels umstellen.
-- Eigene Grafik/Sound, mehr Bahnen, Matchmaking-Queue, Push-Einladungen, Rangliste.
-- Der Name „Fairway Clash“ ist ein Platzhalter (`package/unique_name` in `export_presets.cfg` anpassen).
+- **Name:** „Golf Battle“ ist der Name eines existierenden kommerziellen Spiels. Für eine Veröffentlichung im
+  Play Store solltest du einen eigenen Namen wählen (`config/name` in `project.godot`, Paketname in `export_presets.cfg`).
+- **Release-Build:** Die CI baut eine Debug-APK mit Debug-Keystore. Für den Play Store brauchst du einen eigenen
+  Release-Keystore (als GitHub Secret) und ein AAB.
+- **Lokal entwickeln:** Ordner in Godot 4.5 öffnen, `res://scenes/MainMenu3D.tscn` ist die Startszene.
+  Tests: `godot --headless --fixed-fps 60 res://tests/Smoke.tscn`.
