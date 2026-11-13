@@ -518,6 +518,7 @@ func _stage_match() -> void:
 	cfg["courses"] = ["e1", "n1"]
 	cfg["rounds"] = 2
 	var trophies_before := GameManager.trophies()
+	BotBrain.time_budget_usec = 2500   # Produktions-Rechenbudget
 	var m: Match3D = await _run_match(cfg, true, 420.0)
 	check(m.finished, "Partie ueber 2 Bahnen laeuft bis zum Ende")
 	check(m.final_ranking.size() == 3, "Endrangliste mit 3 Spielern")
@@ -543,6 +544,28 @@ func _stage_match() -> void:
 	await _process_frames(3)
 	m.queue_free()
 	await _process_frames(3)
+	# Partie auf Bahnen mit Hammer, Faehre und Schiebebloecken: 4 Bots mit echtem Rechenbudget
+	print("[SMOKE] Stage: Partie mit beweglichen Hindernissen (4 Bots, Budget 2,5 ms)")
+	var cfg2: Dictionary = GameManager.make_bot_match("pirate", 3, 4)
+	cfg2["courses"] = ["p3", "v3"]
+	cfg2["rounds"] = 2
+	var m2: Match3D = await _run_match(cfg2, true, 600.0)
+	check(m2.finished, "Partie auf p3 + v3 mit 5 Spielern laeuft bis zum Ende")
+	for rec in m2.players:
+		if rec.brain != null:
+			print("[SMOKE]   %s: Schlaege gesamt %d, letzte Suche %.2f s Bahn-Zeit, verpasste Zeitfenster %d" % [rec.name,
+				rec.total, rec.brain.last_search_time, rec.brain.total_misses])
+	var totals2 := PackedStringArray()
+	for row in m2.final_ranking:
+		totals2.append("%s=%d" % [str(row["name"]), int(row["total"])])
+	print("[SMOKE] Endstand p3+v3: ", ", ".join(totals2))
+	var best_total := 999
+	for row in m2.final_ranking:
+		best_total = mini(best_total, int(row["total"]))
+	check(best_total <= 14, "Bester Bot schafft p3 + v3 (Par 8) in hoechstens 14 Schlaegen (%d)" % best_total)
+	m2.queue_free()
+	await _process_frames(3)
+	BotBrain.time_budget_usec = 400000
 
 # ---------------------------------------------------------------- Touch-Eingabe (Zielen, Drehen, Pinch)
 

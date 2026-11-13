@@ -48,6 +48,11 @@ var _shoot_at: float = -1.0
 var _misses: int = 0
 ## false, wenn der Ball selbst auf einer fahrenden Plattform liegt (dann sofort schiessen, kein Abpassen)
 var _timing_ok: bool = false
+## Bahn-Zeit, zu der die aktuelle Suche begann (fuer den adaptiven Vorlauf)
+var _search_started: float = 0.0
+## Diagnose: Dauer der letzten Suche in Bahn-Sekunden, Anzahl verpasster Zeitfenster gesamt
+var last_search_time: float = 0.0
+var total_misses: int = 0
 
 func _init(p_ball: Ball3D, p_course: Course3D, p_skill: float, rng_seed: int) -> void:
 	ball = p_ball
@@ -86,10 +91,11 @@ func update(delta: float) -> void:
 			if _timing_ok and course.clock_running:
 				if course.time < _shoot_at - 0.02:
 					return   # auf das geplante Zeitfenster warten
-				if course.time > _shoot_at + 0.12 and _misses < 2:
+				if course.time > _shoot_at + 0.12 and _misses < 4:
 					# Zeitfenster verpasst (Rechnen hat zu lange gedauert) -> mit mehr Vorlauf neu planen
 					_misses += 1
-					_lead = minf(_lead * 1.8 + 0.5, 6.0)
+					total_misses += 1
+					_lead = minf(maxf(_lead * 1.6, last_search_time * 1.5 + 0.3), 12.0)
 					_build_candidates(true)
 					phase = Phase.SEARCH
 					return
@@ -110,6 +116,10 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 				phase = Phase.AIMED
 				_timer = 0.25
 				_shoot_at = _plan_time + float(_best.get("dt", 0.0))
+				# Vorlauf an die tatsaechliche Rechendauer anpassen (gemessen in Bahn-Zeit)
+				last_search_time = course.time - _search_started
+				if _timing_ok and last_search_time > _lead * 0.8:
+					_lead = minf(last_search_time * 1.4 + 0.3, 12.0)
 				return
 			var cand: Dictionary = _candidates[_index]
 			var v: Vector3 = Ball3D.launch_velocity(cand["dir"], float(cand["power"]), bool(cand["chip"]), ball.profile, ball.ground_normal)
@@ -164,7 +174,7 @@ func _add_timing_candidates() -> void:
 	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["score"]) > float(b["score"]))
 	if not ranked.is_empty() and float(ranked[0]["score"]) >= 90000.0:
 		return   # sofortiger Schlag locht schon ein
-	for i in mini(5, ranked.size()):
+	for i in mini(3, ranked.size()):
 		for off in TIME_OFFSETS:
 			var c: Dictionary = ranked[i].duplicate()
 			c.erase("score")
@@ -180,6 +190,7 @@ func _build_candidates(replan: bool = false) -> void:
 	_best_score = -INF
 	_refined = false
 	_timing_ok = _moving and not _on_moving_floor()
+	_search_started = course.time
 	_plan_time = course.time + (_lead if _timing_ok else 0.0)
 	var pos: Vector3 = ball.global_position
 	_start_progress = course.progress_at(pos)
