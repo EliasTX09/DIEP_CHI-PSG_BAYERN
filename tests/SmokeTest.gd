@@ -42,11 +42,12 @@ func _stage_environment() -> void:
 	print("[SMOKE] Godot ", v["string"])
 	print("[SMOKE] physics_engine (Setting) = ", ProjectSettings.get_setting("physics/3d/physics_engine"))
 	var ps_obj: Object = Engine.get_singleton("PhysicsServer3D")
-	var ps_class: String = ps_obj.get_class() if ps_obj != null else "?"
-	print("[SMOKE] PhysicsServer3D (Klasse) = ", ps_class)
+	var is_jolt: bool = ps_obj != null and ps_obj.is_class("JoltPhysicsServer3D")
+	var is_godot_physics: bool = ps_obj != null and ps_obj.is_class("GodotPhysicsServer3D")
+	print("[SMOKE] PhysicsServer3D: Jolt=", is_jolt, " GodotPhysics=", is_godot_physics)
 	print("[SMOKE] rendering_method = ", ProjectSettings.get_setting("rendering/renderer/rendering_method"))
 	check(int(v["major"]) == 4 and int(v["minor"]) >= 5, "Godot >= 4.5")
-	check(ps_class.contains("Jolt"), "Jolt-Physik ist aktiv")
+	check(is_jolt and not is_godot_physics, "Jolt-Physik ist aktiv")
 	check(str(ProjectSettings.get_setting("rendering/renderer/rendering_method")) == "mobile", "Mobile-Renderer konfiguriert")
 	check(int(ProjectSettings.get_setting("display/window/handheld/orientation")) == DisplayServer.SCREEN_SENSOR_LANDSCAPE,
 		"Orientierung = Sensor-Querformat")
