@@ -141,5 +141,145 @@ begin
 end $$;
 commit;
 
+-- ------------------------------------------------------------ Spiel-Codes (Web-Portal -> Spiel)
+create temp table test_codes (who text primary key, code text);
+grant all on test_codes to anon, authenticated;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "is_anonymous": false}';
+do $$
+declare c1 text; c2 text; n int;
+begin
+  c1 := public.create_game_link_code('rt-anna-game-session-1');
+  assert c1 ~ '^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$', 'Code hat 8 Zeichen aus dem Code-Alphabet';
+  c2 := public.create_game_link_code('rt-anna-game-session-2');
+  assert c1 <> c2, 'Neuer Code bei erneutem Erzeugen';
+  insert into test_codes values ('anna_old', c1), ('anna', c2);
+  begin
+    select count(*) into n from public.game_link_codes;
+    assert false, 'Website darf die Code-Tabelle nicht direkt lesen';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.create_game_link_code('kurz');
+    assert false, 'Zu kurzes Token wird abgelehnt';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+commit;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000c", "is_anonymous": true}';
+do $$
+begin
+  perform public.create_game_link_code('rt-guest-session-123');
+  assert false, 'Gaeste duerfen keine Spiel-Codes erzeugen';
+exception when invalid_authorization_specification then null;
+end $$;
+commit;
+
+do $$
+begin
+  assert (select count(*) from public.game_link_codes where user_id = '00000000-0000-0000-0000-00000000000a') = 1, 'Hoechstens ein gueltiger Code pro Account';
+  insert into public.game_link_codes (code, user_id, refresh_token, expires_at)
+    values ('EXPRD234', '00000000-0000-0000-0000-00000000000b', 'rt-ben-expired-xyz', now() - interval '1 minute');
+end $$;
+
+-- Einloesen als nicht angemeldetes Spiel (Rolle anon)
+begin;
+set local role anon;
+do $$
+declare tok text; c text; n int;
+begin
+  select code into c from test_codes where who = 'anna';
+  tok := public.redeem_game_link_code(lower(substr(c, 1, 4)) || '-' || substr(c, 5));
+  assert tok = 'rt-anna-game-session-2', 'Code liefert das Token der eigens erzeugten Sitzung (Kleinschreibung/Bindestrich egal)';
+  begin
+    perform public.redeem_game_link_code(c);
+    assert false, 'Code ist nur einmal gueltig';
+  exception when raise_exception then null;
+  end;
+  select code into c from test_codes where who = 'anna_old';
+  begin
+    perform public.redeem_game_link_code(c);
+    assert false, 'Ersetzter alter Code ist ungueltig';
+  exception when raise_exception then null;
+  end;
+  begin
+    perform public.redeem_game_link_code('EXPRD234');
+    assert false, 'Abgelaufener Code ist ungueltig';
+  exception when raise_exception then null;
+  end;
+  begin
+    perform public.create_game_link_code('rt-anon-session-123');
+    assert false, 'anon darf keine Codes erzeugen';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    select count(*) into n from public.game_link_codes;
+    assert false, 'anon darf die Code-Tabelle nicht lesen';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+commit;
+
+do $$
+begin
+  assert (select count(*) from public.game_link_codes) = 0, 'Eingeloeste und abgelaufene Codes sind geloescht';
+end $$;
+
+-- ------------------------------------------------------------ Profilbilder
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000a", "is_anonymous": false}';
+do $$
+declare n int;
+begin
+  update public.profiles set avatar_path = '00000000-0000-0000-0000-00000000000a/avatar-1700000000.png'
+    where id = '00000000-0000-0000-0000-00000000000a';
+  get diagnostics n = row_count;
+  assert n = 1, 'Eigenes Profilbild eintragen';
+  begin
+    update public.profiles set avatar_path = '00000000-0000-0000-0000-00000000000b/avatar-1.png'
+      where id = '00000000-0000-0000-0000-00000000000a';
+    assert false, 'Pfad in fremdem Ordner wird abgelehnt';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set avatar_path = 'https://evil.example/x.png' where id = '00000000-0000-0000-0000-00000000000a';
+    assert false, 'URL statt Pfad wird abgelehnt';
+  exception when check_violation then null;
+  end;
+  assert (select avatar_path from public.public_profiles where id = '00000000-0000-0000-0000-00000000000a')
+    = '00000000-0000-0000-0000-00000000000a/avatar-1700000000.png', 'Profilbild-Pfad ist oeffentlich sichtbar';
+  insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-00000000000a/avatar-1700000000.png');
+  begin
+    insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-00000000000b/avatar-1.png');
+    assert false, 'Upload in fremden Ordner verboten';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+commit;
+
+begin;
+set local role authenticated;
+set local request.jwt.claims = '{"sub": "00000000-0000-0000-0000-00000000000c", "is_anonymous": true}';
+do $$
+begin
+  insert into storage.objects (bucket_id, name) values ('avatars', '00000000-0000-0000-0000-00000000000c/avatar-1.png');
+  assert false, 'Gaeste laden keine Profilbilder hoch';
+exception when insufficient_privilege then null;
+end $$;
+commit;
+
+do $$
+begin
+  assert (select public and file_size_limit = 524288 from storage.buckets where id = 'avatars'), 'Bucket avatars: oeffentlich, 512 KB';
+  assert not exists (select 1 from information_schema.columns where table_name = 'public_profiles' and column_name in ('save', 'coins', 'device_id')),
+    'public_profiles zeigt keinen Spielstand';
+end $$;
+
 select public.cleanup_lobbies();
 select 'SCHEMA TEST: PASS' as result;
