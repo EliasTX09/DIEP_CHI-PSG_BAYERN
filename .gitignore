@@ -1,8 +1,13 @@
 # Godot
-minigolf/.godot/
-minigolf/build/
+.godot/
+build/
+ci_out/
 *.translation
-# Secrets - NIE committen
-minigolf/config/backend.cfg
+# Android / Signatur
 *.keystore
 *.jks
+*.apk
+*.aab
+*.idsig
+# Lokale Overrides (optional, ueberschreibt config/backend.cfg)
+config/backend.local.cfg

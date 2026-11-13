@@ -1,104 +1,244 @@
 name: Build Android APK
 
+# Baut bei jedem Push die Debug-APK "GolfBattle3D.apk":
+#   - Godot 4.5.2 + Export-Templates + Android-SDK + Java (Container barichello/godot-ci)
+#   - erzeugt automatisch einen Debug-Keystore
+#   - prueft das Projekt vorher (Import + Headless-Smoke-Test)
+#   - laedt die APK als Artifact hoch und veroeffentlicht sie auf "main" zusaetzlich als GitHub Release
+
 on:
   push:
-    paths:
-      - "minigolf/**"
-      - ".github/workflows/build_android.yml"
-  release:
-    types: [published]
+    branches:
+      - main
+      - "ccr-**"
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: "Screenshots rendern und nach docs/screenshots committen (nicht auf main)"
+        type: boolean
+        default: false
+      shot_filter:
+        description: "Nur diese Screenshots (kommagetrennt, leer = alle)"
+        type: string
+        default: ""
 
 permissions:
-  contents: write   # fuer das Anhaengen der APK an Releases
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 env:
-  GODOT_VERSION: "4.3"
-  PROJECT_DIR: minigolf
+  GODOT_VERSION: "4.5.2"
+  APK_NAME: GolfBattle3D.apk
 
 jobs:
-  export-android:
-    name: Export Android (debug APK)
+  build-apk:
+    name: Test + Android-APK
     runs-on: ubuntu-22.04
+    timeout-minutes: 40
     container:
-      image: barichello/godot-ci:4.3   # Godot 4.3 + Export-Templates + Android SDK + JDK
-
+      image: barichello/godot-ci:4.5.2
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - name: Repository auschecken
+        uses: actions/checkout@v4
 
-      - name: Export-Templates verlinken
+      - name: Godot, Export-Templates, Android-SDK und Java pruefen
         run: |
-          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
-          ln -sfn /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable \
-                  ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
-          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable | head
-
-      - name: Backend-Zugangsdaten schreiben (optional, aus Secrets)
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: |
-          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
-            printf '[supabase]\nurl="%s"\nanon_key="%s"\n' "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > ${PROJECT_DIR}/config/backend.cfg
-            echo "backend.cfg aus Secrets erzeugt."
-          else
-            echo "Keine Secrets gesetzt -> Offline-Build (Platzhalter-Config)."
+          set -e
+          godot --version
+          echo "HOME=$HOME"
+          mkdir -p "$HOME/.local/share/godot" "$HOME/.config/godot"
+          # Der Container bringt die Templates unter /root mit; GitHub setzt HOME aber auf /github/home.
+          if [ "$HOME" != "/root" ] && [ -d /root/.local/share/godot/export_templates ]; then
+            rm -rf "$HOME/.local/share/godot/export_templates"
+            ln -s /root/.local/share/godot/export_templates "$HOME/.local/share/godot/export_templates"
           fi
-
-      - name: Android-SDK, JDK und Debug-Keystore einrichten
-        run: |
+          echo "Export-Templates:"; ls "$HOME/.local/share/godot/export_templates/"
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           for d in "$SDK" /usr/lib/android-sdk /opt/android-sdk /root/android-sdk /usr/local/lib/android/sdk; do
             if [ -n "$d" ] && [ -d "$d/build-tools" ]; then SDK="$d"; break; fi
           done
-          JDK="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(which javac)")")")}"
-          echo "ANDROID SDK: $SDK"; echo "JDK: $JDK"
-          ls "$SDK" "$SDK/build-tools" || true
+          JDK="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(which java)")")")}"
+          echo "Android-SDK: $SDK"; ls "$SDK/build-tools"
+          echo "JDK: $JDK"; java -version
+          echo "ANDROID_SDK_DIR=$SDK" >> "$GITHUB_ENV"
+          echo "JDK_DIR=$JDK" >> "$GITHUB_ENV"
 
+      - name: Debug-Keystore erzeugen
+        run: |
+          set -e
           keytool -genkeypair -v -keystore "$HOME/debug.keystore" -storepass android -keypass android \
             -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Android Debug,O=Android,C=US" -deststoretype pkcs12
-
-          for f in editor_settings-4.tres editor_settings-4.3.tres; do
-            cat > ~/.config/godot/$f <<EOS
-          [gd_resource type="EditorSettings" format=3]
-
-          [resource]
-          export/android/android_sdk_path = "$SDK"
-          export/android/java_sdk_path = "$JDK"
-          export/android/debug_keystore = "$HOME/debug.keystore"
-          export/android/debug_keystore_user = "androiddebugkey"
-          export/android/debug_keystore_pass = "android"
-          EOS
-          done
           {
             echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/debug.keystore"
             echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey"
             echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android"
           } >> "$GITHUB_ENV"
 
-      - name: Projekt importieren (Skript-Klassen & Ressourcen)
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Godot-Editor-Einstellungen schreiben (SDK-, JDK- und Keystore-Pfade)
         run: |
-          godot --headless --verbose --editor --quit || true
-          godot --headless --verbose --import || true
+          set -e
+          MM="$(echo "$GODOT_VERSION" | cut -d. -f1,2)"
+          for f in "editor_settings-$MM.tres" "editor_settings-4.tres"; do
+            printf '%s\n' \
+              '[gd_resource type="EditorSettings" format=3]' \
+              '' \
+              '[resource]' \
+              "export/android/android_sdk_path = \"$ANDROID_SDK_DIR\"" \
+              "export/android/java_sdk_path = \"$JDK_DIR\"" \
+              "export/android/debug_keystore = \"$HOME/debug.keystore\"" \
+              'export/android/debug_keystore_user = "androiddebugkey"' \
+              'export/android/debug_keystore_pass = "android"' \
+              > "$HOME/.config/godot/$f"
+          done
+          ls -la "$HOME/.config/godot"
 
-      - name: APK exportieren
-        working-directory: ${{ env.PROJECT_DIR }}
+      - name: Supabase-Zugangsdaten aus Secrets uebernehmen (optional)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          mkdir -p build
-          godot --headless --verbose --export-debug "Android" build/FairwayClash.apk
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            printf '[supabase]\nurl="%s"\nanon_key="%s"\n' "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > config/backend.cfg
+            echo "config/backend.cfg aus Secrets erzeugt."
+          else
+            echo "Keine Secrets gesetzt - es gilt die eingecheckte config/backend.cfg."
+          fi
+
+      - name: Projekt importieren (Fehler-Gate)
+        run: |
+          mkdir -p ci_out build
+          # Erster Durchlauf registriert die Skript-Klassen, der zweite muss fehlerfrei sein.
+          timeout 600 godot --headless --import > ci_out/import1.log 2>&1 || true
+          timeout 600 godot --headless --import 2>&1 | tee ci_out/import2.log
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Compile Error" ci_out/import2.log; then
+            echo "::error::Skript-Fehler beim Import"
+            exit 1
+          fi
+
+      - name: Headless-Smoke-Test (Logik, Physik, Bahnen, Bots, Menues)
+        run: |
+          set -o pipefail
+          timeout 1500 godot --headless --fixed-fps 60 res://tests/Smoke.tscn 2>&1 | tee ci_out/smoke.log
+          grep -q "SMOKE RESULT: PASS" ci_out/smoke.log || { echo "::error::Smoke-Test nicht bestanden"; exit 1; }
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script" ci_out/smoke.log; then
+            echo "::error::Skript-Fehler im Smoke-Test"
+            exit 1
+          fi
+
+      - name: Android-APK exportieren
+        run: |
+          set -o pipefail
+          timeout 1200 godot --headless --export-debug "Android" "build/$APK_NAME" 2>&1 | tee ci_out/export.log | grep -v "^ADDING:" || true
           ls -la build
+          test -s "build/$APK_NAME"
 
       - name: APK als Artifact hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: FairwayClash-debug-apk
-          path: ${{ env.PROJECT_DIR }}/build/FairwayClash.apk
+          name: GolfBattle3D-apk
+          path: build/${{ env.APK_NAME }}
           if-no-files-found: error
 
-      - name: APK an Release anhaengen
-        if: github.event_name == 'release'
+      - name: Test-Logs hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: ci_out/*.log
+          if-no-files-found: ignore
+
+      - name: GitHub Release veroeffentlichen (nur main)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.PROJECT_DIR }}/build/FairwayClash.apk
+          tag_name: build-${{ github.run_number }}
+          name: Golf Battle 3D - Build ${{ github.run_number }}
+          body: |
+            Automatischer Build von `main` (Commit ${{ github.sha }}).
+            `GolfBattle3D.apk` herunterladen, auf dem Android-Geraet oeffnen und installieren
+            ("Installation aus unbekannten Quellen" erlauben).
+          files: build/${{ env.APK_NAME }}
+          make_latest: true
+
+  visual-check:
+    name: Shader-Check + Screenshots (Software-Rendering)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Xvfb + Mesa (Software-Vulkan/OpenGL) installieren
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb mesa-vulkan-drivers libvulkan1 vulkan-tools libgl1-mesa-dri libglx-mesa0 libegl1 \
+            libxcursor1 libxinerama1 libxrandr2 libxi6 libxkbcommon0 libasound2t64 libpulse0 libfontconfig1 unzip > /dev/null
+          vulkaninfo --summary 2>/dev/null | grep -E "deviceName|apiVersion" || true
+
+      - name: Godot herunterladen
+        run: |
+          set -e
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip -d "$RUNNER_TEMP/godot"
+          mv "$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" "$RUNNER_TEMP/godot/godot"
+          chmod +x "$RUNNER_TEMP/godot/godot"
+          rm godot.zip
+          "$RUNNER_TEMP/godot/godot" --version
+
+      - name: Projekt importieren
+        run: |
+          mkdir -p ci_out/shots
+          timeout 600 "$RUNNER_TEMP/godot/godot" --headless --import > ci_out/vimport1.log 2>&1 || true
+          timeout 600 "$RUNNER_TEMP/godot/godot" --headless --import > ci_out/vimport2.log 2>&1 || true
+
+      - name: Szenen rendern (kompiliert alle Shader)
+        env:
+          SHOT_FILTER: ${{ inputs.shot_filter }}
+        run: |
+          set -o pipefail
+          DRIVER=vulkan
+          if ! vulkaninfo --summary > /dev/null 2>&1; then DRIVER=opengl3; fi
+          echo "Rendering-Treiber: $DRIVER"
+          timeout 1200 xvfb-run -a -s "-screen 0 1280x720x24" "$RUNNER_TEMP/godot/godot" \
+            --rendering-driver "$DRIVER" --resolution 1280x720 --fixed-fps 30 --audio-driver Dummy \
+            res://tests/Shots.tscn -- "--shots=${SHOT_FILTER}" 2>&1 | tee ci_out/visual.log
+          grep -q "\[SHOTS\] DONE" ci_out/visual.log || { echo "::error::Screenshot-Lauf nicht beendet"; exit 1; }
+          if grep -E "SHADER ERROR|SCRIPT ERROR|Parse Error|\[SHOTS\]\[FAIL\]" ci_out/visual.log; then
+            echo "::error::Shader- oder Skript-Fehler beim Rendern"
+            exit 1
+          fi
+          ls -la ci_out/shots
+
+      - name: Screenshots als Artifact hochladen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: |
+            ci_out/shots/*.jpg
+            ci_out/visual.log
+          if-no-files-found: ignore
+
+      - name: Screenshots nach docs/screenshots committen (nur manuell, nie auf main)
+        if: github.event_name == 'workflow_dispatch' && inputs.screenshots && github.ref != 'refs/heads/main'
+        run: |
+          set -e
+          mkdir -p docs/screenshots
+          cp ci_out/shots/*.jpg docs/screenshots/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then
+            echo "Keine geaenderten Screenshots."
+          else
+            git commit -m "CI: Screenshots aktualisiert [skip ci]"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
