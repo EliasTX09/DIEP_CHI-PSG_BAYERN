@@ -2,8 +2,12 @@ class_name BallTag
 extends Node3D
 ## 3D-Namensschild ueber einem Ball (immer zur Kamera gedreht) + aufploppende Emotes/Quick-Chat.
 
+## Alle aktiven Schilder (zum Stapeln, wenn mehrere Baelle dicht beieinander liegen).
+static var _all: Array[BallTag] = []
+
 var target: Node3D = null
 var height: float = 0.85
+var _stack: float = 0.0
 var _name_label: Label3D
 var _emote_root: Node3D
 var _emote_sprite: Sprite3D
@@ -46,6 +50,26 @@ func _init(display_name: String = "", color: Color = Color.WHITE, is_local: bool
 	_emote_label.render_priority = 6
 	_emote_root.add_child(_emote_label)
 
+func _enter_tree() -> void:
+	if not _all.has(self):
+		_all.append(self)
+
+func _exit_tree() -> void:
+	_all.erase(self)
+
+## Wie viele frueher angelegte, sichtbare Schilder liegen fast an derselben Stelle? -> so hoch stapeln.
+func _stack_level() -> int:
+	var level := 0
+	var my_pos: Vector3 = target.global_position
+	for other in _all:
+		if other == self:
+			break
+		if other.target == null or not is_instance_valid(other.target) or not other.target.visible:
+			continue
+		if other.target.global_position.distance_to(my_pos) < 1.4:
+			level += 1
+	return level
+
 func set_tag_visible(v: bool) -> void:
 	_name_label.visible = v
 
@@ -69,7 +93,14 @@ func show_emote(emote_id: String) -> void:
 
 func _process(delta: float) -> void:
 	if target != null and is_instance_valid(target):
-		global_position = target.global_position + Vector3.UP * height
+		var cam := get_viewport().get_camera_3d()
+		var dist: float = 10.0
+		if cam != null:
+			dist = cam.global_position.distance_to(target.global_position)
+		# Feste Bildschirmgroesse -> Stapelabstand waechst mit der Kameradistanz.
+		var want: float = float(_stack_level()) * maxf(0.3, dist * 0.052)
+		_stack = lerpf(_stack, want, clampf(delta * 8.0, 0.0, 1.0))
+		global_position = target.global_position + Vector3.UP * (height + _stack)
 		visible = target.visible
 	if _emote_time > 0.0:
 		_emote_time -= delta

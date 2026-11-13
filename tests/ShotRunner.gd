@@ -25,6 +25,8 @@ func _wanted(shot_name: String) -> bool:
 func _run() -> void:
 	if _wanted("menu"):
 		await _shot_scene("menu", "res://scenes/MainMenu3D.tscn", 30)
+	if _wanted("pages"):
+		await _shot_pages()
 	if _wanted("sheet"):
 		await _course_sheet()
 	for id in Catalog.all_course_ids():
@@ -111,6 +113,29 @@ func _course_sheet() -> void:
 		await get_tree().process_frame
 	var file := ProjectSettings.globalize_path(OUT_DIR.path_join("sheet_courses.jpg"))
 	print("[SHOTS] sheet_courses -> ", file, " (", sheet.save_jpg(file, 0.85), ")")
+
+## Menue-Seiten nacheinander oeffnen und abfotografieren.
+func _shot_pages() -> void:
+	var ps: PackedScene = load("res://scenes/MainMenu3D.tscn")
+	var menu := ps.instantiate() as MainMenu3D
+	add_child(menu)
+	for i in 20:
+		await get_tree().process_frame
+	GameManager.add_chest("silver")
+	GameManager.add_chest("wood")
+	GameManager.start_unlock(0)
+	for page_id in ["play", "clubs", "cosmetics", "shop", "trophies", "settings", "friends", "leaderboard"]:
+		menu.pages.open(page_id)
+		for i in 12:
+			await get_tree().process_frame
+		await _capture("page_" + page_id)
+	menu.pages.close()
+	menu.pages.show_rewards("Silbertruhe", GameManager.roll_chest("silver"))
+	for i in 50:
+		await get_tree().process_frame
+	await _capture("page_rewards")
+	menu.queue_free()
+	await get_tree().process_frame
 
 func _shot_scene(shot_name: String, path: String, frames: int) -> void:
 	var ps: PackedScene = load(path)

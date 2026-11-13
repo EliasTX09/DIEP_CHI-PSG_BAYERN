@@ -23,6 +23,7 @@ func _ready() -> void:
 	await _stage_input()
 	await _stage_daily()
 	_stage_network_offline()
+	await _stage_menu()
 	_finish()
 
 func check(cond: bool, label: String) -> void:
@@ -637,3 +638,111 @@ func _stage_network_offline() -> void:
 	check(NetworkManager.leaderboard.size() > 5, "Offline-Rangliste gefuellt")
 	NetworkManager.refresh_friends()
 	check(NetworkManager.friends.is_empty(), "Offline: keine Freunde")
+
+# ---------------------------------------------------------------- Hauptmenue
+
+func _stage_menu() -> void:
+	print("[SMOKE] Stage: 3D-Hauptmenue + alle Seiten")
+	GameManager.reset_progress()
+	var ps: PackedScene = load("res://scenes/MainMenu3D.tscn")
+	check(ps != null, "MainMenu3D.tscn laedt")
+	if ps == null:
+		return
+	var menu := ps.instantiate() as MainMenu3D
+	check(menu != null, "MainMenu3D hat das Menue-Skript")
+	if menu == null:
+		return
+	add_child(menu)
+	await _process_frames(10)
+	check(menu.camera != null and menu.camera.current, "Menue-Kamera aktiv")
+	var p0: Vector3 = menu.camera.global_position
+	await _process_frames(30)
+	check(menu.camera.global_position.distance_to(p0) > 0.05, "Kamera fliegt auf der Spline")
+	check(menu.course != null and menu.course.obstacles.size() > 0, "Hintergrund-Insel mit Windmuehle gebaut")
+	check(menu.showcase != null and menu.showcase.get_child_count() >= 3, "Vitrine mit Ball und Schlaeger")
+	# Wischen dreht die Vitrine
+	var vp: Vector2 = menu.get_viewport().get_visible_rect().size
+	var start := Vector2(vp.x * 0.25, vp.y * 0.6)
+	var ang0: float = menu._spin_angle
+	var t := InputEventScreenTouch.new()
+	t.index = 0
+	t.position = start
+	t.pressed = true
+	menu._unhandled_input(t)
+	var d := InputEventScreenDrag.new()
+	d.index = 0
+	d.position = start + Vector2(80, 0)
+	d.relative = Vector2(80, 0)
+	menu._unhandled_input(d)
+	t = t.duplicate() as InputEventScreenTouch
+	t.pressed = false
+	menu._unhandled_input(t)
+	check(absf(menu._spin_angle - ang0) > 0.5, "Wischen dreht Ball/Schlaeger")
+	# Alle Seiten oeffnen
+	for page_id in MenuPages.PAGES.keys():
+		menu.pages.open(str(page_id))
+		await _process_frames(2)
+		var ok: bool = menu.pages.is_open() and (menu.pages.modal["body"] as Control).get_child_count() > 0
+		check(ok, "Menue-Seite '%s' baut sich auf" % str(page_id))
+		menu.pages.refresh()
+		await _process_frames(1)
+	menu.pages.close()
+	await _process_frames(2)
+	check(not menu.pages.is_open(), "Seite schliesst")
+	# Kaufen + Ausruesten aktualisiert Vitrine
+	GameManager.add_coins(5000)
+	menu.pages.open("cosmetics")
+	await _process_frames(1)
+	check(GameManager.buy_item("ball", "magma") and GameManager.equip("ball", "magma"), "Ball kaufen + ausruesten")
+	await _process_frames(2)
+	check(menu._ball_node != null and is_instance_valid(menu._ball_node), "Vitrine zeigt neuen Ball")
+	# Schlaeger-Seite: Upgrade-Button
+	GameManager.add_club_cards(Catalog.START_CLUB, 10)
+	menu.pages.open("clubs")
+	await _process_frames(2)
+	var up := menu.pages.modal["root"].find_child("UpgradeButton", true, false) as Button
+	check(up != null and not up.disabled, "Upgrade-Button aktiv bei genug Karten/Coins")
+	if up != null:
+		up.pressed.emit()
+	check(GameManager.club_level(Catalog.START_CLUB) == 2, "Upgrade ueber das Menue")
+	menu.pages.close()
+	# Truhen-Slots: Timer starten, mit Gems oeffnen, Belohnungsfenster
+	GameManager.add_chest("wood")
+	GameManager.add_gems(200)
+	await _process_frames(2)
+	menu._on_chest_pressed(0)
+	await _process_frames(2)
+	check(menu.pages.any_modal_open(), "Truhen-Dialog oeffnet")
+	menu.pages.close_top()
+	await _process_frames(2)
+	check(GameManager.start_unlock(0), "Truhen-Timer startet")
+	var r: Dictionary = GameManager.open_chest(0, true)
+	check(not r.is_empty(), "Truhe mit Gems sofort geoeffnet")
+	menu.pages.show_rewards("Holztruhe", r)
+	await _process_frames(5)
+	check(menu.ui.find_child("Rewards", true, false) != null, "Belohnungsfenster sichtbar")
+	check(menu.pages.close_top() and true, "Zurueck-Taste schliesst oberstes Fenster")
+	await _process_frames(2)
+	# Tagesgeschenk
+	menu.pages.open("shop")
+	await _process_frames(1)
+	var gift: Dictionary = GameManager.claim_gift()
+	check(not gift.is_empty() and not GameManager.gift_available(), "Tagesgeschenk einmal pro Tag")
+	menu.pages.close()
+	# Trophaeen-Pfad
+	GameManager.grant({"trophies": 120})
+	var road: Dictionary = GameManager.claim_road(0)
+	check(int(road.get("coins", 0)) == 150, "Trophaeen-Pfad: erste Belohnung")
+	menu.pages.open("trophies")
+	await _process_frames(2)
+	check(menu.pages.is_open(), "Trophaeen-Seite nach Anspruch")
+	menu.pages.close()
+	# Lobby/Freunde offline zeigen Hinweis statt Absturz
+	menu.pages.open("lobby")
+	await _process_frames(1)
+	check(menu.pages.is_open(), "Lobby-Seite offline")
+	menu.pages.close()
+	await _process_frames(30)
+	menu.queue_free()
+	await _process_frames(3)
+	GameManager.reset_progress()
