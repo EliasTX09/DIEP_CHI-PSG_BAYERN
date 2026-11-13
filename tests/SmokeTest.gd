@@ -847,6 +847,7 @@ func _stage_auth_offline() -> void:
 	check(AuthManager.load_saved_refresh_token() == "tok-123", "auth.json: Token wird gespeichert und gelesen")
 	var raw: String = FileAccess.get_file_as_bytes(AuthManager.AUTH_PATH).get_string_from_ascii()
 	check(not raw.contains("tok-123"), "auth.json enthaelt das Token nicht im Klartext")
+	# (Godot meldet beim Lesen der absichtlich kaputten Datei einen ERROR "magic" - das ist erwartet)
 	var f := FileAccess.open(AuthManager.AUTH_PATH, FileAccess.WRITE)
 	f.store_string("kaputt")
 	f.close()
@@ -930,7 +931,8 @@ func _stage_auth_mock() -> void:
 	check(AuthManager.load_saved_refresh_token() == "rt-guest", "Gast-Session gespeichert")
 	var ok_guest: bool = await _wait_until(func() -> bool: return str(GameManager.data.get("account_id", "")) == MockSupabase.GUEST_ID, 240)
 	check(ok_guest, "Gast-Spielstand dem Gast-Account zugeordnet")
-	check(NetworkManager.friend_code == "GASTFRND", "Freundes-Code aus dem Profil")
+	var ok_code: bool = await _wait_until(func() -> bool: return NetworkManager.friend_code == "GASTFRND", 240)
+	check(ok_code, "Freundes-Code aus dem Profil")
 	# Fortschritt als Gast, dann Web-Account per Code
 	GameManager.grant({"trophies": 50})
 	var bad: Dictionary = await AuthManager.redeem_web_code("ZZZZ9999")
