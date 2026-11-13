@@ -18,6 +18,7 @@ func _ready() -> void:
 	await _stage_jolt_probe()
 	await _stage_courses()
 	await _stage_physics()
+	await _stage_shadow_space()
 	await _stage_bots()
 	await _stage_match()
 	await _stage_input()
@@ -306,6 +307,38 @@ func _shot_case(c: Course3D, label: String, dir: Vector3, power: float, chip: bo
 	ball.queue_free()
 	await _frames(2)
 
+## Schatten-Physikraum: bewegliche Teile lassen sich fuer Vorhersagen sofort auf jeden Zeitpunkt stellen.
+func _stage_shadow_space() -> void:
+	print("[SMOKE] Stage: Schatten-Physikraum")
+	var c: Course3D = CourseBuilder3D.build("p3", 0, false)
+	add_child(c)
+	await _frames(3)
+	check(c.has_moving_parts(), "p3 hat bewegliche Teile")
+	var ferry: Obstacles.MovingPlatform = null
+	for o in c.obstacles:
+		if o is Obstacles.MovingPlatform:
+			ferry = o
+	check(ferry != null, "p3 hat eine Faehre")
+	if ferry != null:
+		var st: PhysicsDirectSpaceState3D = c.shadow_state()
+		var hits := 0
+		for t in [0.0, 3.5]:
+			c.shadow_pose(t)
+			var top: Vector3 = ferry.global_transform * ferry.pose(t)
+			var q := PhysicsRayQueryParameters3D.create(top + Vector3.UP * 2.0, top + Vector3.DOWN * 2.0, Obstacles.LAYER_PLATFORM)
+			if not st.intersect_ray(q).is_empty():
+				hits += 1
+		c.shadow_restore()
+		check(hits == 2, "Schattenraum: Faehre ist zu jedem Zeitpunkt sofort abfragbar (%d/2)" % hits)
+		# Gegenprobe: an der Stelle t=0 ist bei t=3.5 keine Faehre mehr
+		var p0: Vector3 = ferry.global_transform * ferry.pose(0.0)
+		c.shadow_pose(3.5)
+		var q2 := PhysicsRayQueryParameters3D.create(p0 + Vector3.UP * 2.0, p0 + Vector3.DOWN * 2.0, Obstacles.LAYER_PLATFORM)
+		check(st.intersect_ray(q2).is_empty(), "Schattenraum: Faehre ist wirklich weitergefahren")
+		c.shadow_restore()
+	c.queue_free()
+	await _frames(2)
+
 func _stage_physics() -> void:
 	print("[SMOKE] Stage: Ball-Physik")
 	var c: Course3D = CourseBuilder3D.build("e1", 0, false)
@@ -435,8 +468,8 @@ func _log_bot_shot(id: String, c: Course3D, ball: Ball3D, brain: BotBrain, from:
 	var pred_end: Vector3 = ch.get("pred_end", Vector3.ZERO)
 	var pred_txt: String = "Loch" if bool(ch.get("pred_holed", false)) else ("OUT" if bool(ch.get("pred_out", false)) else "%.0f m" % c.progress_at(pred_end))
 	var real_txt: String = "Loch" if ball.state == Ball3D.State.HOLED else ("OUT bei %.0f m (%.1f/%.1f/%.1f)" % [c.progress_at(ball.out_pos), ball.out_pos.x, ball.out_pos.y, ball.out_pos.z] if went_out else "%.0f m" % c.progress_at(ball.global_position))
-	print("[SMOKE]   %s Schlag %d: ab %.0f m, %s %.0f%% -> vorhergesagt %s, echt %s" % [id, strokes_before + 1, c.progress_at(from),
-		"Chip" if bool(ch.get("chip", false)) else "Putt", float(ch.get("power", 0.0)) * 100.0, pred_txt, real_txt])
+	print("[SMOKE]   %s Schlag %d: ab %.0f m, %s %.0f%% (Zeitfenster +%.1f s) -> vorhergesagt %s, echt %s" % [id, strokes_before + 1, c.progress_at(from),
+		"Chip" if bool(ch.get("chip", false)) else "Putt", float(ch.get("power", 0.0)) * 100.0, float(ch.get("dt", 0.0)), pred_txt, real_txt])
 
 func _stage_bots() -> void:
 	print("[SMOKE] Stage: Bots spielen jede Bahn")
@@ -504,18 +537,23 @@ func _stage_match() -> void:
 
 # ---------------------------------------------------------------- Touch-Eingabe (Zielen, Drehen, Pinch)
 
+## Testkoordinaten sind Viewport-Koordinaten (1280 breit); echte Touch-Events kommen in Fensterkoordinaten.
+## Headless ist das Fenster winzig (64 px) -> umrechnen, wie es das Betriebssystem liefern wuerde.
+func _to_window(pos: Vector2) -> Vector2:
+	return get_viewport().get_final_transform() * pos
+
 func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 	var ev := InputEventScreenTouch.new()
 	ev.index = index
-	ev.position = pos
+	ev.position = _to_window(pos)
 	ev.pressed = pressed
 	Input.parse_input_event(ev)
 
 func _drag(index: int, pos: Vector2, rel: Vector2) -> void:
 	var ev := InputEventScreenDrag.new()
 	ev.index = index
-	ev.position = pos
-	ev.relative = rel
+	ev.position = _to_window(pos)
+	ev.relative = get_viewport().get_final_transform().basis_xform(rel)
 	Input.parse_input_event(ev)
 
 func _stage_input() -> void:
@@ -611,16 +649,18 @@ func _stage_daily() -> void:
 		var space := c.get_world_3d().direct_space_state
 		var best := 999.0
 		var to_hole := Vector3(c.hole_pos.x - c.tee.origin.x, 0.0, c.hole_pos.z - c.tee.origin.z).normalized()
-		for a in range(-8, 9):
-			for pw in range(8, 21):
-				var res: Dictionary = ShotSim.predict_shot(c, space, c.tee.origin, to_hole.rotated(Vector3.UP, deg_to_rad(float(a) * 2.0)),
-					float(pw) / 20.0, true, Vector2.ZERO, prof, 12.0, Vector3.UP, 1000)
-				if bool(res["holed"]):
-					best = 0.0
-				elif not bool(res["out"]):
-					var e: Vector3 = res["end_pos"]
-					if absf(e.y - c.hole_pos.y) < 1.0:
-						best = minf(best, Vector2(e.x - c.hole_pos.x, e.z - c.hole_pos.z).length())
+		# wie ein Spieler: Richtung, Kraft und Backspin variieren
+		for a in range(-14, 15):
+			for pw in range(16, 41):
+				for back in [0.0, -1.0]:
+					var res: Dictionary = ShotSim.predict_shot(c, space, c.tee.origin, to_hole.rotated(Vector3.UP, deg_to_rad(float(a))),
+						float(pw) / 40.0, true, Vector2(0.0, back), prof, 12.0, Vector3.UP, 1000)
+					if bool(res["holed"]):
+						best = 0.0
+					elif not bool(res["out"]):
+						var e: Vector3 = res["end_pos"]
+						if absf(e.y - c.hole_pos.y) < 1.0:
+							best = minf(best, Vector2(e.x - c.hole_pos.x, e.z - c.hole_pos.z).length())
 		print("[SMOKE] Golden Shot Seed %d (%s): bester Chip landet %.1f m vom Loch" % [seed_value, c.world, best])
 		check(best < 4.0, "Golden Shot ist mit dem Start-Schlaeger erreichbar (Seed %d: %.1f m)" % [seed_value, best])
 		c.queue_free()

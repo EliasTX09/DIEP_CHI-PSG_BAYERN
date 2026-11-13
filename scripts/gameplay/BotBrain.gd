@@ -10,6 +10,10 @@ enum Phase { WAIT, DELAY, SEARCH, AIMED }
 
 ## Rechenzeit pro Aufruf von think() in Mikrosekunden (Tests setzen das hoch).
 static var time_budget_usec: int = 2500
+## Vorlauf (s) zwischen Planung und geplantem Abschlag auf Bahnen mit beweglichen Teilen.
+const PLAN_LEAD := 0.8
+## Zusaetzlich gepruefte Abschlag-Zeitpunkte (s nach dem Planungszeitpunkt) fuer die besten Kandidaten.
+const TIME_OFFSETS: Array[float] = [0.9, 1.8, 2.7, 3.6, 4.8]
 
 var ball: Ball3D
 var course: Course3D
@@ -35,12 +39,22 @@ var _shot_from: Vector3 = Vector3.INF
 var _shot_progress: float = 0.0
 ## Schlaege, die nichts gebracht haben (Out oder kein Fortschritt): [{pos, dir, power, chip}]
 var _failed: Array[Dictionary] = []
+## Timing auf Bahnen mit Hammer/Windmuehle/Faehre
+var _moving: bool = false
+var _plan_time: float = 0.0
+var _lead: float = PLAN_LEAD
+var _refined: bool = false
+var _shoot_at: float = -1.0
+var _misses: int = 0
+## false, wenn der Ball selbst auf einer fahrenden Plattform liegt (dann sofort schiessen, kein Abpassen)
+var _timing_ok: bool = false
 
 func _init(p_ball: Ball3D, p_course: Course3D, p_skill: float, rng_seed: int) -> void:
 	ball = p_ball
 	course = p_course
 	skill = clampf(p_skill, 0.05, 1.0)
 	_rng.seed = rng_seed
+	_moving = course.has_moving_parts()
 
 ## true, wenn der Bot gerade rechnen moechte (Match3D verteilt die Rechenzeit reihum).
 func wants_cpu() -> bool:
@@ -67,8 +81,19 @@ func update(delta: float) -> void:
 				phase = Phase.SEARCH
 		Phase.AIMED:
 			_timer -= delta
-			if _timer <= 0.0:
-				_shoot()
+			if _timer > 0.0:
+				return
+			if _timing_ok and course.clock_running:
+				if course.time < _shoot_at - 0.02:
+					return   # auf das geplante Zeitfenster warten
+				if course.time > _shoot_at + 0.12 and _misses < 2:
+					# Zeitfenster verpasst (Rechnen hat zu lange gedauert) -> mit mehr Vorlauf neu planen
+					_misses += 1
+					_lead = minf(_lead * 1.8 + 0.5, 6.0)
+					_build_candidates(true)
+					phase = Phase.SEARCH
+					return
+			_shoot()
 
 ## Rechnet an den Kandidaten weiter (hoechstens time_budget_usec lang).
 func think(space: PhysicsDirectSpaceState3D) -> void:
@@ -78,16 +103,22 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 	while phase == Phase.SEARCH:
 		if _sim == null:
 			if _index >= _candidates.size():
+				if _timing_ok and not _refined:
+					_refined = true
+					_add_timing_candidates()
+					continue
 				phase = Phase.AIMED
 				_timer = 0.25
+				_shoot_at = _plan_time + float(_best.get("dt", 0.0))
 				return
 			var cand: Dictionary = _candidates[_index]
 			var v: Vector3 = Ball3D.launch_velocity(cand["dir"], float(cand["power"]), bool(cand["chip"]), ball.profile, ball.ground_normal)
 			_sim = ShotSim.new()
 			_sim.begin(course, space, ball.global_position, v, {"max_time": 9.0, "dt": 1.0 / 40.0, "chip": bool(cand["chip"]),
-				"profile": ball.profile, "sample": 100000, "ignore_moving": true})
+				"profile": ball.profile, "sample": 100000, "timed": _moving, "start_time": _plan_time + float(cand.get("dt", 0.0))})
 		if _sim.advance(24):
 			var sc: float = _score(_sim.result, _candidates[_index])
+			_candidates[_index]["score"] = sc
 			if sc > _best_score:
 				_best_score = sc
 				_best = _candidates[_index]
@@ -117,22 +148,49 @@ func power_for_distance(dist: float) -> float:
 	var vmax: float = Ball3D.MAX_SPEED * float(ball.profile.get("power", 1.0))
 	return clampf(hi / vmax, 0.05, 1.0)
 
-func _build_candidates() -> void:
+## Liegt der Ball auf einer fahrenden Plattform (Layer 8)?
+func _on_moving_floor() -> bool:
+	if not ball.is_inside_tree():
+		return false
+	var q := PhysicsRayQueryParameters3D.create(ball.global_position, ball.global_position + Vector3.DOWN * (Ball3D.RADIUS + 0.4), Obstacles.LAYER_PLATFORM)
+	return not ball.get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+## Prueft die besten Kandidaten zusaetzlich mit spaeteren Abschlag-Zeitpunkten (Hammer/Faehre abpassen).
+func _add_timing_candidates() -> void:
+	var ranked: Array[Dictionary] = []
+	for c in _candidates:
+		if c.has("score") and float(c.get("dt", 0.0)) == 0.0:
+			ranked.append(c)
+	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["score"]) > float(b["score"]))
+	if not ranked.is_empty() and float(ranked[0]["score"]) >= 90000.0:
+		return   # sofortiger Schlag locht schon ein
+	for i in mini(5, ranked.size()):
+		for off in TIME_OFFSETS:
+			var c: Dictionary = ranked[i].duplicate()
+			c.erase("score")
+			c["dt"] = off
+			_candidates.append(c)
+
+func _build_candidates(replan: bool = false) -> void:
 	_candidates.clear()
 	_index = 0
 	_sim = null
 	_best = {}
 	_best_pred = {}
 	_best_score = -INF
+	_refined = false
+	_timing_ok = _moving and not _on_moving_floor()
+	_plan_time = course.time + (_lead if _timing_ok else 0.0)
 	var pos: Vector3 = ball.global_position
 	_start_progress = course.progress_at(pos)
 	var total: float = course.total_length()
 	# Steckt der Bot fest (gleiche Stelle wie zuvor)? Dann breiter streuen.
-	if _last_pos != Vector3.INF and _last_pos.distance_to(pos) < 1.0:
-		_stuck += 1
-	else:
-		_stuck = 0
-	_last_pos = pos
+	if not replan:
+		if _last_pos != Vector3.INF and _last_pos.distance_to(pos) < 1.0:
+			_stuck += 1
+		else:
+			_stuck = 0
+		_last_pos = pos
 	var dirs: Array[Vector3] = []
 	var dists: Array[float] = []
 	var to_hole := Vector3(course.hole_pos.x - pos.x, 0.0, course.hole_pos.z - pos.z)
@@ -222,7 +280,9 @@ func _shoot() -> void:
 	var err: float = 1.0 - skill
 	dir = dir.rotated(Vector3.UP, deg_to_rad(_rng.randfn(0.0, 0.25 + 3.2 * err)))
 	power = clampf(power * (1.0 + _rng.randfn(0.0, 0.015 + 0.09 * err)), 0.05, 1.0)
-	last_choice = {"dir": _best["dir"], "power": float(_best["power"]), "chip": bool(_best["chip"])}
+	_misses = 0
+	_lead = maxf(PLAN_LEAD, _lead * 0.85)
+	last_choice = {"dir": _best["dir"], "power": float(_best["power"]), "chip": bool(_best["chip"]), "dt": float(_best.get("dt", 0.0))}
 	last_choice.merge(_best_pred)
 	_shot_from = ball.global_position
 	_shot_progress = course.progress_at(_shot_from)

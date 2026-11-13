@@ -38,6 +38,11 @@ var one_shot: bool = false
 ## Zeitlimit der Bahn in Sekunden.
 var time_limit: float = 75.0
 
+# Schatten-Physikraum fuer Vorhersagen mit beweglichen Teilen (statische Kopien aller Bahn-Kollisionen)
+var _shadow_space: RID = RID()
+var _shadow_rids: Array[RID] = []
+var _shadow_moving: Array[Dictionary] = []
+
 func _physics_process(delta: float) -> void:
 	if clock_running:
 		time += delta
@@ -127,3 +132,67 @@ func is_in_cup(p: Vector3) -> bool:
 	var dx: float = p.x - hole_pos.x
 	var dz: float = p.z - hole_pos.z
 	return dx * dx + dz * dz < hole_radius * hole_radius and p.y < hole_pos.y + 0.12 and p.y > hole_pos.y - CUP_DEPTH - 0.6
+
+# ---------------------------------------------------------------- Schatten-Physikraum
+
+## true, wenn die Bahn bewegliche Hindernisse oder Plattformen hat.
+func has_moving_parts() -> bool:
+	return not obstacles.is_empty()
+
+## Physik-Abfragen im Schattenraum (wird beim ersten Aufruf aufgebaut).
+## Dort sind alle Koerper statisch und lassen sich ohne Verzoegerung auf jeden Zeitpunkt stellen -
+## so kann die Flugbahn-Vorschau/Bot-KI Hammer, Windmuehlen und Faehren "in der Zukunft" beruecksichtigen.
+func shadow_state() -> PhysicsDirectSpaceState3D:
+	if not _shadow_space.is_valid():
+		_build_shadow()
+	return PhysicsServer3D.space_get_direct_state(_shadow_space)
+
+func _build_shadow() -> void:
+	_shadow_space = PhysicsServer3D.space_create()
+	PhysicsServer3D.space_set_active(_shadow_space, true)
+	for node in find_children("*", "StaticBody3D", true, false):
+		var body := node as StaticBody3D
+		if body == null or not body.is_inside_tree():
+			continue
+		var rid: RID = PhysicsServer3D.body_create()
+		PhysicsServer3D.body_set_mode(rid, PhysicsServer3D.BODY_MODE_STATIC)
+		PhysicsServer3D.body_set_collision_layer(rid, body.collision_layer)
+		PhysicsServer3D.body_set_collision_mask(rid, 0)
+		for owner_id in body.get_shape_owners():
+			if body.is_shape_owner_disabled(owner_id):
+				continue
+			var local_xf: Transform3D = body.shape_owner_get_transform(owner_id)
+			for i in body.shape_owner_get_shape_count(owner_id):
+				var shape: Shape3D = body.shape_owner_get_shape(owner_id, i)
+				if shape != null:
+					PhysicsServer3D.body_add_shape(rid, shape.get_rid(), local_xf)
+		PhysicsServer3D.body_set_space(rid, _shadow_space)
+		PhysicsServer3D.body_set_state(rid, PhysicsServer3D.BODY_STATE_TRANSFORM, body.global_transform)
+		_shadow_rids.append(rid)
+		if body is AnimatableBody3D:
+			_shadow_moving.append({"rid": rid, "body": body})
+
+## Stellt alle beweglichen Teile im Schattenraum auf die Bahn-Uhrzeit t.
+func shadow_pose(t: float) -> void:
+	if _shadow_moving.is_empty():
+		return
+	for o in obstacles:
+		o.call("update_time", t)
+	for e in _shadow_moving:
+		var b: Node3D = e["body"]
+		if is_instance_valid(b):
+			PhysicsServer3D.body_set_state(e["rid"], PhysicsServer3D.BODY_STATE_TRANSFORM, b.global_transform)
+
+## Setzt die echten Hindernisse wieder auf die aktuelle Bahn-Uhrzeit.
+func shadow_restore() -> void:
+	for o in obstacles:
+		o.call("update_time", time)
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		for rid in _shadow_rids:
+			PhysicsServer3D.free_rid(rid)
+		_shadow_rids.clear()
+		if _shadow_space.is_valid():
+			PhysicsServer3D.free_rid(_shadow_space)
+			_shadow_space = RID()

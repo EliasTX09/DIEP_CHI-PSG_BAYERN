@@ -38,6 +38,7 @@ var _air: float = 0.0
 var _max_air: float = 0.0
 var _t: float = 0.0
 var _t0: float = 0.0
+var _timed: bool = false
 var _step: int = 0
 var _steps: int = 0
 var _stop_timer: float = 0.0
@@ -45,10 +46,16 @@ var _points: PackedVector3Array = PackedVector3Array()
 
 ## Startet eine Simulation.
 ## opts: max_time (s), dt (s), spin (Vector2, bereits mit Schlaeger-Spin skaliert), chip (bool),
-##       profile (Schlagprofil), sample (jeder n-te Schritt wird als Punkt gespeichert), ignore_moving (bool)
+##       profile (Schlagprofil), sample (jeder n-te Schritt wird als Punkt gespeichert), ignore_moving (bool),
+##       timed (bool): bewegliche Hindernisse/Plattformen werden fuer jeden Schritt auf ihre Stellung zum Zeitpunkt
+##             start_time + t gesetzt (im Schatten-Physikraum der Bahn, die echte Physik bleibt unberuehrt),
+##       start_time (float): Bahn-Uhrzeit, zu der der Schlag ausgefuehrt wird (Standard: jetzt)
 func begin(course: Course3D, space: PhysicsDirectSpaceState3D, start: Vector3, velocity: Vector3, opts: Dictionary = {}) -> void:
 	_course = course
 	_space = space
+	_timed = bool(opts.get("timed", false)) and course.has_moving_parts()
+	if _timed:
+		_space = course.shadow_state()
 	var max_time: float = float(opts.get("max_time", 6.0))
 	_dt = float(opts.get("dt", 1.0 / 60.0))
 	_spin = opts.get("spin", Vector2.ZERO)
@@ -82,7 +89,7 @@ func begin(course: Course3D, space: PhysicsDirectSpaceState3D, start: Vector3, v
 	_air = 0.0
 	_max_air = 0.0
 	_t = 0.0
-	_t0 = course.time
+	_t0 = float(opts.get("start_time", course.time))
 	_step = 0
 	_steps = int(max_time / _dt)
 	_stop_timer = 0.0
@@ -96,9 +103,13 @@ func advance(max_steps: int) -> bool:
 	var budget: int = max_steps
 	while not done and budget > 0:
 		budget -= 1
+		if _timed:
+			_course.shadow_pose(_t0 + _t + _dt)
 		if _step >= _steps or _one_step():
 			_finish()
 		_step += 1
+	if _timed:
+		_course.shadow_restore()
 	return done
 
 func _finish() -> void:
