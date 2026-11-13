@@ -74,8 +74,9 @@ func _ready() -> void:
 	GameManager.inventory_changed.connect(_on_inventory_changed)
 	GameManager.chests_changed.connect(_refresh_chests)
 	GameManager.toast.connect(func(msg: String) -> void: UIKit.toast(ui, msg))
-	NetworkManager.status_changed.connect(func(_t: String) -> void: _refresh_top())
-	NetworkManager.auth_changed.connect(_refresh_top)
+	AuthManager.status_changed.connect(func(_t: String) -> void: _refresh_top())
+	AuthManager.auth_changed.connect(_refresh_top)
+	ProfileManager.avatar_changed.connect(_refresh_top)
 	NetworkManager.invites_updated.connect(_refresh_invites)
 	NetworkManager.friends_updated.connect(_refresh_invites)
 	NetworkManager.lobby_error.connect(func(msg: String) -> void: UIKit.toast(ui, msg, UIKit.RED.darkened(0.3)))
@@ -593,6 +594,7 @@ func _refresh_top() -> void:
 	if _avatar == null:
 		return
 	_avatar.set_player(GameManager.player_name(), int(GameManager.data.get("avatar_color", 0)), GameManager.avatar_frame())
+	_avatar.set_picture(ProfileManager.avatar_texture)
 	_name_label.text = GameManager.player_name()
 	_trophy_label.text = UIKit.format_number(GameManager.trophies())
 	var lg: Dictionary = GameManager.league()
@@ -600,7 +602,7 @@ func _refresh_top() -> void:
 	_league_label.add_theme_color_override("font_color", lg["color"])
 	(_coin_pill.find_child("Value", true, false) as Label).text = UIKit.format_number(GameManager.coins())
 	(_gem_pill.find_child("Value", true, false) as Label).text = UIKit.format_number(GameManager.gems())
-	var st: String = NetworkManager.status
+	var st: String = AuthManager.status
 	if not NetworkManager.is_configured():
 		st = "Offline-Modus (Bots) · Backend in config/backend.cfg eintragen"
 	_status_label.text = st

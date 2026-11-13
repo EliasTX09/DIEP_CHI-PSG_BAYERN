@@ -1,8 +1,8 @@
 extends Node
-## Autoload "NetworkManager": Supabase-Anbindung (Auth + REST + Realtime-WebSocket) und Bot-Fallback.
+## Autoload "NetworkManager": Profil-Sync, Freunde, Lobbys und Realtime-Multiplayer ueber Supabase, mit Bot-Fallback.
+## Die Anmeldung (User-ID, Tokens, HTTP-Requests) gehoert dem AuthManager; hier wird nur darauf zugegriffen.
 ##
-##  - Account: sofortiger Gast-Login beim ersten Start (anonyme Supabase-Session + lokale Geraete-ID),
-##    spaeter mit E-Mail/Passwort verknuepfbar; Profil, Schlaeger und Inventar werden synchronisiert.
+##  - Profil: Spielstand, Schlaeger und Inventar werden mit dem angemeldeten Account abgeglichen.
 ##  - Freunde: Suche per Name oder Freundes-Code, Anfragen, Online-Status, Lobby-Einladungen.
 ##  - Lobbys: private Raeume mit 4-stelligem Code oder oeffentliches Schnellspiel, bis zu 6 Spieler,
 ##    Welt + Rundenzahl waehlbar, Echtzeit-Sync ueber Supabase Realtime (Broadcast + Presence).
@@ -11,8 +11,6 @@ extends Node
 ## WICHTIG: Der Supabase-Teil ist nach der offiziellen Doku geschrieben, konnte aber nicht gegen ein
 ## echtes Projekt getestet werden. Das Realtime-Protokoll ist bewusst in einem Block gekapselt (unten).
 
-signal auth_changed
-signal status_changed(text: String)
 signal lobby_updated
 signal lobby_joined(code: String)
 signal lobby_left(reason: String)
@@ -23,24 +21,27 @@ signal friends_updated
 signal invites_updated
 signal leaderboard_updated
 
-const CONFIG_PATH := "res://config/backend.cfg"
-const LOCAL_CONFIG_PATH := "res://config/backend.local.cfg"
-const SESSION_PATH := "user://session.json"
 const HEARTBEAT_SECONDS := 25.0
 const PRESENCE_PING_SECONDS := 60.0
 const ONLINE_WINDOW_SECONDS := 150.0
 const QUICK_MATCH_WAIT := 12.0
 const CODE_CHARS := "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
-var url: String = ""
-var anon_key: String = ""
-var user_id: String = ""
-var access_token: String = ""
-var refresh_token: String = ""
-var email: String = ""
-var is_anonymous: bool = true
+## Nur-Lese-Zugriff auf die Anmeldung (Besitzer: AuthManager)
+var url: String:
+	get:
+		return AuthManager.url
+var anon_key: String:
+	get:
+		return AuthManager.anon_key
+var user_id: String:
+	get:
+		return AuthManager.user_id
+var access_token: String:
+	get:
+		return AuthManager.access_token
+## Eigener Freundes-Code (aus dem Profil)
 var friend_code: String = ""
-var status: String = "Offline"
 
 ## Freunde: [{row_id, id, name, trophies, frame, color, online, state: "accepted"|"incoming"|"outgoing"}]
 var friends: Array = []
@@ -56,7 +57,6 @@ var roster: Array = []
 ## Freie Plaetze beim Start mit Bots auffuellen (bis 4 Spieler).
 var fill_bots: bool = true
 
-var _busy_login: bool = false
 var _push_timer: float = -1.0
 var _push_inventory: bool = true
 var _ping_timer: float = 0.0
@@ -76,37 +76,35 @@ var _presence: Dictionary = {}
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
-	_load_config()
 	GameManager.save_changed.connect(_on_save_changed)
 	GameManager.inventory_changed.connect(func() -> void: _push_inventory = true)
-	if is_configured():
-		auto_login()
-	else:
-		_set_status("Offline-Modus (kein Backend eingetragen)")
+	AuthManager.account_changing.connect(_on_account_changing)
+	AuthManager.auth_changed.connect(_on_auth_changed)
 
-func _load_config() -> void:
-	var cf := ConfigFile.new()
-	var path: String = LOCAL_CONFIG_PATH if FileAccess.file_exists(LOCAL_CONFIG_PATH) else CONFIG_PATH
-	if cf.load(path) != OK:
-		return
-	url = str(cf.get_value("supabase", "url", "")).strip_edges().trim_suffix("/")
-	anon_key = str(cf.get_value("supabase", "anon_key", "")).strip_edges()
-
-## true, wenn echte Supabase-Zugangsdaten eingetragen sind (keine Platzhalter).
 func is_configured() -> bool:
-	return url.begins_with("https://") and not url.contains("DEIN-PROJEKT") and anon_key.length() > 20 and not anon_key.begins_with("DEIN_")
+	return AuthManager.is_configured()
 
-## true, wenn eingeloggt (Gast oder E-Mail) und damit online-faehig.
 func is_online() -> bool:
-	return is_configured() and user_id != "" and access_token != ""
+	return AuthManager.is_online()
 
 ## Netzwerk-ID des lokalen Spielers.
 func local_id() -> String:
-	return user_id if user_id != "" else "local"
+	return AuthManager.local_id()
 
-func _set_status(text: String) -> void:
-	status = text
-	status_changed.emit(text)
+func _on_account_changing() -> void:
+	leave_lobby()
+
+func _on_auth_changed() -> void:
+	if is_online():
+		await _pull_profile()
+		refresh_friends()
+		refresh_invites()
+	else:
+		friend_code = ""
+		friends.clear()
+		invites.clear()
+		friends_updated.emit()
+		invites_updated.emit()
 
 func _process(delta: float) -> void:
 	if _push_timer >= 0.0:
@@ -127,44 +125,8 @@ func _process(delta: float) -> void:
 
 # ================================================================ HTTP
 
-## Fuehrt einen Request gegen Supabase aus. Rueckgabe: {ok, code, data, message}
-func _req(method: int, path: String, body: Variant = null, auth: bool = true, extra_headers: Array = [], allow_refresh: bool = true) -> Dictionary:
-	if not is_configured():
-		return {"ok": false, "code": 0, "data": null, "message": "Kein Backend konfiguriert."}
-	var req := HTTPRequest.new()
-	req.timeout = 12.0
-	add_child(req)
-	var headers := PackedStringArray(["apikey: " + anon_key, "Content-Type: application/json"])
-	var token: String = access_token if auth and access_token != "" else anon_key
-	headers.append("Authorization: Bearer " + token)
-	for h in extra_headers:
-		headers.append(str(h))
-	var payload: String = "" if body == null else JSON.stringify(body)
-	var err: int = req.request(url + path, headers, method, payload)
-	if err != OK:
-		req.queue_free()
-		return {"ok": false, "code": 0, "data": null, "message": "Keine Verbindung (Fehler %d)." % err}
-	var res: Array = await req.request_completed
-	req.queue_free()
-	var code: int = int(res[1])
-	var text: String = (res[3] as PackedByteArray).get_string_from_utf8()
-	var parsed: Variant = null
-	if text != "":
-		parsed = JSON.parse_string(text)
-	var ok: bool = int(res[0]) == HTTPRequest.RESULT_SUCCESS and code >= 200 and code < 300
-	if not ok and code == 401 and auth and allow_refresh and refresh_token != "":
-		if await _refresh_session():
-			return await _req(method, path, body, auth, extra_headers, false)
-	var message := ""
-	if not ok:
-		if int(res[0]) != HTTPRequest.RESULT_SUCCESS:
-			message = "Keine Verbindung zum Server."
-		elif parsed is Dictionary:
-			var d: Dictionary = parsed
-			message = str(d.get("msg", d.get("message", d.get("error_description", d.get("error", "Fehler %d" % code)))))
-		else:
-			message = "Fehler %d" % code
-	return {"ok": ok, "code": code, "data": parsed, "message": message}
+func _req(method: int, path: String, body: Variant = null, auth: bool = true, extra_headers: Array = []) -> Dictionary:
+	return await AuthManager.request(method, path, body, auth, extra_headers)
 
 func _api_get(path: String) -> Dictionary:
 	return await _req(HTTPClient.METHOD_GET, path)
@@ -180,109 +142,6 @@ func _api_delete(path: String) -> Dictionary:
 
 static func _now_iso() -> String:
 	return Time.get_datetime_string_from_system(true) + "Z"
-
-# ================================================================ Auth
-
-## Beim Start: gespeicherte Session erneuern, sonst sofort als Gast anmelden.
-func auto_login() -> void:
-	if _busy_login or not is_configured():
-		return
-	_busy_login = true
-	_set_status("Verbinde …")
-	var ok := false
-	if FileAccess.file_exists(SESSION_PATH):
-		var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(SESSION_PATH))
-		if saved is Dictionary:
-			refresh_token = str((saved as Dictionary).get("rt", ""))
-			if refresh_token != "":
-				ok = await _refresh_session()
-	if not ok:
-		ok = await _sign_in_guest()
-	_busy_login = false
-	if ok:
-		await _after_login()
-	else:
-		_set_status("Offline-Modus (Server nicht erreichbar)")
-	auth_changed.emit()
-
-## Anonyme Supabase-Session (im Dashboard: Authentication -> Sign In / Providers -> "Allow anonymous sign-ins").
-func _sign_in_guest() -> bool:
-	var body := {"data": {"device_id": GameManager.device_id(), "name": GameManager.player_name()}}
-	var r: Dictionary = await _req(HTTPClient.METHOD_POST, "/auth/v1/signup", body, false, [], false)
-	return _apply_session(r)
-
-func _refresh_session() -> bool:
-	if refresh_token == "":
-		return false
-	var r: Dictionary = await _req(HTTPClient.METHOD_POST, "/auth/v1/token?grant_type=refresh_token", {"refresh_token": refresh_token}, false, [], false)
-	return _apply_session(r)
-
-func _apply_session(r: Dictionary) -> bool:
-	if not bool(r.get("ok", false)) or not (r.get("data") is Dictionary):
-		return false
-	var d: Dictionary = r["data"]
-	if not d.has("access_token"):
-		return false
-	access_token = str(d.get("access_token", ""))
-	refresh_token = str(d.get("refresh_token", ""))
-	var u: Dictionary = d.get("user", {}) if d.get("user") is Dictionary else {}
-	user_id = str(u.get("id", ""))
-	email = str(u.get("email", "")) if u.get("email") != null else ""
-	is_anonymous = bool(u.get("is_anonymous", email == ""))
-	var f := FileAccess.open(SESSION_PATH, FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify({"rt": refresh_token}))
-		f.close()
-	return user_id != ""
-
-func _after_login() -> void:
-	_set_status("Online als Gast" if is_anonymous else "Online: " + email)
-	await _pull_profile()
-	refresh_friends()
-	refresh_invites()
-
-## Verknuepft den Gast-Account mit E-Mail + Passwort (User-ID und Fortschritt bleiben erhalten).
-func link_email(mail: String, password: String) -> Dictionary:
-	if not is_online():
-		return {"ok": false, "message": "Nicht verbunden."}
-	var r: Dictionary = await _req(HTTPClient.METHOD_PUT, "/auth/v1/user", {"email": mail, "password": password})
-	if bool(r["ok"]):
-		email = mail
-		is_anonymous = false
-		_set_status("Online: " + email)
-		auth_changed.emit()
-		return {"ok": true, "message": "Account verknüpft. Falls E-Mail-Bestätigung aktiv ist: bitte Postfach prüfen."}
-	return {"ok": false, "message": str(r["message"])}
-
-## Meldet sich mit einem bestehenden E-Mail-Account an (z.B. auf einem neuen Geraet) und laedt dessen Spielstand.
-func sign_in_email(mail: String, password: String) -> Dictionary:
-	if not is_configured():
-		return {"ok": false, "message": "Kein Backend konfiguriert."}
-	leave_lobby()
-	var r: Dictionary = await _req(HTTPClient.METHOD_POST, "/auth/v1/token?grant_type=password", {"email": mail, "password": password}, false, [], false)
-	if not _apply_session(r):
-		return {"ok": false, "message": str(r.get("message", "Anmeldung fehlgeschlagen."))}
-	await _after_login()
-	auth_changed.emit()
-	return {"ok": true, "message": "Angemeldet."}
-
-## Abmelden: Session verwerfen und als neuer Gast weitermachen.
-func sign_out() -> void:
-	leave_lobby()
-	access_token = ""
-	refresh_token = ""
-	user_id = ""
-	email = ""
-	friend_code = ""
-	is_anonymous = true
-	friends.clear()
-	invites.clear()
-	if FileAccess.file_exists(SESSION_PATH):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SESSION_PATH))
-	_set_status("Abgemeldet")
-	auth_changed.emit()
-	friends_updated.emit()
-	invites_updated.emit()
 
 # ================================================================ Profil-Sync
 
@@ -307,17 +166,30 @@ func _profile_row() -> Dictionary:
 		"last_seen": _now_iso(),
 	}
 
+## Laedt das Profil des angemeldeten Accounts und gleicht den Spielstand ab (GameManager.adopt_account_save).
 func _pull_profile() -> void:
-	var r: Dictionary = await _api_get("/rest/v1/profiles?id=eq.%s&select=*" % user_id)
-	if bool(r["ok"]) and r["data"] is Array and (r["data"] as Array).size() > 0:
+	var account: String = user_id
+	var r: Dictionary = await _api_get("/rest/v1/profiles?id=eq.%s&select=*" % account)
+	if not bool(r["ok"]) or not (r["data"] is Array):
+		return
+	var remote: Dictionary = {}
+	var web_name: String = ""
+	if (r["data"] as Array).size() > 0:
 		var row: Dictionary = (r["data"] as Array)[0]
 		friend_code = str(row.get("friend_code", ""))
-		var remote: Variant = row.get("save")
-		if remote is Dictionary and not (remote as Dictionary).is_empty():
-			if GameManager.apply_remote_save(remote):
-				return
-	_push_inventory = true
-	await push_profile()
+		if row.get("save") is Dictionary:
+			remote = row["save"]
+		ProfileManager.set_avatar_path(str(row.get("avatar_path", "")) if row.get("avatar_path") != null else "")
+		web_name = str(row.get("username", ""))
+	if account != user_id:
+		return   # waehrenddessen Account gewechselt
+	var outcome: String = GameManager.adopt_account_save(account, remote)
+	# Im Web-Portal gewaehlter Name gilt fuer echte (nicht-Gast-)Accounts
+	if not AuthManager.is_anonymous and web_name != GameManager.player_name():
+		GameManager.set_player_name(web_name)
+	if outcome == "upload":
+		_push_inventory = true
+		await push_profile()
 
 ## Schreibt Profil (+ bei Bedarf Schlaeger und Inventar) nach Supabase.
 func push_profile() -> void:

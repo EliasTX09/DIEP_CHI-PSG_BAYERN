@@ -5,6 +5,8 @@ extends Control
 var display_name: String = "?"
 var color_index: int = 0
 var frame_id: String = "bronze"
+## Profilbild aus dem Web-Account (null = Anfangsbuchstabe)
+var picture: Texture2D = null
 
 func _init(p_name: String = "?", p_color: int = 0, p_frame: String = "bronze", p_size: float = 56.0) -> void:
 	display_name = p_name
@@ -19,6 +21,22 @@ func set_player(p_name: String, p_color: int, p_frame: String) -> void:
 	frame_id = p_frame
 	queue_redraw()
 
+## Setzt ein Profilbild (rund ausgeschnitten im Rahmen) oder entfernt es (null).
+func set_picture(tex: Texture2D) -> void:
+	picture = tex
+	queue_redraw()
+
+## Kreis als Polygon mit Texturkoordinaten (zum runden Ausschneiden des Profilbilds).
+static func circle_polygon(center: Vector2, radius: float, segments: int = 40) -> Array:
+	var pts := PackedVector2Array()
+	var uvs := PackedVector2Array()
+	for i in segments:
+		var a: float = TAU * float(i) / float(segments)
+		var d := Vector2(cos(a), sin(a))
+		pts.append(center + d * radius)
+		uvs.append(Vector2(0.5, 0.5) + d * 0.5)
+	return [pts, uvs]
+
 func _draw() -> void:
 	var c: Vector2 = size * 0.5
 	var r: float = minf(size.x, size.y) * 0.5
@@ -29,12 +47,16 @@ func _draw() -> void:
 	draw_circle(c, r * 0.94, fc)
 	draw_circle(c, r * 0.8, bg.darkened(0.25))
 	draw_circle(c + Vector2(0, -r * 0.06), r * 0.74, bg)
-	var letter: String = display_name.substr(0, 1).to_upper() if display_name.length() > 0 else "?"
-	var font: Font = get_theme_default_font()
-	var fs: int = int(r * 0.95)
-	var ts: Vector2 = font.get_string_size(letter, HORIZONTAL_ALIGNMENT_CENTER, -1, fs)
-	draw_string_outline(font, c + Vector2(-ts.x * 0.5, ts.y * 0.32), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0, 0, 0, 0.55))
-	draw_string(font, c + Vector2(-ts.x * 0.5, ts.y * 0.32), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+	if picture != null:
+		var poly: Array = circle_polygon(c, r * 0.8)
+		draw_colored_polygon(poly[0], Color.WHITE, poly[1], picture)
+	else:
+		var letter: String = display_name.substr(0, 1).to_upper() if display_name.length() > 0 else "?"
+		var font: Font = get_theme_default_font()
+		var fs: int = int(r * 0.95)
+		var ts: Vector2 = font.get_string_size(letter, HORIZONTAL_ALIGNMENT_CENTER, -1, fs)
+		draw_string_outline(font, c + Vector2(-ts.x * 0.5, ts.y * 0.32), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 6, Color(0, 0, 0, 0.55))
+		draw_string(font, c + Vector2(-ts.x * 0.5, ts.y * 0.32), letter, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
 	match frame_id:
 		"neon":
 			draw_arc(c, r * 1.0, 0.0, TAU, 40, Color(1.0, 0.3, 0.9), r * 0.06)

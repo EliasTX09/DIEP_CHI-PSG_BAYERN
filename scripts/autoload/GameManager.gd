@@ -72,6 +72,8 @@ func default_save() -> Dictionary:
 		"settings": {"sfx": 0.8, "vibration": true, "quality": 1, "camera_sens": 1.0},
 		"revision": 0,
 		"updated_at": 0.0,
+		# Account (Supabase-User-ID), mit dem dieser Spielstand zuletzt abgeglichen wurde ("" = nur lokal)
+		"account_id": "",
 	}
 
 func _new_device_id() -> String:
@@ -201,11 +203,79 @@ func apply_remote_save(remote: Dictionary) -> bool:
 	settings_changed.emit()
 	return true
 
+## Gleicht den lokalen Spielstand mit dem Stand eines Accounts ab (nach Login/Account-Wechsel).
+## Regel - es geht nie still Fortschritt verloren:
+##  - Server-Stand leer           -> lokaler Stand gehoert ab jetzt diesem Account ("upload")
+##  - gleicher Account wie bisher -> der neuere Stand (Revision) gewinnt ("loaded" bzw. "upload")
+##  - anderer Account mit Stand   -> Server-Stand wird geladen; hatte der lokale Stand echten Fortschritt,
+##                                   wird er vorher als Sicherungsdatei abgelegt ("loaded_backup")
+## Rueckgabe: "upload" (Aufrufer laedt hoch) | "loaded" | "loaded_backup"
+func adopt_account_save(account: String, remote: Dictionary) -> String:
+	var owner: String = str(data.get("account_id", ""))
+	if remote.is_empty():
+		data["account_id"] = account
+		mark_dirty()
+		return "upload"
+	if owner == account:
+		if apply_remote_save(remote):
+			data["account_id"] = account
+			return "loaded"
+		return "upload"
+	var outcome: String = "loaded"
+	if has_real_progress():
+		backup_save("account-wechsel")
+		outcome = "loaded_backup"
+	var device: String = str(data.get("device_id", ""))
+	data = default_save()
+	_merge_into(data, remote)
+	data["device_id"] = device
+	data["account_id"] = account
+	_sanitize()
+	_save_dirty = true
+	_save_timer = 0.1
+	currency_changed.emit()
+	inventory_changed.emit()
+	chests_changed.emit()
+	profile_changed.emit()
+	settings_changed.emit()
+	if outcome == "loaded_backup":
+		toast.emit("Spielstand des Accounts geladen. Dein bisheriger Stand wurde gesichert.")
+	return outcome
+
+## Hat der lokale Stand Fortschritt, der nicht verloren gehen darf?
+func has_real_progress() -> bool:
+	var st: Dictionary = data.get("stats", {})
+	return trophies() > 0 or int(st.get("matches", 0)) > 0 or (data.get("clubs", {}) as Dictionary).size() > 1
+
+## Legt eine Kopie des aktuellen Spielstands an (user://save_backup_<zeit>_<grund>.json, max. 5 Stueck).
+func backup_save(reason: String) -> String:
+	var path: String = "user://save_backup_%d_%s.json" % [int(Time.get_unix_time_from_system()), reason.validate_filename()]
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return ""
+	f.store_string(JSON.stringify(data))
+	f.close()
+	var backups: Array[String] = []
+	var dir := DirAccess.open("user://")
+	if dir != null:
+		for file in dir.get_files():
+			if file.begins_with("save_backup_") and file.ends_with(".json"):
+				backups.append(file)
+	backups.sort()
+	while backups.size() > 5:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://" + backups.pop_front()))
+	return path
+
 func reset_progress() -> void:
 	var device: String = str(data.get("device_id", ""))
+	var account: String = str(data.get("account_id", ""))
+	var revision: int = int(data.get("revision", 0))
 	data = default_save()
 	if device != "":
 		data["device_id"] = device
+	# Account und Revision behalten, damit der zurueckgesetzte Stand beim Abgleich als neuester gilt
+	data["account_id"] = account
+	data["revision"] = revision
 	mark_dirty()
 	currency_changed.emit()
 	inventory_changed.emit()

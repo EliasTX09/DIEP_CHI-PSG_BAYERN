@@ -24,6 +24,8 @@ func _ready() -> void:
 	await _stage_input()
 	await _stage_daily()
 	_stage_network_offline()
+	_stage_auth_offline()
+	await _stage_auth_mock()
 	await _stage_menu()
 	_finish()
 
@@ -821,3 +823,138 @@ func _stage_menu() -> void:
 	menu.queue_free()
 	await _process_frames(3)
 	GameManager.reset_progress()
+
+# ---------------------------------------------------------------- Anmeldung, Spielstand-Regel, Profilbild
+
+func _wait_until(cond: Callable, max_frames: int) -> bool:
+	for i in max_frames:
+		if cond.call():
+			return true
+		await get_tree().process_frame
+	return bool(cond.call())
+
+func _stage_auth_offline() -> void:
+	print("[SMOKE] Stage: AuthManager/ProfileManager (offline)")
+	check(AuthManager.normalize_code("abcd-2345") == "ABCD2345", "Spiel-Code wird normalisiert")
+	check(AuthManager.normalize_code("ABCD 23 45") == "ABCD2345", "Leerzeichen im Code erlaubt")
+	check(AuthManager.normalize_code("ABC") == "" and AuthManager.normalize_code("ABCD234O") == "", "Ungueltige Codes abgelehnt (Laenge, O/0)")
+	check(AuthManager.is_valid_email("a.b@example.com") and not AuthManager.is_valid_email("kein-at") and not AuthManager.is_valid_email("a@b"), "E-Mail-Pruefung")
+	check(not AuthManager.is_configured() and AuthManager.local_id() == "local", "Ohne Backend: offline, lokale ID")
+	check(NetworkManager.user_id == AuthManager.user_id and NetworkManager.url == AuthManager.url, "NetworkManager liest die Anmeldung nur beim AuthManager")
+	# Lokale Speicherung: verschluesselt, Migration der alten session.json, kaputte Datei = keine Session
+	AuthManager.clear_saved_session()
+	AuthManager.save_refresh_token("tok-123")
+	check(AuthManager.load_saved_refresh_token() == "tok-123", "auth.json: Token wird gespeichert und gelesen")
+	var raw: String = FileAccess.get_file_as_bytes(AuthManager.AUTH_PATH).get_string_from_ascii()
+	check(not raw.contains("tok-123"), "auth.json enthaelt das Token nicht im Klartext")
+	var f := FileAccess.open(AuthManager.AUTH_PATH, FileAccess.WRITE)
+	f.store_string("kaputt")
+	f.close()
+	check(AuthManager.load_saved_refresh_token() == "", "Unlesbare auth.json = keine Session")
+	var lf := FileAccess.open(AuthManager.LEGACY_SESSION_PATH, FileAccess.WRITE)
+	lf.store_string(JSON.stringify({"rt": "legacy-rt"}))
+	lf.close()
+	check(AuthManager.load_saved_refresh_token() == "legacy-rt" and not FileAccess.file_exists(AuthManager.LEGACY_SESSION_PATH), "Alte session.json wird uebernommen und geloescht")
+	check(AuthManager.load_saved_refresh_token() == "legacy-rt", "Uebernommenes Token liegt danach in auth.json")
+	AuthManager.clear_saved_session()
+	check(not FileAccess.file_exists(AuthManager.AUTH_PATH), "Abmelden loescht auth.json")
+	# Profilbild: nur gueltige Pfade, Bild-Dekodierung robust
+	var uid := "22222222-2222-4222-8222-222222222222"
+	check(ProfileManager.is_valid_path(uid + "/avatar-17.png", uid), "Gueltiger Avatar-Pfad")
+	check(not ProfileManager.is_valid_path("../" + uid + "/avatar-17.png") and not ProfileManager.is_valid_path(uid + "/avatar-17.svg")
+		and not ProfileManager.is_valid_path(uid + "/avatar-17.png", "33333333-3333-4333-8333-333333333333")
+		and not ProfileManager.is_valid_path("https://evil.example/x.png"), "Fremde/ungueltige Avatar-Pfade abgelehnt")
+	var img := Image.create(40, 40, false, Image.FORMAT_RGBA8)
+	img.fill(Color.ORANGE)
+	check(ProfileManager.decode_image(img.save_png_to_buffer()) != null, "PNG-Profilbild wird dekodiert")
+	check(ProfileManager.decode_image(img.save_jpg_to_buffer()) != null, "JPEG-Profilbild wird dekodiert")
+	check(ProfileManager.decode_image("<html>kein bild</html>".to_utf8_buffer()) == null, "Kein Bild -> verworfen")
+	var big := PackedByteArray()
+	big.resize(ProfileManager.MAX_AVATAR_BYTES + 10)
+	check(ProfileManager.decode_image(big) == null, "Zu grosse Datei -> verworfen")
+	var large := Image.create(1024, 700, false, Image.FORMAT_RGB8)
+	var dec: Image = ProfileManager.decode_image(large.save_png_to_buffer())
+	check(dec != null and maxi(dec.get_width(), dec.get_height()) <= ProfileManager.MAX_SIDE, "Grosses Bild wird verkleinert")
+	# Spielstand-Regel beim Account-Wechsel
+	GameManager.reset_progress()
+	GameManager.data["account_id"] = ""
+	check(GameManager.adopt_account_save("acc-a", {}) == "upload" and str(GameManager.data["account_id"]) == "acc-a", "Leerer Server-Stand: lokaler Stand gehoert dem Account")
+	var newer: Dictionary = GameManager.data.duplicate(true)
+	newer["revision"] = int(GameManager.data["revision"]) + 10
+	newer["coins"] = 999
+	check(GameManager.adopt_account_save("acc-a", newer) == "loaded" and GameManager.coins() == 999, "Gleicher Account: neuerer Server-Stand wird geladen")
+	var older: Dictionary = GameManager.data.duplicate(true)
+	older["revision"] = 1
+	older["coins"] = 5
+	check(GameManager.adopt_account_save("acc-a", older) == "upload" and GameManager.coins() == 999, "Gleicher Account: aelterer Server-Stand ueberschreibt nichts")
+	GameManager.grant({"trophies": 40})
+	var other: Dictionary = GameManager.default_save()
+	other["trophies"] = 500
+	other["revision"] = 2
+	var before := _count_backups()
+	check(GameManager.adopt_account_save("acc-b", other) == "loaded_backup", "Anderer Account mit Stand: Laden mit Sicherung")
+	check(GameManager.trophies() == 500 and str(GameManager.data["account_id"]) == "acc-b", "Server-Stand des neuen Accounts aktiv")
+	check(_count_backups() > before, "Bisheriger Fortschritt als Sicherungsdatei abgelegt")
+	GameManager.reset_progress()
+	check(not GameManager.has_real_progress() and GameManager.adopt_account_save("acc-c", other) == "loaded", "Frischer lokaler Stand: ohne Sicherung geladen")
+	GameManager.reset_progress()
+	GameManager.data["account_id"] = ""
+
+func _count_backups() -> int:
+	var n := 0
+	var dir := DirAccess.open("user://")
+	if dir != null:
+		for file in dir.get_files():
+			if file.begins_with("save_backup_"):
+				n += 1
+	return n
+
+## Kompletter Ablauf gegen einen lokalen Schein-Server: Gast-Login, Web-Code einloesen, Profil + Profilbild.
+func _stage_auth_mock() -> void:
+	print("[SMOKE] Stage: Anmelde-Ablauf gegen lokalen Schein-Server")
+	var mock := MockSupabase.new()
+	add_child(mock)
+	check(mock.start(), "Schein-Server startet auf 127.0.0.1")
+	if mock.port == 0:
+		return
+	var saved_url: String = AuthManager.url
+	var saved_key: String = AuthManager.anon_key
+	AuthManager.clear_saved_session()
+	GameManager.reset_progress()
+	GameManager.data["account_id"] = ""
+	AuthManager.url = mock.base_url()
+	AuthManager.anon_key = "test-anon-key-0123456789abcdef"
+	check(AuthManager.is_configured(), "Test-Server gilt als konfiguriert")
+	await AuthManager.auto_login()
+	check(AuthManager.user_id == MockSupabase.GUEST_ID and AuthManager.is_anonymous, "Gast-Login (anonyme Session)")
+	check(AuthManager.load_saved_refresh_token() == "rt-guest", "Gast-Session gespeichert")
+	var ok_guest: bool = await _wait_until(func() -> bool: return str(GameManager.data.get("account_id", "")) == MockSupabase.GUEST_ID, 240)
+	check(ok_guest, "Gast-Spielstand dem Gast-Account zugeordnet")
+	check(NetworkManager.friend_code == "GASTFRND", "Freundes-Code aus dem Profil")
+	# Fortschritt als Gast, dann Web-Account per Code
+	GameManager.grant({"trophies": 50})
+	var bad: Dictionary = await AuthManager.redeem_web_code("ZZZZ9999")
+	check(not bool(bad["ok"]) and AuthManager.user_id == MockSupabase.GUEST_ID, "Falscher Code: bleibt Gast")
+	var r: Dictionary = await AuthManager.redeem_web_code("abcd-2345")
+	print("[SMOKE] Code einloesen: ", r)
+	check(bool(r["ok"]) and AuthManager.user_id == MockSupabase.WEB_ID and not AuthManager.is_anonymous, "Web-Code: mit Web-Account angemeldet")
+	check(AuthManager.email == MockSupabase.WEB_EMAIL and AuthManager.load_saved_refresh_token() == "rt-web", "Eigene Session des Spiels gespeichert")
+	var ok_web: bool = await _wait_until(func() -> bool: return GameManager.trophies() == 777, 240)
+	check(ok_web and str(GameManager.data["account_id"]) == MockSupabase.WEB_ID, "Spielstand des Web-Accounts geladen")
+	check(GameManager.player_name() == "WebHeld", "Name aus dem Web-Portal uebernommen")
+	check(_count_backups() > 0, "Gast-Fortschritt vor dem Wechsel gesichert")
+	var ok_pic: bool = await _wait_until(func() -> bool: return ProfileManager.avatar_texture != null, 240)
+	check(ok_pic and ProfileManager.avatar_path.begins_with(MockSupabase.WEB_ID + "/"), "Profilbild vom Server geladen")
+	check(mock.requests_log.has("POST /rest/v1/rpc/redeem_game_link_code"), "Code wurde per RPC eingeloest")
+	# Abmelden ohne Gast-Neustart
+	AuthManager.sign_out(false)
+	check(AuthManager.user_id == "" and not FileAccess.file_exists(AuthManager.AUTH_PATH), "Abmelden verwirft die Session")
+	print("[SMOKE] Server-Aufrufe: ", ", ".join(mock.requests_log))
+	await _process_frames(5)
+	AuthManager.url = saved_url
+	AuthManager.anon_key = saved_key
+	ProfileManager.clear_avatar()
+	GameManager.reset_progress()
+	GameManager.data["account_id"] = ""
+	mock.queue_free()
+	await _process_frames(2)

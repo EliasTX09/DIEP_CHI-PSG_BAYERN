@@ -44,7 +44,7 @@ func _init(p_menu: Node, p_host: Control) -> void:
 	NetworkManager.friends_updated.connect(_on_net_update.bind("friends"))
 	NetworkManager.invites_updated.connect(_on_net_update.bind("friends"))
 	NetworkManager.leaderboard_updated.connect(_on_net_update.bind("leaderboard"))
-	NetworkManager.auth_changed.connect(func() -> void:
+	AuthManager.auth_changed.connect(func() -> void:
 		_on_net_update("settings")
 		_on_net_update("friends"))
 	GameManager.currency_changed.connect(_on_data_changed)
@@ -196,7 +196,7 @@ func _row_panel(parent: Control, highlight: bool = false) -> HBoxContainer:
 func _offline_note(parent: Control, what: String) -> void:
 	var t: String = "%s brauchen eine Internetverbindung und ein eingetragenes Supabase-Backend (config/backend.cfg, siehe README)." % what
 	if NetworkManager.is_configured():
-		t = "%s: Verbindung zum Server wird aufgebaut ... (%s)" % [what, NetworkManager.status]
+		t = "%s: Verbindung zum Server wird aufgebaut ... (%s)" % [what, AuthManager.status]
 	parent.add_child(UIKit.wrap_label(t, 21, UIKit.TEXT_DIM))
 
 # ================================================================ Seite: Spielen
@@ -983,38 +983,56 @@ func _page_settings(body: VBoxContainer) -> void:
 	left.add_child(vib)
 	# --- Account
 	right.add_child(UIKit.label("Account", 24, UIKit.GOLD))
-	if not NetworkManager.is_configured():
+	if not AuthManager.is_configured():
 		right.add_child(UIKit.wrap_label("Kein Backend eingetragen – du spielst im Offline-Modus. Trage Supabase-URL und Anon-Key in config/backend.cfg ein (siehe README), um Freunde, Online-Matches und Cloud-Speicherstand zu nutzen.", 19, UIKit.TEXT_DIM))
 	else:
-		var acc: String = "Status: %s" % NetworkManager.status
-		if NetworkManager.is_online():
-			acc += "\n" + ("Gast-Account (nur auf diesem Gerät)" if NetworkManager.is_anonymous else "Verknüpft mit " + NetworkManager.email)
+		var acc: String = "Status: %s" % AuthManager.status
+		if AuthManager.is_online():
+			acc += "\n" + ("Gast-Account (nur auf diesem Gerät)" if AuthManager.is_anonymous else "Verknüpft mit " + AuthManager.email)
 		right.add_child(UIKit.wrap_label(acc, 19, UIKit.TEXT))
+		# Web-Portal: Registrieren, Profilbild, Freunde - und dort einen Spiel-Code erzeugen
+		var portal := UIKit.button("Account verknüpfen / Registrieren", UIKit.PURPLE, func() -> void:
+			if not AuthManager.open_portal():
+				_toast("Keine Web-Portal-Adresse eingetragen (config/backend.cfg, Abschnitt [web]).", UIKit.RED.darkened(0.3)), Vector2(0, 54), 19)
+		portal.name = "PortalButton"
+		portal.disabled = not AuthManager.has_portal()
+		right.add_child(portal)
+		var cr := UIKit.hbox(8)
+		right.add_child(cr)
+		var code_edit := LineEdit.new()
+		code_edit.name = "WebCodeEdit"
+		code_edit.placeholder_text = "Spiel-Code von der Website"
+		code_edit.max_length = AuthManager.CODE_LENGTH + 2
+		code_edit.custom_minimum_size = Vector2(250, 52)
+		code_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		code_edit.add_theme_font_size_override("font_size", 20)
+		cr.add_child(code_edit)
+		cr.add_child(UIKit.button("Einlösen", UIKit.GREEN, func() -> void: _redeem_code(code_edit.text), Vector2(140, 52), 19))
+		# Alternativ direkt im Spiel
 		var mail := LineEdit.new()
 		mail.name = "MailEdit"
 		mail.placeholder_text = "E-Mail"
 		mail.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
-		mail.custom_minimum_size = Vector2(0, 50)
-		mail.add_theme_font_size_override("font_size", 20)
+		mail.custom_minimum_size = Vector2(0, 48)
+		mail.add_theme_font_size_override("font_size", 19)
 		right.add_child(mail)
 		var pw := LineEdit.new()
 		pw.name = "PasswordEdit"
 		pw.placeholder_text = "Passwort (mind. 6 Zeichen)"
 		pw.secret = true
 		pw.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_PASSWORD
-		pw.custom_minimum_size = Vector2(0, 50)
-		pw.add_theme_font_size_override("font_size", 20)
+		pw.custom_minimum_size = Vector2(0, 48)
+		pw.add_theme_font_size_override("font_size", 19)
 		right.add_child(pw)
 		var ar := UIKit.hbox(8)
 		right.add_child(ar)
-		if NetworkManager.is_online() and NetworkManager.is_anonymous:
-			ar.add_child(UIKit.button("Gast verknüpfen", UIKit.GREEN, func() -> void: _account_action("link", mail.text, pw.text), Vector2(220, 54), 19))
-		ar.add_child(UIKit.button("Anmelden", UIKit.BLUE, func() -> void: _account_action("login", mail.text, pw.text), Vector2(160, 54), 19))
-		if NetworkManager.is_online():
-			right.add_child(UIKit.button("Abmelden", UIKit.GREY, func() -> void:
+		if AuthManager.is_online() and AuthManager.is_anonymous:
+			ar.add_child(UIKit.button("Gast verknüpfen", UIKit.GREEN, func() -> void: _account_action("link", mail.text, pw.text), Vector2(200, 50), 18))
+		ar.add_child(UIKit.button("Anmelden", UIKit.BLUE, func() -> void: _account_action("login", mail.text, pw.text), Vector2(150, 50), 18))
+		if AuthManager.is_online():
+			ar.add_child(UIKit.button("Abmelden", UIKit.GREY, func() -> void:
 				_confirm("Abmelden?", "Du spielst danach als neuer Gast weiter. Dein Account bleibt auf dem Server erhalten.", func() -> void:
-					NetworkManager.sign_out()
-					NetworkManager.auto_login()), Vector2(180, 50), 19))
+					AuthManager.sign_out(true)), Vector2(150, 50), 18))
 	right.add_child(UIKit.spacer(true))
 	right.add_child(UIKit.label("Geräte-ID: " + GameManager.device_id().substr(0, 8), 16, UIKit.TEXT_DIM))
 	right.add_child(UIKit.button("Fortschritt zurücksetzen", UIKit.RED.darkened(0.2), func() -> void:
@@ -1037,15 +1055,24 @@ func _slider(value: float, lo: float, hi: float, on_change: Callable) -> HSlider
 		_busy = false)
 	return s
 
+func _redeem_code(text: String) -> void:
+	if AuthManager.normalize_code(text) == "":
+		_toast("Der Spiel-Code hat %d Zeichen – du findest ihn im Web-Portal unter „Spiel verbinden“." % AuthManager.CODE_LENGTH, UIKit.RED.darkened(0.3))
+		return
+	var r: Dictionary = await AuthManager.redeem_web_code(text)
+	_toast(str(r["message"]), UIKit.GREEN.darkened(0.4) if bool(r["ok"]) else UIKit.RED.darkened(0.3))
+	if page == "settings":
+		refresh()
+
 func _account_action(action: String, mail: String, password: String) -> void:
-	if not mail.contains("@") or password.length() < 6:
+	if not AuthManager.is_valid_email(mail) or password.length() < 6:
 		_toast("Bitte gültige E-Mail und ein Passwort mit mind. 6 Zeichen eingeben.", UIKit.RED.darkened(0.3))
 		return
 	var r: Dictionary
 	if action == "link":
-		r = await NetworkManager.link_email(mail, password)
+		r = await AuthManager.link_email(mail, password)
 	else:
-		r = await NetworkManager.sign_in_email(mail, password)
+		r = await AuthManager.sign_in_email(mail, password)
 	_toast(str(r["message"]), UIKit.GREEN.darkened(0.4) if bool(r["ok"]) else UIKit.RED.darkened(0.3))
 	if page == "settings":
 		refresh()

@@ -99,17 +99,25 @@ jobs:
           done
           ls -la "$HOME/.config/godot"
 
-      - name: Supabase-Zugangsdaten aus Secrets uebernehmen (optional)
+      - name: Backend- und Web-Portal-Adressen eintragen (Secrets optional)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          WEB_PORTAL_URL: ${{ secrets.WEB_PORTAL_URL }}
         run: |
-          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
-            printf '[supabase]\nurl="%s"\nanon_key="%s"\n' "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > config/backend.cfg
-            echo "config/backend.cfg aus Secrets erzeugt."
-          else
-            echo "Keine Secrets gesetzt - es gilt die eingecheckte config/backend.cfg."
+          CFG=config/backend.cfg
+          cur() { sed -n "s/^$1=\"\(.*\)\"\s*$/\1/p" "$CFG" | head -n 1; }
+          URL="${SUPABASE_URL:-$(cur url)}"
+          KEY="${SUPABASE_ANON_KEY:-$(cur anon_key)}"
+          PORTAL="${WEB_PORTAL_URL:-$(cur portal_url)}"
+          # Ohne eigene Adresse: GitHub-Pages-Adresse dieses Repositorys
+          if [ -z "$PORTAL" ] || echo "$PORTAL" | grep -q "DEINNAME"; then
+            OWNER="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+            PORTAL="https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
           fi
+          printf '[supabase]\nurl="%s"\nanon_key="%s"\n\n[web]\nportal_url="%s"\n' "$URL" "$KEY" "$PORTAL" > "$CFG"
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then echo "Supabase-Zugang aus Secrets."; else echo "Supabase-Zugang aus der eingecheckten config/backend.cfg."; fi
+          echo "Web-Portal: $PORTAL"
 
       - name: Projekt importieren (Fehler-Gate)
         run: |
@@ -163,8 +171,9 @@ jobs:
           test -n "$AAPT"
           "$AAPT" dump xmltree "build/$APK_NAME" AndroidManifest.xml > ci_out/manifest.txt
           grep -iE "screenOrientation|permission" ci_out/manifest.txt | sed 's/^ *//' | sort -u
-          # android:screenOrientation 0x7 = sensorPortrait
-          grep -q "screenOrientation.*=(type 0x10)0x7" ci_out/manifest.txt || { echo "::error::APK ist nicht auf sensorPortrait gesetzt"; exit 1; }
+          # Hochformat mit Sensor-Drehung: 0x7 = sensorPortrait, 0xc = userPortrait (so exportiert Godot "Sensor Portrait";
+          # dreht ebenfalls zwischen Hochformat und umgedrehtem Hochformat und beachtet die Rotationssperre)
+          grep -qE "screenOrientation.*=\(type 0x10\)0x(7|c)$" ci_out/manifest.txt || { echo "::error::APK ist nicht auf Hochformat gesetzt"; exit 1; }
           grep -q "android.permission.INTERNET" ci_out/manifest.txt
           grep -q "android.permission.ACCESS_NETWORK_STATE" ci_out/manifest.txt
 

@@ -18,6 +18,8 @@ config/icon="res://icon.svg"
 [autoload]
 
 GameManager="*res://scripts/autoload/GameManager.gd"
+AuthManager="*res://scripts/autoload/AuthManager.gd"
+ProfileManager="*res://scripts/autoload/ProfileManager.gd"
 NetworkManager="*res://scripts/autoload/NetworkManager.gd"
 SoundManager="*res://scripts/autoload/SoundManager.gd"
 
