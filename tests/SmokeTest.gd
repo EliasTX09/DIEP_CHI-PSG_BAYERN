@@ -52,8 +52,10 @@ func _stage_environment() -> void:
 	print("[SMOKE] rendering_method = ", ProjectSettings.get_setting("rendering/renderer/rendering_method"))
 	check(int(v["major"]) == 4 and int(v["minor"]) >= 5, "Godot >= 4.5")
 	check(str(ProjectSettings.get_setting("rendering/renderer/rendering_method")) == "mobile", "Mobile-Renderer konfiguriert")
-	check(int(ProjectSettings.get_setting("display/window/handheld/orientation")) == DisplayServer.SCREEN_SENSOR_LANDSCAPE,
-		"Orientierung = Sensor-Querformat")
+	check(int(ProjectSettings.get_setting("display/window/handheld/orientation")) == DisplayServer.SCREEN_SENSOR_PORTRAIT,
+		"Orientierung = Sensor-Hochformat")
+	check(int(ProjectSettings.get_setting("display/window/size/viewport_width")) < int(ProjectSettings.get_setting("display/window/size/viewport_height")),
+		"Basis-Aufloesung ist hochkant")
 	check(int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d")) >= 1, "MSAA aktiv")
 	check(Engine.physics_ticks_per_second == 120, "Physik-Takt 120 Hz")
 

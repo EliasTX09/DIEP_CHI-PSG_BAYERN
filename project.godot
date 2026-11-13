@@ -1,5 +1,5 @@
 ; Engine configuration file.
-; Golf Battle 3D - Godot 4.5 (Mobile-Renderer, Jolt-Physik, Querformat)
+; Golf Battle 3D - Godot 4.5 (Mobile-Renderer, Jolt-Physik, Hochformat)
 
 config_version=5
 
@@ -23,11 +23,11 @@ SoundManager="*res://scripts/autoload/SoundManager.gd"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=720
+window/size/viewport_height=1280
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/handheld/orientation=4
+window/handheld/orientation=5
 
 [gui]
 

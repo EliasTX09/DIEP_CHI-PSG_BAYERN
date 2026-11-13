@@ -157,6 +157,17 @@ jobs:
           ls -la build
           test -s "build/$APK_NAME"
 
+      - name: APK-Manifest pruefen (Hochformat, Berechtigungen)
+        run: |
+          AAPT="$(find "$ANDROID_SDK_DIR/build-tools" -name aapt -type f | sort | tail -n 1)"
+          test -n "$AAPT"
+          "$AAPT" dump xmltree "build/$APK_NAME" AndroidManifest.xml > ci_out/manifest.txt
+          grep -iE "screenOrientation|permission" ci_out/manifest.txt | sed 's/^ *//' | sort -u
+          # android:screenOrientation 0x7 = sensorPortrait
+          grep -q "screenOrientation.*=(type 0x10)0x7" ci_out/manifest.txt || { echo "::error::APK ist nicht auf sensorPortrait gesetzt"; exit 1; }
+          grep -q "android.permission.INTERNET" ci_out/manifest.txt
+          grep -q "android.permission.ACCESS_NETWORK_STATE" ci_out/manifest.txt
+
       - name: APK als Artifact hochladen
         uses: actions/upload-artifact@v4
         with:
@@ -226,8 +237,8 @@ jobs:
           METHOD="--rendering-method mobile"
           if ! vulkaninfo --summary > /dev/null 2>&1; then DRIVER=opengl3; METHOD="--rendering-method gl_compatibility"; fi
           echo "Rendering-Treiber: $DRIVER $METHOD"
-          timeout 1200 xvfb-run -a -s "-screen 0 1280x720x24" "$RUNNER_TEMP/godot/godot" \
-            --rendering-driver "$DRIVER" $METHOD --resolution 1280x720 --fixed-fps 30 --audio-driver Dummy \
+          timeout 1200 xvfb-run -a -s "-screen 0 720x1280x24" "$RUNNER_TEMP/godot/godot" \
+            --rendering-driver "$DRIVER" $METHOD --resolution 720x1280 --fixed-fps 30 --audio-driver Dummy \
             res://tests/Shots.tscn -- "--shots=${SHOT_FILTER}" 2>&1 | tee ci_out/visual.log
           grep -q "\[SHOTS\] DONE" ci_out/visual.log || { echo "::error::Screenshot-Lauf nicht beendet"; exit 1; }
           if grep -E "SHADER ERROR|SCRIPT ERROR|Parse Error|\[SHOTS\]\[FAIL\]" ci_out/visual.log; then

@@ -92,7 +92,10 @@ func _shot_course(id: String) -> void:
 func _course_sheet() -> void:
 	var ids: Array[String] = Catalog.all_course_ids()
 	ids.append("daily")
-	var sheet := Image.create(1280, 720, false, Image.FORMAT_RGB8)
+	# Kacheln im Seitenverhaeltnis des Fensters (Hochformat: 180 x 320), 4 x 4 Raster
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var tile := Vector2i(180, 320) if vp.y >= vp.x else Vector2i(320, 180)
+	var sheet := Image.create(tile.x * 4, tile.y * 4, false, Image.FORMAT_RGB8)
 	var idx := 0
 	for id in ids:
 		var c: Course3D = CourseBuilder3D.build(id, 4242, true)
@@ -104,8 +107,8 @@ func _course_sheet() -> void:
 		var img := get_viewport().get_texture().get_image()
 		if img != null and not img.is_empty():
 			img.convert(Image.FORMAT_RGB8)
-			img.resize(320, 180, Image.INTERPOLATE_BILINEAR)
-			sheet.blit_rect(img, Rect2i(0, 0, 320, 180), Vector2i((idx % 4) * 320, (idx / 4) * 180))
+			img.resize(tile.x, tile.y, Image.INTERPOLATE_BILINEAR)
+			sheet.blit_rect(img, Rect2i(Vector2i.ZERO, tile), Vector2i((idx % 4) * tile.x, (idx / 4) * tile.y))
 		print("[SHOTS] Bahn ", id, " gerendert")
 		idx += 1
 		cam.queue_free()
@@ -156,7 +159,9 @@ func _capture(shot_name: String) -> void:
 	if img == null or img.is_empty():
 		print("[SHOTS][FAIL] Kein Bild fuer ", shot_name)
 		return
-	img.resize(960, 540, Image.INTERPOLATE_BILINEAR)
+	# Seitenverhaeltnis beibehalten (Hochformat: 540 x 960)
+	var target_h: int = 960 if img.get_height() >= img.get_width() else 540
+	img.resize(int(round(float(img.get_width()) * float(target_h) / float(img.get_height()))), target_h, Image.INTERPOLATE_BILINEAR)
 	var file := ProjectSettings.globalize_path(OUT_DIR.path_join(shot_name + ".jpg"))
 	var err := img.save_jpg(file, 0.8)
 	print("[SHOTS] ", shot_name, " -> ", file, " (", err, ")")
