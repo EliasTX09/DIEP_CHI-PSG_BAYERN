@@ -145,7 +145,8 @@ class Teleporter extends Gadget:
 		if st.on_cooldown(self):
 			return
 		var l := to_local_point(st.pos)
-		if absf(l.z) > 0.45 or l.y < 0.0 or Vector2(l.x, l.y - radius).length() > radius:
+		# Fangzone: so breit und hoch wie der Portal-Ring (ein rollender Ball muss nicht exakt die Mitte treffen)
+		if absf(l.z) > 0.45 or l.y < -0.2 or l.y > radius * 2.0 or absf(l.x) > radius:
 			return
 		var spd: float = maxf(st.vel.length(), 7.0)
 		st.pos = exit_xf.origin + exit_xf.basis.y * (BALL_R + 0.05) - exit_xf.basis.z * 0.6

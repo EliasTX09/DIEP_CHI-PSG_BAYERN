@@ -371,7 +371,9 @@ static func _n3(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.set_width(7.0)
 	k.set_wall_height(0.9)
 	k.set_surface(TrackKit.S_ALT)
-	k.straight(12.0)
+	k.straight(6.0)
+	# Trichter zum Portal
+	k.taper(6.0, 2.6)
 	# Portal am Ende der Plattform fuehrt zum schwebenden Ziel-Gruen
 	var green_start := Transform3D(Basis.IDENTITY, Vector3(16.0, 5.0, -46.0))
 	_portal(c, k, th, 1.6, green_start.translated_local(Vector3(0.0, 0.0, -1.0)))
