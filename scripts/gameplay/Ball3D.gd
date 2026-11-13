@@ -72,6 +72,8 @@ var _pin_pos: Vector3 = Vector3.ZERO
 var _pin_body: Node3D = null
 var _pin_local: Vector3 = Vector3.ZERO
 var _out_timer: float = 0.0
+## Stelle, an der der Ball zuletzt "out" ging (fuer Effekte und Diagnose).
+var out_pos: Vector3 = Vector3.ZERO
 var _mesh: Node3D
 var _trail: GPUParticles3D
 var _ray := PhysicsRayQueryParameters3D.new()
@@ -87,7 +89,7 @@ func setup(p_course: Course3D, p_id: String, shot_profile: Dictionary, p_skin: S
 	is_local = local
 	sound_gain = 1.0 if local else 0.35
 	collision_layer = 2
-	collision_mask = 1 | 4
+	collision_mask = 1 | 4 | 8
 	mass = 1.0
 	gravity_scale = 1.0
 	continuous_cd = true
@@ -115,7 +117,7 @@ func setup(p_course: Course3D, p_id: String, shot_profile: Dictionary, p_skin: S
 			_trail.top_level = true
 			_trail.emitting = false
 			add_child(_trail)
-	_ray.collision_mask = 1 | 4
+	_ray.collision_mask = 1 | 4 | 8
 	sim.wind_resist = float(profile.get("wind_resist", 0.0))
 
 ## Setzt den Ball auf den Abschlag (neue Bahn).
@@ -259,6 +261,18 @@ func _integrate_forces(body_state: PhysicsDirectBodyState3D) -> void:
 			ground_obj = body_state.get_contact_collider_object(i)
 		if closing > 2.2:
 			_on_impact(closing, n.y < 0.5)
+	# Ohne gemeldeten Kontakt: knapp ueber dem Boden gilt der Ball trotzdem als rollend
+	# (beim Rollen ueber Dreieckskanten meldet die Physik nicht in jedem Tick einen Kontakt).
+	if not on_ground and vel.y < 1.5:
+		var space_state: PhysicsDirectSpaceState3D = body_state.get_space_state()
+		if space_state != null:
+			_ray.from = pos
+			_ray.to = pos + Vector3.DOWN * (RADIUS + 0.06)
+			var ground_hit: Dictionary = space_state.intersect_ray(_ray)
+			if not ground_hit.is_empty() and (ground_hit["normal"] as Vector3).y > 0.55:
+				on_ground = true
+				gn = ground_hit["normal"]
+				ground_obj = ground_hit.get("collider")
 
 	# --- Flugzeit / Landung ---
 	if on_ground:
@@ -471,6 +485,7 @@ func _go_out(kind: String) -> void:
 	if state == State.OUT:
 		return
 	state = State.OUT
+	out_pos = global_position
 	_out_timer = OUT_DELAY
 	_pin_body = null
 	_pin_pos = global_position

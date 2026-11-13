@@ -11,3 +11,4 @@ ci_out/
 *.idsig
 # Lokale Overrides (optional, ueberschreibt config/backend.cfg)
 config/backend.local.cfg
+override.cfg

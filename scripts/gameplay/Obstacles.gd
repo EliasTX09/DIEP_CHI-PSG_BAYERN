@@ -3,7 +3,8 @@ extends RefCounted
 ## Bewegliche, physische Hindernisse (AnimatableBody3D). Alle werden ueber die Bahn-Uhr
 ## angetrieben: update_time(t) setzt die Pose deterministisch -> gleiche Bewegung auf allen Geraeten.
 
-const LAYER_OBSTACLE := 4   # Bit 3 = Layer "hindernisse"
+const LAYER_OBSTACLE := 4   # Layer 3 "hindernisse": Windmuehle, Hammer, Schiebeblock
+const LAYER_PLATFORM := 8   # Layer 4 "plattformen": fahrende Plattformen (zaehlen als Boden)
 
 static func _body(bounce: float = 0.3) -> AnimatableBody3D:
 	var b := AnimatableBody3D.new()
@@ -167,6 +168,7 @@ class MovingPlatform extends Node3D:
 		omega = TAU / maxf(0.5, period)
 		phase = start_phase
 		body = Obstacles._body(0.0)
+		body.collision_layer = Obstacles.LAYER_PLATFORM
 		body.add_to_group("moving_floor")
 		add_child(body)
 		var mat: Material = material if material != null else Mat.flat(Color(0.55, 0.38, 0.22), 0.85)

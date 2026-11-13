@@ -28,6 +28,13 @@ var _best_score: float = -INF
 var _start_progress: float = 0.0
 var _last_pos: Vector3 = Vector3.INF
 var _stuck: int = 0
+## Letzte Entscheidung inkl. Vorhersage (fuer Diagnose): {dir, power, chip, pred_end, pred_holed, pred_out, pred_stopped}
+var last_choice: Dictionary = {}
+var _best_pred: Dictionary = {}
+var _shot_from: Vector3 = Vector3.INF
+var _shot_progress: float = 0.0
+## Schlaege, die nichts gebracht haben (Out oder kein Fortschritt): [{pos, dir, power, chip}]
+var _failed: Array[Dictionary] = []
 
 func _init(p_ball: Ball3D, p_course: Course3D, p_skill: float, rng_seed: int) -> void:
 	ball = p_ball
@@ -50,6 +57,7 @@ func update(delta: float) -> void:
 		return
 	match phase:
 		Phase.WAIT:
+			_learn_from_last_shot()
 			phase = Phase.DELAY
 			_timer = lerpf(2.2, 0.8, skill) + _rng.randf_range(0.0, 1.2)
 		Phase.DELAY:
@@ -77,12 +85,14 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 			var v: Vector3 = Ball3D.launch_velocity(cand["dir"], float(cand["power"]), bool(cand["chip"]), ball.profile, ball.ground_normal)
 			_sim = ShotSim.new()
 			_sim.begin(course, space, ball.global_position, v, {"max_time": 9.0, "dt": 1.0 / 40.0, "chip": bool(cand["chip"]),
-				"profile": ball.profile, "sample": 100000})
+				"profile": ball.profile, "sample": 100000, "ignore_moving": true})
 		if _sim.advance(24):
-			var sc: float = _score(_sim.result)
+			var sc: float = _score(_sim.result, _candidates[_index])
 			if sc > _best_score:
 				_best_score = sc
 				_best = _candidates[_index]
+				_best_pred = {"pred_end": _sim.result["end_pos"], "pred_holed": bool(_sim.result["holed"]),
+					"pred_out": bool(_sim.result["out"]), "pred_stopped": bool(_sim.result["stopped"])}
 			_sim = null
 			_index += 1
 		if Time.get_ticks_usec() - t_start > time_budget_usec:
@@ -112,6 +122,7 @@ func _build_candidates() -> void:
 	_index = 0
 	_sim = null
 	_best = {}
+	_best_pred = {}
 	_best_score = -INF
 	var pos: Vector3 = ball.global_position
 	_start_progress = course.progress_at(pos)
@@ -156,11 +167,39 @@ func _build_candidates() -> void:
 			for cp: float in [0.55, 0.8, 1.0]:
 				_candidates.append({"dir": dirs[i], "power": cp, "chip": true})
 
-func _score(res: Dictionary) -> float:
+## Merkt sich den letzten Schlag als Fehlschlag, wenn der Ball wieder (fast) am Ausgangspunkt liegt
+## oder nicht vorangekommen ist - beim naechsten Mal waehlt der Bot dann etwas anderes.
+func _learn_from_last_shot() -> void:
+	if _shot_from == Vector3.INF or last_choice.is_empty():
+		return
+	var now: Vector3 = ball.global_position
+	var gained: float = course.progress_at(now) - _shot_progress
+	if now.distance_to(_shot_from) < 1.5 or gained < 0.5:
+		_failed.append({"pos": _shot_from, "dir": last_choice["dir"], "power": float(last_choice["power"]), "chip": bool(last_choice["chip"])})
+		if _failed.size() > 24:
+			_failed.pop_front()
+	_shot_from = Vector3.INF
+
+func _failure_penalty(cand: Dictionary) -> float:
+	var pos: Vector3 = ball.global_position
+	var penalty := 0.0
+	for f in _failed:
+		if (f["pos"] as Vector3).distance_to(pos) > 2.0 or bool(f["chip"]) != bool(cand["chip"]):
+			continue
+		var same_dir: float = (f["dir"] as Vector3).dot(cand["dir"])
+		var dp: float = absf(float(f["power"]) - float(cand["power"]))
+		if same_dir > 0.996 and dp < 0.1:
+			penalty += 600.0
+		elif same_dir > 0.98 and dp < 0.2:
+			penalty += 150.0
+	return penalty
+
+func _score(res: Dictionary, cand: Dictionary) -> float:
+	var penalty: float = _failure_penalty(cand)
 	if bool(res.get("holed", false)):
-		return 100000.0 - float(res.get("time", 0.0))
+		return 100000.0 - float(res.get("time", 0.0)) - penalty * 200.0
 	if bool(res.get("out", false)):
-		return -500.0
+		return -500.0 - penalty
 	var end_pos: Vector3 = res["end_pos"]
 	var total: float = course.total_length()
 	var progress: float = course.progress_at(end_pos)
@@ -169,7 +208,7 @@ func _score(res: Dictionary) -> float:
 	var score: float = -(total - progress) - 0.35 * minf(to_hole, 40.0) - 0.5 * maxf(0.0, off_path - 2.0)
 	if not bool(res.get("stopped", false)):
 		score -= 6.0
-	return score
+	return score - penalty
 
 func _shoot() -> void:
 	phase = Phase.WAIT
@@ -183,5 +222,9 @@ func _shoot() -> void:
 	var err: float = 1.0 - skill
 	dir = dir.rotated(Vector3.UP, deg_to_rad(_rng.randfn(0.0, 0.25 + 3.2 * err)))
 	power = clampf(power * (1.0 + _rng.randfn(0.0, 0.015 + 0.09 * err)), 0.05, 1.0)
+	last_choice = {"dir": _best["dir"], "power": float(_best["power"]), "chip": bool(_best["chip"])}
+	last_choice.merge(_best_pred)
+	_shot_from = ball.global_position
+	_shot_progress = course.progress_at(_shot_from)
 	if ball.shoot(dir, power, bool(_best["chip"]), Vector2.ZERO):
 		shots_taken += 1

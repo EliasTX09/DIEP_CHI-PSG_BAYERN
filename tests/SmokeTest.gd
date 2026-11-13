@@ -298,7 +298,8 @@ func _shot_case(c: Course3D, label: String, dir: Vector3, power: float, chip: bo
 	var end_pred: Vector3 = pred["end_pos"]
 	var err: float = end_real.distance_to(end_pred)
 	var travelled: float = end_real.distance_to(c.tee.origin)
-	print("[SMOKE] %s: echt %.1f m weit, Vorhersage-Abweichung %.2f m (holed=%s/%s, Zeit %.1f s)" % [label, travelled, err, ball.state == Ball3D.State.HOLED, pred["holed"], float(pred["time"])])
+	var predicted: float = end_pred.distance_to(c.tee.origin)
+	print("[SMOKE] %s: echt %.1f m, vorhergesagt %.1f m, Abweichung %.2f m (holed=%s/%s, Zeit %.1f s)" % [label, travelled, predicted, err, ball.state == Ball3D.State.HOLED, pred["holed"], float(pred["time"])])
 	check(travelled > 1.0, label + ": Ball hat sich bewegt")
 	check(err < tolerance, label + ": Vorhersage stimmt (%.2f m < %.1f m)" % [err, tolerance])
 	ball.queue_free()
@@ -330,8 +331,8 @@ func _stage_physics() -> void:
 
 # ---------------------------------------------------------------- Jolt-Nachweis
 
-## Verhaltenstest statt Klassenname: Unter Jolt erkennen Area3Ds standardmaessig KEINE statischen Koerper
-## (Projekt-Einstellung areas_detect_static_bodies = false), unter GodotPhysics schon. RigidBodies erkennen beide.
+## Kleine Physik-Probe (Area3D-Ueberlappungen). Der eigentliche Nachweis, dass wirklich Jolt rechnet, ist der
+## Physik-Fingerabdruck in der CI (tests/PhysicsProbe.gd laeuft dort einmal mit Jolt und einmal mit GodotPhysics).
 func _stage_jolt_probe() -> void:
 	print("[SMOKE] Stage: Jolt-Nachweis")
 	var root := Node3D.new()
@@ -374,9 +375,9 @@ func _stage_jolt_probe() -> void:
 			statics += 1
 		elif b is RigidBody3D:
 			rigids += 1
-	print("[SMOKE] Area3D sieht %d RigidBody, %d StaticBody (Jolt erwartet: 1 / 0)" % [rigids, statics])
+	print("[SMOKE] Area3D sieht %d RigidBody, %d StaticBody" % [rigids, statics])
 	check(rigids == 1, "Area3D erkennt RigidBody")
-	check(statics == 0, "Jolt-Physik ist aktiv (Area3D ignoriert statische Koerper)")
+	check(str(ProjectSettings.get_setting("physics/3d/physics_engine")) == "Jolt Physics", "Projekt ist auf Jolt-Physik eingestellt")
 	root.queue_free()
 	await _frames(2)
 
@@ -386,8 +387,8 @@ func _process_frames(n: int) -> void:
 	for i in n:
 		await get_tree().process_frame
 
-## Laesst einen Bot die Bahn spielen. Rueckgabe: {holed, strokes, time}
-func _bot_playthrough(id: String) -> Dictionary:
+## Laesst einen Bot die Bahn spielen. Rueckgabe: {holed, strokes, time, ...}; schreibt pro Schlag eine Diagnosezeile.
+func _bot_playthrough(id: String, verbose: bool) -> Dictionary:
 	var c: Course3D = CourseBuilder3D.build(id, 4242, false)
 	add_child(c)
 	await _frames(3)
@@ -398,19 +399,43 @@ func _bot_playthrough(id: String) -> Dictionary:
 	var brain := BotBrain.new(ball, c, 0.92, 777)
 	var t := 0.0
 	var space := c.get_world_3d().direct_space_state
+	var seen_shots := 0
+	var shot_from := Vector3.ZERO
+	var strokes_before := 0
+	var pending := false
 	while t < 240.0 and ball.state != Ball3D.State.HOLED and ball.strokes < Ball3D.MAX_STROKES:
 		brain.update(1.0 / 60.0)
 		if brain.wants_cpu():
 			brain.think(space)
+		if brain.shots_taken > seen_shots:
+			seen_shots = brain.shots_taken
+			shot_from = brain._shot_from
+			strokes_before = ball.strokes - 1
+			pending = true
+		elif pending and ball.state != Ball3D.State.MOVING and ball.state != Ball3D.State.OUT:
+			pending = false
+			if verbose:
+				_log_bot_shot(id, c, ball, brain, shot_from, strokes_before)
 		await get_tree().process_frame
 		t += 1.0 / 60.0
-	if ball.strokes >= Ball3D.MAX_STROKES and ball.state == Ball3D.State.MOVING:
+	if ball.state == Ball3D.State.MOVING or ball.state == Ball3D.State.OUT:
 		await _wait_ball(ball, 16.0)
+	if pending and verbose:
+		_log_bot_shot(id, c, ball, brain, shot_from, strokes_before)
 	var out := {"holed": ball.state == Ball3D.State.HOLED, "strokes": ball.strokes, "time": t, "par": c.par,
 		"progress": c.progress_at(ball.global_position), "length": c.total_length()}
 	c.queue_free()
 	await _frames(2)
 	return out
+
+func _log_bot_shot(id: String, c: Course3D, ball: Ball3D, brain: BotBrain, from: Vector3, strokes_before: int) -> void:
+	var ch: Dictionary = brain.last_choice
+	var went_out: bool = ball.strokes - strokes_before >= 2
+	var pred_end: Vector3 = ch.get("pred_end", Vector3.ZERO)
+	var pred_txt: String = "Loch" if bool(ch.get("pred_holed", false)) else ("OUT" if bool(ch.get("pred_out", false)) else "%.0f m" % c.progress_at(pred_end))
+	var real_txt: String = "Loch" if ball.state == Ball3D.State.HOLED else ("OUT bei %.0f m (%.1f/%.1f/%.1f)" % [c.progress_at(ball.out_pos), ball.out_pos.x, ball.out_pos.y, ball.out_pos.z] if went_out else "%.0f m" % c.progress_at(ball.global_position))
+	print("[SMOKE]   %s Schlag %d: ab %.0f m, %s %.0f%% -> vorhergesagt %s, echt %s" % [id, strokes_before + 1, c.progress_at(from),
+		"Chip" if bool(ch.get("chip", false)) else "Putt", float(ch.get("power", 0.0)) * 100.0, pred_txt, real_txt])
 
 func _stage_bots() -> void:
 	print("[SMOKE] Stage: Bots spielen jede Bahn")
@@ -418,7 +443,7 @@ func _stage_bots() -> void:
 	var holed := 0
 	var failed := PackedStringArray()
 	for id in Catalog.all_course_ids():
-		var r: Dictionary = await _bot_playthrough(id)
+		var r: Dictionary = await _bot_playthrough(id, true)
 		print("[SMOKE] Bot auf %s: %s nach %d Schlaegen (Par %d, %.0f s, Fortschritt %.0f/%.0f m)" % [id,
 			"EINGELOCHT" if bool(r["holed"]) else "NICHT eingelocht", int(r["strokes"]), int(r["par"]), float(r["time"]),
 			float(r["progress"]), float(r["length"])])
@@ -534,8 +559,11 @@ func _stage_input() -> void:
 	m.rig.aim_at(-m.course.tee.basis.z, true)
 	await _process_frames(20)
 	screen = m.rig.target_screen_pos()
+	print("[SMOKE] Zielen: Ball am Bildschirm %s, Viewport %s, can_aim=%s, ueber Widget=%s, offene Touches=%d, Ball-State=%d" % [screen,
+		m.get_viewport().get_visible_rect().size, m._can_aim(), m.hud.is_over_widget(screen), m._touches.size(), ball.state])
 	_touch(0, screen, true)
 	await _process_frames(2)
+	print("[SMOKE] Zielen nach Touch-Down: aiming=%s, Touches=%s" % [m._aiming, m._touches])
 	for i in 8:
 		_drag(0, screen + Vector2(0.0, 18.0 * float(i + 1)), Vector2(0.0, 18.0))
 		await _process_frames(1)
@@ -573,6 +601,29 @@ func _stage_daily() -> void:
 	print("[SMOKE] Golden Shot: ", m.result_rewards)
 	m.queue_free()
 	await _process_frames(3)
+	# Loesbarkeit: gibt es mit dem Start-Schlaeger einen Chip, der nah an der Fahne liegen bleibt?
+	for seed_value in [11, 222, 3333, GameManager.daily_seed()]:
+		var c: Course3D = CourseBuilder3D.build("daily", seed_value, false)
+		add_child(c)
+		await _frames(3)
+		var prof := _test_profile()
+		var space := c.get_world_3d().direct_space_state
+		var best := 999.0
+		var to_hole := Vector3(c.hole_pos.x - c.tee.origin.x, 0.0, c.hole_pos.z - c.tee.origin.z).normalized()
+		for a in range(-8, 9):
+			for pw in range(8, 21):
+				var res: Dictionary = ShotSim.predict_shot(c, space, c.tee.origin, to_hole.rotated(Vector3.UP, deg_to_rad(float(a) * 2.0)),
+					float(pw) / 20.0, true, Vector2.ZERO, prof, 12.0, Vector3.UP, 1000)
+				if bool(res["holed"]):
+					best = 0.0
+				elif not bool(res["out"]):
+					var e: Vector3 = res["end_pos"]
+					if absf(e.y - c.hole_pos.y) < 1.0:
+						best = minf(best, Vector2(e.x - c.hole_pos.x, e.z - c.hole_pos.z).length())
+		print("[SMOKE] Golden Shot Seed %d (%s): bester Chip landet %.1f m vom Loch" % [seed_value, c.world, best])
+		check(best < 4.0, "Golden Shot ist mit dem Start-Schlaeger erreichbar (Seed %d: %.1f m)" % [seed_value, best])
+		c.queue_free()
+		await _frames(2)
 
 # ---------------------------------------------------------------- Netzwerk (nur Offline-Pfade)
 

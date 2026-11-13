@@ -122,6 +122,24 @@ jobs:
             exit 1
           fi
 
+      - name: Nachweis, dass wirklich Jolt rechnet (Physik-Fingerabdruck)
+        run: |
+          set -e
+          probe() { timeout 120 godot --headless --fixed-fps 60 --script res://tests/PhysicsProbe.gd 2>/dev/null | grep "PHYSICS FINGERPRINT"; }
+          DEFAULT="$(probe)"
+          printf '[physics]\n\n3d/physics_engine="GodotPhysics3D"\n' > override.cfg
+          GODOT_PHYSICS="$(probe)"
+          printf '[physics]\n\n3d/physics_engine="Jolt Physics"\n' > override.cfg
+          JOLT="$(probe)"
+          rm -f override.cfg
+          echo "Projekt-Einstellung: $DEFAULT"
+          echo "GodotPhysics3D:      $GODOT_PHYSICS"
+          echo "Jolt Physics:        $JOLT"
+          test -n "$DEFAULT"
+          if [ "$DEFAULT" != "$JOLT" ]; then echo "::error::Projekt rechnet nicht mit Jolt"; exit 1; fi
+          if [ "$DEFAULT" = "$GODOT_PHYSICS" ]; then echo "::error::Jolt und GodotPhysics nicht unterscheidbar - Einstellung wirkt nicht"; exit 1; fi
+          echo "OK: Die Projekt-Einstellung nutzt Jolt (Ergebnis identisch mit Jolt, verschieden von GodotPhysics)."
+
       - name: Headless-Smoke-Test (Logik, Physik, Bahnen, Bots, Menues)
         run: |
           set -o pipefail

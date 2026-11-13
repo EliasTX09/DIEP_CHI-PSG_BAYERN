@@ -55,7 +55,8 @@ func begin(course: Course3D, space: PhysicsDirectSpaceState3D, start: Vector3, v
 	_chip = bool(opts.get("chip", false))
 	var prof: Dictionary = opts.get("profile", {})
 	_sample = maxi(1, int(opts.get("sample", 2)))
-	var mask: int = 1 if bool(opts.get("ignore_moving", false)) else (1 | 4)
+	# Welt (1) + fahrende Plattformen (8) immer; bewegliche Hindernisse (4) nur, wenn gewuenscht
+	var mask: int = (1 | 8) if bool(opts.get("ignore_moving", false)) else (1 | 4 | 8)
 	_roll_bonus = 1.0 - float(prof.get("roll_bonus", 0.0))
 	_e_floor = Ball3D.BOUNCE_FLOOR + float(prof.get("bounce_bonus", 0.0))
 	_e_wall = minf(0.95, Ball3D.BOUNCE_WALL + float(prof.get("bounce_bonus", 0.0)))
