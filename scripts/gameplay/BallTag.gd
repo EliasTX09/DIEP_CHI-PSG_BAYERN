@@ -66,7 +66,7 @@ func _stack_level() -> int:
 			break
 		if other.target == null or not is_instance_valid(other.target) or not other.target.visible:
 			continue
-		if other.target.global_position.distance_to(my_pos) < 1.4:
+		if other.target.global_position.distance_to(my_pos) < 3.0:
 			level += 1
 	return level
 
