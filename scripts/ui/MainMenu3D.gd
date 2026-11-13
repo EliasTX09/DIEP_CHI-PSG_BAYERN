@@ -284,7 +284,7 @@ func refresh_showcase() -> void:
 		_trail_node = null
 	if _club_node != null:
 		_club_node.queue_free()
-	_ball_node = BallFX.make_ball(GameManager.equipped("ball"), 0.42, GameManager.avatar_color())
+	_ball_node = BallFX.make_ball(GameManager.equipped("ball"), 0.36, GameManager.avatar_color())
 	_ball_pivot.add_child(_ball_node)
 	var trail := BallFX.make_trail(GameManager.equipped("trail"))
 	if trail != null:
@@ -380,14 +380,16 @@ func _build_ui() -> void:
 	_build_showcase_caption(frame)
 	_build_invite_bar(frame)
 	_status_label = UIKit.label("", 16, UIKit.TEXT_DIM)
-	_status_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	# Verbindungsstatus klein unter der Waehrungsleiste
+	_status_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_status_label.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_status_label.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_status_label.offset_left = -360.0
-	_status_label.offset_top = -24.0
+	_status_label.offset_left = -620.0
+	_status_label.offset_top = 70.0
 	_status_label.offset_right = 0.0
-	_status_label.offset_bottom = 0.0
+	_status_label.offset_bottom = 92.0
+	_status_label.add_theme_constant_override("outline_size", 6)
+	_status_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
 	frame.add_child(_status_label)
 
 func _build_top_bar(frame: Control) -> void:
@@ -477,13 +479,13 @@ func _build_tabs(frame: Control) -> void:
 func _build_play_column(frame: Control) -> void:
 	var col := UIKit.vbox(14)
 	col.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	col.offset_left = -440.0
+	col.offset_left = -450.0
 	col.offset_top = 88.0
 	col.offset_bottom = -150.0
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.add_child(col)
-	var title := UIKit.label("GOLF BATTLE 3D", 58, UIKit.GOLD, true)
+	var title := UIKit.label("GOLF BATTLE 3D", 50, UIKit.GOLD, true)
 	title.add_theme_constant_override("outline_size", 14)
 	title.add_theme_color_override("font_outline_color", Color(0.25, 0.08, 0.0))
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
