@@ -1,0 +1,36 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="Fairway Clash"
+config/description="Kompetitives Arcade-Minigolf fuer Android"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+Cfg="*res://scripts/core/BackendConfig.gd"
+Supa="*res://scripts/core/SupabaseClient.gd"
+Net="*res://scripts/core/NetworkManager.gd"
+Progression="*res://scripts/core/Progression.gd"
+GameManager="*res://scripts/core/GameManager.gd"
+
+[display]
+
+window/size/viewport_width=720
+window/size/viewport_height=1280
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

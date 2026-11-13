@@ -1,0 +1,104 @@
+name: Build Android APK
+
+on:
+  push:
+    paths:
+      - "minigolf/**"
+      - ".github/workflows/build_android.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # fuer das Anhaengen der APK an Releases
+
+env:
+  GODOT_VERSION: "4.3"
+  PROJECT_DIR: minigolf
+
+jobs:
+  export-android:
+    name: Export Android (debug APK)
+    runs-on: ubuntu-22.04
+    container:
+      image: barichello/godot-ci:4.3   # Godot 4.3 + Export-Templates + Android SDK + JDK
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export-Templates verlinken
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates ~/.config/godot
+          ln -sfn /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable \
+                  ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          ls ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable | head
+
+      - name: Backend-Zugangsdaten schreiben (optional, aus Secrets)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            printf '[supabase]\nurl="%s"\nanon_key="%s"\n' "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > ${PROJECT_DIR}/config/backend.cfg
+            echo "backend.cfg aus Secrets erzeugt."
+          else
+            echo "Keine Secrets gesetzt -> Offline-Build (Platzhalter-Config)."
+          fi
+
+      - name: Android-SDK, JDK und Debug-Keystore einrichten
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          for d in "$SDK" /usr/lib/android-sdk /opt/android-sdk /root/android-sdk /usr/local/lib/android/sdk; do
+            if [ -n "$d" ] && [ -d "$d/build-tools" ]; then SDK="$d"; break; fi
+          done
+          JDK="${JAVA_HOME:-$(dirname "$(dirname "$(readlink -f "$(which javac)")")")}"
+          echo "ANDROID SDK: $SDK"; echo "JDK: $JDK"
+          ls "$SDK" "$SDK/build-tools" || true
+
+          keytool -genkeypair -v -keystore "$HOME/debug.keystore" -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US" -deststoretype pkcs12
+
+          for f in editor_settings-4.tres editor_settings-4.3.tres; do
+            cat > ~/.config/godot/$f <<EOS
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "$SDK"
+          export/android/java_sdk_path = "$JDK"
+          export/android/debug_keystore = "$HOME/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOS
+          done
+          {
+            echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/debug.keystore"
+            echo "GODOT_ANDROID_KEYSTORE_DEBUG_USER=androiddebugkey"
+            echo "GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD=android"
+          } >> "$GITHUB_ENV"
+
+      - name: Projekt importieren (Skript-Klassen & Ressourcen)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          godot --headless --verbose --editor --quit || true
+          godot --headless --verbose --import || true
+
+      - name: APK exportieren
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          mkdir -p build
+          godot --headless --verbose --export-debug "Android" build/FairwayClash.apk
+          ls -la build
+
+      - name: APK als Artifact hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: FairwayClash-debug-apk
+          path: ${{ env.PROJECT_DIR }}/build/FairwayClash.apk
+          if-no-files-found: error
+
+      - name: APK an Release anhaengen
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PROJECT_DIR }}/build/FairwayClash.apk

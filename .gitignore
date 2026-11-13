@@ -1,0 +1,8 @@
+# Godot
+minigolf/.godot/
+minigolf/build/
+*.translation
+# Secrets - NIE committen
+minigolf/config/backend.cfg
+*.keystore
+*.jks
