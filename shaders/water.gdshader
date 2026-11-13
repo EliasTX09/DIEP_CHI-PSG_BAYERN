@@ -39,10 +39,13 @@ void fragment() {
 	float hx = waves(p + vec2(e, 0.0), t);
 	float hz = waves(p + vec2(0.0, e), t);
 	vec3 n = normalize(vec3(-(hx - h0) / e * wave_height * 2.0, 1.0, -(hz - h0) / e * wave_height * 2.0));
+	float cam_dist = length(wpos - CAMERA_POSITION_WORLD);
+	float detail = 1.0 - smoothstep(35.0, 130.0, cam_dist);
+	n = normalize(mix(vec3(0.0, 1.0, 0.0), n, 0.25 + 0.75 * detail));
 	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+	float foam = smoothstep(0.72, 0.95, noise(p * 3.1 + vec2(t * 0.25, -t * 0.2)) * 0.65 + h0 * 0.35) * detail;
+	vec3 col = mix(deep, shallow, clamp(h0 * 0.5 + 0.5, 0.0, 1.0) * (0.35 + 0.65 * detail) + 0.3 * (1.0 - detail));
 	float fres = pow(1.0 - clamp(dot(normalize(VIEW), NORMAL), 0.0, 1.0), 3.0);
-	float foam = smoothstep(0.72, 0.95, noise(p * 3.1 + vec2(t * 0.25, -t * 0.2)) * 0.65 + h0 * 0.35);
-	vec3 col = mix(deep, shallow, clamp(h0 * 0.5 + 0.5, 0.0, 1.0));
 	ALBEDO = mix(col, foam_color, foam * 0.55);
 	ROUGHNESS = 0.08;
 	SPECULAR = 0.7;

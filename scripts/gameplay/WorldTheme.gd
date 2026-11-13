@@ -94,12 +94,12 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 	var env := Environment.new()
 	var sky_params := {}
 	var sun_color := Color(1.0, 0.96, 0.86)
-	var sun_energy := 1.25
+	var sun_energy := 1.45
 	var sun_rot := Vector3(-48.0, 35.0, 0.0)
 	var ambient := Color(0.55, 0.62, 0.7)
-	var ambient_energy := 0.9
+	var ambient_energy := 0.7
 	var fog_color := Color(0.7, 0.82, 0.92)
-	var fog_density := 0.0035
+	var fog_density := 0.0011
 	var glow_intensity := 0.55
 	match id:
 		"volcano":
@@ -111,7 +111,7 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			ambient = Color(0.6, 0.35, 0.28)
 			ambient_energy = 0.8
 			fog_color = Color(0.5, 0.18, 0.08)
-			fog_density = 0.006
+			fog_density = 0.0022
 			glow_intensity = 0.9
 		"neon":
 			sky_params = {"top_color": Color(0.01, 0.01, 0.06), "horizon_color": Color(0.3, 0.05, 0.4), "bottom_color": Color(0.02, 0.02, 0.08),
@@ -122,7 +122,7 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			ambient = Color(0.35, 0.3, 0.55)
 			ambient_energy = 1.0
 			fog_color = Color(0.12, 0.03, 0.2)
-			fog_density = 0.004
+			fog_density = 0.0014
 			glow_intensity = 1.2
 		"pirate":
 			sky_params = {"top_color": Color(0.12, 0.35, 0.6), "horizon_color": Color(1.0, 0.68, 0.4), "bottom_color": Color(0.15, 0.3, 0.42),
@@ -131,8 +131,8 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			sun_energy = 1.3
 			sun_rot = Vector3(-28.0, 60.0, 0.0)
 			ambient = Color(0.62, 0.58, 0.6)
-			fog_color = Color(0.95, 0.72, 0.52)
-			fog_density = 0.003
+			fog_color = Color(0.85, 0.75, 0.68)
+			fog_density = 0.0009
 		_:
 			sky_params = {"top_color": Color(0.14, 0.42, 0.88), "horizon_color": Color(0.66, 0.84, 0.97), "bottom_color": Color(0.3, 0.5, 0.6),
 				"cloud_amount": 0.45}
@@ -353,7 +353,7 @@ func _clouds(decor: Node3D, center: Vector3, extent: float, count: int, color: C
 
 func _emerald_decor(decor: Node3D, course: Course3D, center: Vector3, hazard_y: float, extent: float) -> void:
 	var ground := Mat.shader("terrain", {"low_color": Color(0.86, 0.8, 0.55), "mid_color": Color(0.27, 0.62, 0.3),
-		"high_color": Color(0.5, 0.47, 0.42), "mid_height": 0.25, "high_height": 0.92})
+		"high_color": Color(0.5, 0.47, 0.42), "mid_height": 0.44, "high_height": 5.0, "slope_strength": 0.0})
 	# Inseln als (x, z, Radius, Hoehe)
 	var islands: Array[Vector4] = []
 	for p in _scatter(course, center, extent * 0.8, 7, 16.0):
@@ -494,7 +494,7 @@ func _neon_decor(decor: Node3D, course: Course3D, center: Vector3, hazard_y: flo
 
 func _pirate_decor(decor: Node3D, course: Course3D, center: Vector3, hazard_y: float, extent: float) -> void:
 	var sand := Mat.shader("terrain", {"low_color": Color(0.93, 0.85, 0.6), "mid_color": Color(0.9, 0.8, 0.52),
-		"high_color": Color(0.35, 0.6, 0.3), "mid_height": 0.2, "high_height": 0.85})
+		"high_color": Color(0.35, 0.6, 0.3), "mid_height": 0.3, "high_height": 0.9, "slope_strength": 0.0})
 	var palm_spots := PackedVector3Array()
 	for p in _scatter(course, center, extent * 0.8, 6, 15.0):
 		var r: float = rng.randf_range(7.0, 14.0)

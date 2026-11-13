@@ -8,6 +8,7 @@ uniform vec3 high_color : source_color = vec3(0.45, 0.42, 0.4);
 uniform float mid_height = 0.8;
 uniform float high_height = 6.0;
 uniform float emission_strength = 0.0;
+uniform float slope_strength = 1.0;
 
 varying float height;
 varying float slope;
@@ -20,7 +21,7 @@ void vertex() {
 void fragment() {
 	vec3 col = mix(low_color, mid_color, smoothstep(mid_height * 0.4, mid_height, height));
 	col = mix(col, high_color, smoothstep(high_height * 0.7, high_height, height));
-	col = mix(col, high_color, smoothstep(0.35, 0.7, slope));
+	col = mix(col, high_color, smoothstep(0.35, 0.7, slope) * slope_strength);
 	ALBEDO = col;
 	ROUGHNESS = 0.95;
 	EMISSION = col * emission_strength;

@@ -15,8 +15,14 @@ func _ready() -> void:
 	_stage_catalog()
 	_stage_game_manager()
 	_stage_sound()
+	await _stage_jolt_probe()
 	await _stage_courses()
 	await _stage_physics()
+	await _stage_bots()
+	await _stage_match()
+	await _stage_input()
+	await _stage_daily()
+	_stage_network_offline()
 	_finish()
 
 func check(cond: bool, label: String) -> void:
@@ -41,13 +47,8 @@ func _stage_environment() -> void:
 	var v := Engine.get_version_info()
 	print("[SMOKE] Godot ", v["string"])
 	print("[SMOKE] physics_engine (Setting) = ", ProjectSettings.get_setting("physics/3d/physics_engine"))
-	var ps_obj: Object = Engine.get_singleton("PhysicsServer3D")
-	var is_jolt: bool = ps_obj != null and ps_obj.is_class("JoltPhysicsServer3D")
-	var is_godot_physics: bool = ps_obj != null and ps_obj.is_class("GodotPhysicsServer3D")
-	print("[SMOKE] PhysicsServer3D: Jolt=", is_jolt, " GodotPhysics=", is_godot_physics)
 	print("[SMOKE] rendering_method = ", ProjectSettings.get_setting("rendering/renderer/rendering_method"))
 	check(int(v["major"]) == 4 and int(v["minor"]) >= 5, "Godot >= 4.5")
-	check(is_jolt and not is_godot_physics, "Jolt-Physik ist aktiv")
 	check(str(ProjectSettings.get_setting("rendering/renderer/rendering_method")) == "mobile", "Mobile-Renderer konfiguriert")
 	check(int(ProjectSettings.get_setting("display/window/handheld/orientation")) == DisplayServer.SCREEN_SENSOR_LANDSCAPE,
 		"Orientierung = Sensor-Querformat")
@@ -326,3 +327,262 @@ func _stage_physics() -> void:
 	check(ball.global_position.distance_to(c.tee.origin) < 0.5, "Out: Respawn an letzter sicherer Position")
 	c.queue_free()
 	await _frames(2)
+
+# ---------------------------------------------------------------- Jolt-Nachweis
+
+## Verhaltenstest statt Klassenname: Unter Jolt erkennen Area3Ds standardmaessig KEINE statischen Koerper
+## (Projekt-Einstellung areas_detect_static_bodies = false), unter GodotPhysics schon. RigidBodies erkennen beide.
+func _stage_jolt_probe() -> void:
+	print("[SMOKE] Stage: Jolt-Nachweis")
+	var root := Node3D.new()
+	root.position = Vector3(0.0, 500.0, 0.0)
+	add_child(root)
+	var area := Area3D.new()
+	area.collision_layer = 0
+	area.collision_mask = 1 << 10
+	var acs := CollisionShape3D.new()
+	var ash := SphereShape3D.new()
+	ash.radius = 1.0
+	acs.shape = ash
+	area.add_child(acs)
+	root.add_child(area)
+	var sb := StaticBody3D.new()
+	sb.collision_layer = 1 << 10
+	sb.collision_mask = 0
+	var scs := CollisionShape3D.new()
+	var sbox := BoxShape3D.new()
+	sbox.size = Vector3(0.5, 0.5, 0.5)
+	scs.shape = sbox
+	sb.add_child(scs)
+	root.add_child(sb)
+	var rb := RigidBody3D.new()
+	rb.collision_layer = 1 << 10
+	rb.collision_mask = 0
+	rb.gravity_scale = 0.0
+	var rcs := CollisionShape3D.new()
+	var rsh := SphereShape3D.new()
+	rsh.radius = 0.2
+	rcs.shape = rsh
+	rb.add_child(rcs)
+	rb.position = Vector3(0.4, 0.0, 0.0)
+	root.add_child(rb)
+	await _frames(6)
+	var statics := 0
+	var rigids := 0
+	for b in area.get_overlapping_bodies():
+		if b is StaticBody3D:
+			statics += 1
+		elif b is RigidBody3D:
+			rigids += 1
+	print("[SMOKE] Area3D sieht %d RigidBody, %d StaticBody (Jolt erwartet: 1 / 0)" % [rigids, statics])
+	check(rigids == 1, "Area3D erkennt RigidBody")
+	check(statics == 0, "Jolt-Physik ist aktiv (Area3D ignoriert statische Koerper)")
+	root.queue_free()
+	await _frames(2)
+
+# ---------------------------------------------------------------- Bots spielen alle Bahnen
+
+func _process_frames(n: int) -> void:
+	for i in n:
+		await get_tree().process_frame
+
+## Laesst einen Bot die Bahn spielen. Rueckgabe: {holed, strokes, time}
+func _bot_playthrough(id: String) -> Dictionary:
+	var c: Course3D = CourseBuilder3D.build(id, 4242, false)
+	add_child(c)
+	await _frames(3)
+	var ball := _new_ball(c)
+	ball.place_on_tee(c.tee)
+	await _frames(3)
+	ball.unfreeze()
+	var brain := BotBrain.new(ball, c, 0.92, 777)
+	var t := 0.0
+	var space := c.get_world_3d().direct_space_state
+	while t < 240.0 and ball.state != Ball3D.State.HOLED and ball.strokes < Ball3D.MAX_STROKES:
+		brain.update(1.0 / 60.0)
+		if brain.wants_cpu():
+			brain.think(space)
+		await get_tree().process_frame
+		t += 1.0 / 60.0
+	if ball.strokes >= Ball3D.MAX_STROKES and ball.state == Ball3D.State.MOVING:
+		await _wait_ball(ball, 16.0)
+	var out := {"holed": ball.state == Ball3D.State.HOLED, "strokes": ball.strokes, "time": t, "par": c.par,
+		"progress": c.progress_at(ball.global_position), "length": c.total_length()}
+	c.queue_free()
+	await _frames(2)
+	return out
+
+func _stage_bots() -> void:
+	print("[SMOKE] Stage: Bots spielen jede Bahn")
+	BotBrain.time_budget_usec = 400000
+	var holed := 0
+	var failed := PackedStringArray()
+	for id in Catalog.all_course_ids():
+		var r: Dictionary = await _bot_playthrough(id)
+		print("[SMOKE] Bot auf %s: %s nach %d Schlaegen (Par %d, %.0f s, Fortschritt %.0f/%.0f m)" % [id,
+			"EINGELOCHT" if bool(r["holed"]) else "NICHT eingelocht", int(r["strokes"]), int(r["par"]), float(r["time"]),
+			float(r["progress"]), float(r["length"])])
+		if bool(r["holed"]):
+			holed += 1
+		else:
+			failed.append(id)
+	print("[SMOKE] Bots: %d von 15 Bahnen eingelocht; offen: %s" % [holed, ", ".join(failed)])
+	check(holed == 15, "Bot locht auf allen 15 Bahnen ein (offen: %s)" % ", ".join(failed))
+
+# ---------------------------------------------------------------- Komplette Partie (Match3D + HUD + Bots)
+
+func _run_match(config: Dictionary, auto: bool, max_seconds: float) -> Match3D:
+	GameManager.match_config = config
+	var scene: PackedScene = load("res://scenes/Game.tscn")
+	var m := scene.instantiate() as Match3D
+	m.auto_play = auto
+	add_child(m)
+	var t := 0.0
+	while auto and not m.finished and t < max_seconds:
+		await get_tree().process_frame
+		t += 1.0 / 60.0
+	return m
+
+func _stage_match() -> void:
+	print("[SMOKE] Stage: komplette Partie")
+	GameManager.reset_progress()
+	var cfg: Dictionary = GameManager.make_bot_match("emerald", 3, 2)
+	cfg["courses"] = ["e1", "n1"]
+	cfg["rounds"] = 2
+	var trophies_before := GameManager.trophies()
+	var m: Match3D = await _run_match(cfg, true, 420.0)
+	check(m.finished, "Partie ueber 2 Bahnen laeuft bis zum Ende")
+	check(m.final_ranking.size() == 3, "Endrangliste mit 3 Spielern")
+	check(m.result_rewards.has("coins") and int(m.result_rewards["coins"]) > 0, "Match-Belohnung (Coins) vergeben")
+	check(GameManager.trophies() != trophies_before or int(m.result_rewards.get("trophies", 0)) == 0, "Trophaeen verbucht")
+	var totals := PackedStringArray()
+	for row in m.final_ranking:
+		totals.append("%s=%d" % [str(row["name"]), int(row["total"])])
+	print("[SMOKE] Endstand: ", ", ".join(totals), " | Belohnung: ", m.result_rewards)
+	check(m.hud.has_overlay(), "Ergebnis-Screen wird angezeigt")
+	# HUD-Funktionen einmal durchlaufen
+	m.hud.popup_style("AIR TIME! +60")
+	m.hud.toast("Test")
+	m.hud.set_status("REPLAY")
+	m.hud.set_power(0.7, true)
+	m.hud.set_chip_mode(true)
+	m.hud.show_banner("BIRDIE!", "2 Schlaege")
+	m.hud.hide_overlay()
+	m.hud.confirm_exit()
+	check(m.hud.has_overlay(), "Verlassen-Dialog oeffnet")
+	m.hud.hide_overlay()
+	m.hud.show_daily_result(1.5, false, {"coins": 200, "gems": 4, "label": "Ganz nah dran!"})
+	await _process_frames(3)
+	m.queue_free()
+	await _process_frames(3)
+
+# ---------------------------------------------------------------- Touch-Eingabe (Zielen, Drehen, Pinch)
+
+func _touch(index: int, pos: Vector2, pressed: bool) -> void:
+	var ev := InputEventScreenTouch.new()
+	ev.index = index
+	ev.position = pos
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+
+func _drag(index: int, pos: Vector2, rel: Vector2) -> void:
+	var ev := InputEventScreenDrag.new()
+	ev.index = index
+	ev.position = pos
+	ev.relative = rel
+	Input.parse_input_event(ev)
+
+func _stage_input() -> void:
+	print("[SMOKE] Stage: Touch-Eingabe")
+	var cfg: Dictionary = GameManager.make_bot_match("emerald", 3, 1)
+	cfg["courses"] = ["e1"]
+	var m: Match3D = await _run_match(cfg, false, 0.0)
+	var t := 0.0
+	while m.phase != Match3D.Phase.PLAY and t < 10.0:
+		await get_tree().process_frame
+		t += 1.0 / 60.0
+	check(m.phase == Match3D.Phase.PLAY, "Bahn startet nach dem Intro")
+	await _process_frames(40)
+	var ball: Ball3D = m.local.ball
+	var screen: Vector2 = m.rig.target_screen_pos()
+	check(screen != Vector2.INF, "Ball ist im Bild")
+	# 1) Kamera drehen: Finger weit weg vom Ball ziehen
+	var yaw_before: float = m.rig.yaw
+	var far: Vector2 = Vector2(120.0, 360.0)
+	_touch(0, far, true)
+	await _process_frames(2)
+	for i in 6:
+		_drag(0, far + Vector2(20.0 * float(i + 1), 0.0), Vector2(20.0, 0.0))
+		await _process_frames(1)
+	_touch(0, far + Vector2(120.0, 0.0), false)
+	await _process_frames(2)
+	check(absf(m.rig.yaw - yaw_before) > 0.1, "Ein-Finger-Wischen dreht die Kamera")
+	check(ball.strokes == 0, "Kamera-Geste loest keinen Schlag aus")
+	# 2) Pinch-to-Zoom mit zwei Fingern
+	var dist_before: float = m.rig.distance
+	_touch(0, Vector2(300, 300), true)
+	_touch(1, Vector2(400, 300), true)
+	await _process_frames(2)
+	for i in 6:
+		_drag(1, Vector2(400.0 + 30.0 * float(i + 1), 300.0), Vector2(30.0, 0.0))
+		await _process_frames(1)
+	_touch(1, Vector2(580, 300), false)
+	_touch(0, Vector2(300, 300), false)
+	await _process_frames(2)
+	check(m.rig.distance < dist_before - 0.5, "Pinch (Finger auseinander) zoomt heran")
+	# 3) Zielen: am Ball ziehen und loslassen
+	m.rig.aim_at(-m.course.tee.basis.z, true)
+	await _process_frames(20)
+	screen = m.rig.target_screen_pos()
+	_touch(0, screen, true)
+	await _process_frames(2)
+	for i in 8:
+		_drag(0, screen + Vector2(0.0, 18.0 * float(i + 1)), Vector2(0.0, 18.0))
+		await _process_frames(1)
+	check(m._aiming and m._aim_power > 0.3, "Ziehen am Ball spannt den Schlag (Kraft %.2f)" % m._aim_power)
+	check(m._dots.visible and m._arrow.visible, "Kraftpfeil und Flugbahn-Vorschau sichtbar")
+	_touch(0, screen + Vector2(0.0, 144.0), false)
+	await _process_frames(4)
+	check(ball.strokes == 1 and ball.state == Ball3D.State.MOVING, "Loslassen fuehrt den Schlag aus")
+	await _wait_ball(ball, 16.0)
+	var fwd: Vector3 = -m.course.tee.basis.z
+	var moved: Vector3 = ball.global_position - m.course.tee.origin
+	check(moved.dot(fwd) > 3.0, "Slingshot: nach unten ziehen schiesst nach vorn (%.1f m)" % moved.dot(fwd))
+	# 4) Vogelperspektive und Emote
+	m.hud._on_top_pressed()
+	await _process_frames(5)
+	check(m.rig.is_top(), "Vogelperspektive-Button schaltet um")
+	m.hud._on_top_pressed()
+	m.hud._on_emote("laugh")
+	m.hud._on_emote("nice")
+	await _process_frames(5)
+	m.queue_free()
+	await _process_frames(3)
+
+# ---------------------------------------------------------------- Daily Challenge
+
+func _stage_daily() -> void:
+	print("[SMOKE] Stage: Golden Shot")
+	GameManager.reset_progress()
+	var cfg: Dictionary = GameManager.make_match_config("daily", "emerald", 1, [GameManager.local_player_entry()], GameManager.daily_seed(), false)
+	check((cfg["courses"] as Array) == ["daily"], "Daily-Konfiguration")
+	var m: Match3D = await _run_match(cfg, true, 120.0)
+	check(m.finished, "Golden Shot endet nach einem Schlag")
+	check(not GameManager.daily_available(), "Daily als gespielt markiert")
+	check(int(m.result_rewards.get("coins", 0)) > 0, "Daily-Belohnung vergeben")
+	print("[SMOKE] Golden Shot: ", m.result_rewards)
+	m.queue_free()
+	await _process_frames(3)
+
+# ---------------------------------------------------------------- Netzwerk (nur Offline-Pfade)
+
+func _stage_network_offline() -> void:
+	print("[SMOKE] Stage: NetworkManager (offline)")
+	check(not NetworkManager.is_configured(), "Platzhalter-Config gilt als 'nicht konfiguriert'")
+	check(not NetworkManager.is_online() and NetworkManager.local_id() == "local", "Offline: lokale ID")
+	check(NetworkManager.is_host(), "Ohne Lobby gilt der Client als Host")
+	NetworkManager.send_game_event("pos", {"id": "x"})
+	NetworkManager.refresh_leaderboard()
+	check(NetworkManager.leaderboard.size() > 5, "Offline-Rangliste gefuellt")
+	NetworkManager.refresh_friends()
+	check(NetworkManager.friends.is_empty(), "Offline: keine Freunde")

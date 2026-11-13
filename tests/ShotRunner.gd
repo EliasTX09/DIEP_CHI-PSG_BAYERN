@@ -32,6 +32,36 @@ func _run() -> void:
 			await _shot_course(id)
 	if _filter.has("daily"):
 		await _shot_course("daily")
+	if _wanted("game"):
+		await _shot_game()
+
+## Spielszene mit HUD: einmal normal, einmal waehrend des Zielens (Kraftpfeil + Vorschau).
+func _shot_game() -> void:
+	var cfg: Dictionary = GameManager.make_bot_match("emerald", 3, 3)
+	cfg["courses"] = ["e2"]
+	GameManager.match_config = cfg
+	var scene: PackedScene = load("res://scenes/Game.tscn")
+	var m := scene.instantiate() as Match3D
+	add_child(m)
+	for i in 400:
+		await get_tree().process_frame
+		if m.phase == Match3D.Phase.PLAY and m.phase_time > 1.2:
+			break
+	await _capture("game_hud")
+	var screen: Vector2 = m.rig.target_screen_pos()
+	if screen != Vector2.INF:
+		m._touch_down(0, screen)
+		m._touch_move(0, screen + Vector2(30.0, 150.0), Vector2(30.0, 150.0))
+		for i in 6:
+			await get_tree().process_frame
+		await _capture("game_aim")
+		m._cancel_aim()
+	m.rig.set_top(true)
+	for i in 50:
+		await get_tree().process_frame
+	await _capture("game_top")
+	m.queue_free()
+	await get_tree().process_frame
 
 func _course_camera(c: Course3D) -> Camera3D:
 	var cam := Camera3D.new()
