@@ -23,6 +23,7 @@ func _ready() -> void:
 	await _stage_match()
 	await _stage_input()
 	await _stage_daily()
+	_stage_battle_pass()
 	_stage_network_offline()
 	_stage_auth_offline()
 	await _stage_auth_mock()
@@ -715,6 +716,78 @@ func _stage_network_offline() -> void:
 	check(NetworkManager.leaderboard.size() > 5, "Offline-Rangliste gefuellt")
 	NetworkManager.refresh_friends()
 	check(NetworkManager.friends.is_empty(), "Offline: keine Freunde")
+
+# ---------------------------------------------------------------- Battle Pass
+
+func _stage_battle_pass() -> void:
+	print("[SMOKE] Stage: Battle Pass")
+	GameManager.reset_progress()
+	check(Catalog.PASS_TIERS.size() == 30, "Pass hat 30 Stufen")
+	check(Catalog.pass_season_at(float(Catalog.PASS_EPOCH_UNIX)) == 1, "Saison 1 beginnt am Stichtag")
+	check(Catalog.pass_season_at(float(Catalog.PASS_EPOCH_UNIX) + 28.0 * 86400.0) == 2, "Nach 28 Tagen Saison 2")
+	check(Catalog.pass_season_at(float(Catalog.PASS_EPOCH_UNIX) + 27.9 * 86400.0) == 1, "Tag 27 noch Saison 1")
+	for i in Catalog.PASS_TIERS.size():
+		var e: Dictionary = Catalog.PASS_TIERS[i]
+		if e.has("item"):
+			var it: Array = e["item"]
+			check(Catalog.item_table(str(it[0])).has(str(it[1])), "Pass-Gegenstand existiert: %s" % str(it[1]))
+		if e.has("chest"):
+			check(Catalog.CHESTS.has(str(e["chest"])), "Pass-Truhe existiert: %s" % str(e["chest"]))
+		check(Catalog.pass_reward_text(i) != "", "Pass-Stufe %d hat einen Text" % (i + 1))
+	check(not GameManager.item_buyable("frame", "summit"), "Pass-Rahmen ist nicht kaufbar")
+	check(GameManager.pass_xp() == 0 and GameManager.pass_tier() == 0, "Pass startet bei 0")
+	check(GameManager.pass_season() >= 1, "Laufende Saison bestimmt")
+	check(GameManager.pass_seconds_left() > 0.0 and GameManager.pass_seconds_left() <= 28.0 * 86400.0, "Saison-Restzeit plausibel")
+	GameManager.add_pass_xp(Catalog.PASS_XP_PER_TIER - 1)
+	check(GameManager.pass_tier() == 0 and GameManager.pass_claimable().is_empty(), "Knapp unter Stufe 1: nichts abholbar")
+	check(GameManager.add_pass_xp(1) == 1, "Stufe 1 erreicht")
+	check(GameManager.pass_claimable() == [0], "Stufe 1 abholbar")
+	var c0: int = GameManager.coins()
+	var r0: Dictionary = GameManager.pass_claim(0)
+	check(int(r0.get("coins", 0)) == 100 and GameManager.coins() == c0 + 100, "Stufe 1 gibt 100 Coins")
+	check(GameManager.pass_claim(0).is_empty(), "Stufe nur einmal abholbar")
+	check(GameManager.pass_claim(5).is_empty(), "Nicht erreichte Stufe nicht abholbar")
+	# Truhe ohne freien Slot bleibt offen
+	GameManager.add_pass_xp(Catalog.PASS_XP_PER_TIER)
+	for i in Catalog.CHEST_SLOTS:
+		GameManager.add_chest("wood")
+	check(GameManager.pass_claim(1).is_empty() and not GameManager.pass_claimed(1), "Pass-Truhe wartet auf freien Slot")
+	GameManager.data["chests"] = [null, null, null, null]
+	check(str(GameManager.pass_claim(1).get("chest", "")) == "wood" and GameManager.chest_state(0) != "empty", "Pass-Truhe landet im Slot")
+	# Doppelter Gegenstand wird zu Coins
+	GameManager.add_pass_xp(Catalog.pass_max_xp())
+	check(GameManager.pass_tier() == Catalog.PASS_TIERS.size() and GameManager.pass_tier_progress() == 1.0, "Pass-XP gedeckelt, alle Stufen")
+	var r4: Dictionary = GameManager.pass_claim(4)
+	check(GameManager.owns("trail", "fire") and r4.has("items"), "Pass schaltet Feuer-Trail frei")
+	GameManager.grant({"items": [{"kind": "trail", "id": "ice"}]})
+	var r18: Dictionary = GameManager.pass_claim(18)
+	check(not r18.has("items") and int(r18.get("coins", 0)) == Catalog.PASS_DUPLICATE_COINS, "Doppelter Pass-Gegenstand wird zu Coins")
+	var r9: Dictionary = GameManager.pass_claim(9)
+	check(r9.has("items") and GameManager.owns("frame", "summit") and GameManager.set_avatar_frame("summit"), "Pass-Rahmen freigeschaltet und nutzbar")
+	# Saisonwechsel: offene Belohnungen werden gutgeschrieben, XP startet neu
+	GameManager.reset_progress()
+	GameManager.data["pass"] = {"season": GameManager.pass_season() - 1, "xp": 3 * Catalog.PASS_XP_PER_TIER, "claimed": [0]}
+	var c1: int = GameManager.coins()
+	var g1: int = GameManager.gems()
+	check(GameManager.pass_xp() == 0, "Neue Saison beginnt bei 0 XP")
+	check(GameManager.coins() == c1 + 120 and GameManager.gems() == g1 + 5, "Offene Stufen der alten Saison gutgeschrieben (Truhe als Coins)")
+	check(GameManager.pass_claimable().is_empty(), "Nach Saisonwechsel nichts offen")
+	# Match und Golden Shot geben Pass-XP
+	GameManager.match_config = {"mode": "quick"}
+	var mr: Dictionary = GameManager.finish_match({"rank": 1, "players": 4, "style_points": 120, "holes_in_one": 1, "strokes": 9, "holes": 3})
+	check(int(mr.get("pass_xp", 0)) == 40 + 40 + 12 + 20 and GameManager.pass_xp() == 112, "Sieg gibt 112 Pass-XP")
+	check(GameManager.describe_rewards(mr).has("+112 Pass-XP"), "Pass-XP in der Belohnungsliste")
+	GameManager.match_config = {"mode": "practice"}
+	check(int(GameManager.finish_match({"rank": 1, "players": 1}).get("pass_xp", 0)) == Catalog.PASS_XP_PRACTICE, "Training gibt wenig Pass-XP")
+	GameManager.last_match_rewards = {}
+	# Kaputter Speicherstand wird repariert
+	GameManager.data["pass"] = "kaputt"
+	GameManager._sanitize()
+	check(GameManager.data["pass"] is Dictionary and GameManager.pass_xp() == 0, "Kaputter Pass-Stand repariert")
+	GameManager.data["pass"] = {"season": GameManager.pass_season(), "xp": 99999999, "claimed": [0, 0, -3, 77, "2"]}
+	GameManager._sanitize()
+	check(GameManager.pass_xp() == Catalog.pass_max_xp() and GameManager.data["pass"]["claimed"] == [0, 2], "Pass-Werte begrenzt und bereinigt")
+	GameManager.reset_progress()
 
 # ---------------------------------------------------------------- Hauptmenue
 

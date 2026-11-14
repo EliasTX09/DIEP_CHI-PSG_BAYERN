@@ -10,6 +10,7 @@ signal chests_changed
 signal profile_changed
 signal settings_changed
 signal save_changed
+signal pass_changed
 signal toast(message: String)
 
 const SAVE_PATH := "user://save.json"
@@ -66,6 +67,8 @@ func default_save() -> Dictionary:
 		"owned": {"ball": ["standard"], "trail": ["none"], "explosion": ["confetti"], "frame": ["bronze"]},
 		"chests": [null, null, null, null],
 		"road_claimed": [],
+		# Battle Pass: Saison-Nummer, gesammelte XP dieser Saison, abgeholte Stufen (Index ab 0)
+		"pass": {"season": 0, "xp": 0, "claimed": []},
 		"daily": {"date": "", "played": false, "best": -1.0},
 		"gift_date": "",
 		"stats": {"matches": 0, "wins": 0, "holes_in_one": 0, "best_style": 0, "shots": 0, "holes": 0},
@@ -167,6 +170,21 @@ func _sanitize() -> void:
 		data["avatar_frame"] = "bronze"
 	if str(data.get("name", "")).strip_edges() == "":
 		data["name"] = "Gast%04d" % _rng.randi_range(0, 9999)
+	var bp: Variant = data.get("pass")
+	if not (bp is Dictionary):
+		bp = {}
+	var claimed_tiers: Array = []
+	var raw_claimed: Variant = (bp as Dictionary).get("claimed", [])
+	if raw_claimed is Array:
+		for v in (raw_claimed as Array):
+			var i: int = int(v)
+			if i >= 0 and i < Catalog.PASS_TIERS.size() and not claimed_tiers.has(i):
+				claimed_tiers.append(i)
+	data["pass"] = {
+		"season": maxi(0, int((bp as Dictionary).get("season", 0))),
+		"xp": clampi(int((bp as Dictionary).get("xp", 0)), 0, Catalog.pass_max_xp()),
+		"claimed": claimed_tiers,
+	}
 
 func save_game() -> void:
 	_save_dirty = false
@@ -443,6 +461,111 @@ func claim_road(index: int) -> Dictionary:
 	if not items.is_empty():
 		rewards["items"] = items
 	grant(rewards)
+	return rewards
+
+# ================================================================ Battle Pass (kostenlos)
+
+func pass_season() -> int:
+	return Catalog.pass_season_at(Time.get_unix_time_from_system())
+
+## Sekunden bis zum Ende der laufenden Saison.
+func pass_seconds_left() -> float:
+	return maxf(0.0, Catalog.pass_season_end(pass_season()) - Time.get_unix_time_from_system())
+
+## Pass-Stand der laufenden Saison. Beim Saisonwechsel werden noch nicht abgeholte, aber erreichte
+## Belohnungen automatisch gutgeschrieben (Truhen ohne freien Slot als Coins), danach beginnt die Saison bei 0 XP.
+func _pass_state() -> Dictionary:
+	var p: Dictionary = data["pass"]
+	var season: int = pass_season()
+	if int(p.get("season", 0)) == season:
+		return p
+	var carry := {"coins": 0, "gems": 0, "items": []}
+	if int(p.get("season", 0)) > 0:
+		for i in Catalog.PASS_TIERS.size():
+			if int(p.get("xp", 0)) >= (i + 1) * Catalog.PASS_XP_PER_TIER and not _array_has_int(p.get("claimed", []), i):
+				var r: Dictionary = _pass_tier_rewards(i, true)
+				carry["coins"] = int(carry["coins"]) + int(r.get("coins", 0))
+				carry["gems"] = int(carry["gems"]) + int(r.get("gems", 0))
+				(carry["items"] as Array).append_array(r.get("items", []))
+	p["season"] = season
+	p["xp"] = 0
+	p["claimed"] = []
+	if int(carry["coins"]) > 0 or int(carry["gems"]) > 0 or not (carry["items"] as Array).is_empty():
+		grant(carry)
+		toast.emit("Neue Pass-Saison! Offene Belohnungen der letzten Saison wurden gutgeschrieben.")
+	mark_dirty()
+	return p
+
+func pass_xp() -> int:
+	return int(_pass_state()["xp"])
+
+## Anzahl freigeschalteter Stufen (0..30).
+func pass_tier() -> int:
+	return mini(pass_xp() / Catalog.PASS_XP_PER_TIER, Catalog.PASS_TIERS.size())
+
+## Fortschritt innerhalb der naechsten Stufe (0..1); 1.0, wenn alle Stufen erreicht sind.
+func pass_tier_progress() -> float:
+	if pass_tier() >= Catalog.PASS_TIERS.size():
+		return 1.0
+	return float(pass_xp() % Catalog.PASS_XP_PER_TIER) / float(Catalog.PASS_XP_PER_TIER)
+
+func pass_tier_unlocked(index: int) -> bool:
+	return index >= 0 and index < Catalog.PASS_TIERS.size() and pass_xp() >= (index + 1) * Catalog.PASS_XP_PER_TIER
+
+func pass_claimed(index: int) -> bool:
+	return _array_has_int(_pass_state()["claimed"], index)
+
+func pass_claimable() -> Array[int]:
+	var out: Array[int] = []
+	for i in Catalog.PASS_TIERS.size():
+		if pass_tier_unlocked(i) and not pass_claimed(i):
+			out.append(i)
+	return out
+
+## Fuegt Pass-XP hinzu. Rueckgabe: Anzahl neu erreichter Stufen.
+func add_pass_xp(amount: int) -> int:
+	if amount <= 0:
+		return 0
+	var p: Dictionary = _pass_state()
+	var before: int = pass_tier()
+	p["xp"] = mini(int(p["xp"]) + amount, Catalog.pass_max_xp())
+	mark_dirty()
+	pass_changed.emit()
+	return pass_tier() - before
+
+## Belohnungen einer Stufe. Besessene Gegenstaende werden zu Coins; chest_as_coins wandelt Truhen in Coins um.
+func _pass_tier_rewards(index: int, chest_as_coins: bool) -> Dictionary:
+	var e: Dictionary = Catalog.PASS_TIERS[index]
+	var rewards := {}
+	if e.has("coins"):
+		rewards["coins"] = int(e["coins"])
+	if e.has("gems"):
+		rewards["gems"] = int(e["gems"])
+	if e.has("chest"):
+		if chest_as_coins:
+			var cr: Array = Catalog.CHESTS[str(e["chest"])]["coins"]
+			rewards["coins"] = int(rewards.get("coins", 0)) + int(cr[1])
+		else:
+			rewards["chest"] = str(e["chest"])
+	if e.has("item"):
+		var it: Array = e["item"]
+		if owns(str(it[0]), str(it[1])):
+			rewards["coins"] = int(rewards.get("coins", 0)) + Catalog.PASS_DUPLICATE_COINS
+		else:
+			rewards["items"] = [{"kind": str(it[0]), "id": str(it[1])}]
+	return rewards
+
+## Holt eine erreichte Pass-Stufe ab. Liefert die gewaehrten Belohnungen ({} wenn nicht moeglich).
+func pass_claim(index: int) -> Dictionary:
+	if not pass_tier_unlocked(index) or pass_claimed(index):
+		return {}
+	if Catalog.PASS_TIERS[index].has("chest") and free_chest_slot() < 0:
+		toast.emit("Kein freier Truhen-Slot! Öffne zuerst eine Truhe.")
+		return {}
+	var rewards: Dictionary = _pass_tier_rewards(index, false)
+	(_pass_state()["claimed"] as Array).append(index)
+	grant(rewards)
+	pass_changed.emit()
 	return rewards
 
 # ================================================================ Schlaeger
@@ -761,6 +884,8 @@ func grant(rewards: Dictionary) -> void:
 				(data["owned"][kind] as Array).append(id)
 	if rewards.has("chest") and str(rewards["chest"]) != "":
 		add_chest(str(rewards["chest"]))
+	if rewards.has("pass_xp"):
+		add_pass_xp(int(rewards["pass_xp"]))
 	if rewards.has("trophies"):
 		var t: int = maxi(0, trophies() + int(rewards["trophies"]))
 		data["trophies"] = t
@@ -790,6 +915,8 @@ static func describe_rewards(rewards: Dictionary) -> PackedStringArray:
 			lines.append("NEU: %s „%s“" % [Catalog.kind_name(str(it["kind"])), Catalog.item_name(str(it["kind"]), str(it["id"]))])
 	if rewards.has("chest") and str(rewards["chest"]) != "":
 		lines.append("%s erhalten" % str(Catalog.CHESTS[str(rewards["chest"])]["name"]))
+	if rewards.has("pass_xp") and int(rewards["pass_xp"]) > 0:
+		lines.append("+%d Pass-XP" % int(rewards["pass_xp"]))
 	return lines
 
 # ================================================================ Tagesgeschenk & Daily Challenge
@@ -831,6 +958,7 @@ func finish_daily(distance: float, holed: bool) -> Dictionary:
 		rewards.erase("chest")
 		rewards["coins"] = int(rewards.get("coins", 0)) + 300
 	data["daily"] = {"date": today(), "played": true, "best": 0.0 if holed else distance}
+	rewards["pass_xp"] = Catalog.PASS_XP_DAILY
 	grant(rewards)
 	last_match_rewards = rewards
 	return rewards
@@ -931,6 +1059,7 @@ func finish_match(summary: Dictionary) -> Dictionary:
 	var style: int = int(summary.get("style_points", 0))
 	var rewards := {}
 	var mode: String = str(match_config.get("mode", "quick"))
+	rewards["pass_xp"] = Catalog.pass_xp_for_match(rank, count, style, int(summary.get("holes_in_one", 0)), mode == "practice")
 	if mode == "practice" or count <= 1:
 		rewards["coins"] = 20 + int(float(style) * Catalog.STYLE_TO_COINS)
 	else:

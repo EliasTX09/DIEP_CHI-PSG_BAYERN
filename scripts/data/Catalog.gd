@@ -162,8 +162,11 @@ const FRAMES := {
 	"champion": {"name": "Champion", "color": Color(1.0, 0.3, 0.45), "coins": 0, "gems": 0, "league": "champion"},
 	"neon": {"name": "Neon", "color": Color(0.3, 1.0, 0.8), "coins": 0, "gems": 100, "league": ""},
 	"flame": {"name": "Flamme", "color": Color(1.0, 0.45, 0.1), "coins": 3000, "gems": 0, "league": ""},
+	# Nur im Battle Pass erhaeltlich (kein Preis, keine Liga)
+	"summit": {"name": "Gipfelstürmer", "color": Color(0.55, 0.8, 1.0), "coins": 0, "gems": 0, "league": "", "pass": true},
+	"peak": {"name": "Saison-Krone", "color": Color(1.0, 0.62, 0.95), "coins": 0, "gems": 0, "league": "", "pass": true},
 }
-const FRAME_ORDER: Array[String] = ["bronze", "silver", "gold", "diamond", "champion", "neon", "flame"]
+const FRAME_ORDER: Array[String] = ["bronze", "silver", "gold", "diamond", "champion", "neon", "flame", "summit", "peak"]
 const AVATAR_COLORS: Array[Color] = [
 	Color(0.2, 0.6, 1.0), Color(1.0, 0.45, 0.25), Color(0.4, 0.85, 0.35), Color(0.85, 0.35, 0.9),
 	Color(1.0, 0.8, 0.2), Color(0.25, 0.85, 0.8), Color(1.0, 0.35, 0.5), Color(0.6, 0.6, 0.7),
@@ -281,6 +284,82 @@ const TROPHY_ROAD: Array[Dictionary] = [
 	{"at": 1900, "coins": 4000},
 	{"at": 2200, "chest": "magic", "frame": "champion", "gems": 150},
 ]
+
+# ---------------------------------------------------------------- Battle Pass (kostenlos, Saisons zu 28 Tagen)
+## Saison 1 beginnt am Montag, 5. Januar 2026 (00:00 UTC). Danach startet alle 28 Tage eine neue Saison.
+const PASS_EPOCH_UNIX := 1767571200
+const PASS_SEASON_DAYS := 28
+const PASS_XP_PER_TIER := 150
+const PASS_SEASON_NAMES: Array[String] = ["Gipfelsturm", "Lavaglut", "Neonnacht", "Piratengold", "Eiskante", "Canyonfieber"]
+## XP-Quellen
+const PASS_XP_MATCH := 40
+const PASS_XP_RANK: Array[int] = [40, 25, 15, 5, 0, 0]
+const PASS_XP_HOLE_IN_ONE := 20
+const PASS_XP_STYLE_CAP := 30
+const PASS_XP_PRACTICE := 15
+const PASS_XP_DAILY := 30
+## Eine Belohnung pro Stufe (30 Stufen). Bereits besessene Gegenstaende werden in Coins umgewandelt (PASS_DUPLICATE_COINS).
+const PASS_DUPLICATE_COINS := 300
+const PASS_TIERS: Array[Dictionary] = [
+	{"coins": 100}, {"chest": "wood"}, {"gems": 5}, {"coins": 150}, {"item": ["trail", "fire"]},
+	{"coins": 200}, {"chest": "silver"}, {"gems": 10}, {"coins": 250}, {"item": ["frame", "summit"]},
+	{"coins": 300}, {"chest": "silver"}, {"gems": 12}, {"item": ["explosion", "lightning"]}, {"coins": 350},
+	{"chest": "gold"}, {"gems": 15}, {"coins": 400}, {"item": ["trail", "ice"]}, {"coins": 450},
+	{"chest": "gold"}, {"gems": 20}, {"item": ["ball", "magma"]}, {"coins": 500}, {"chest": "gold"},
+	{"gems": 25}, {"item": ["trail", "rainbow"]}, {"coins": 750}, {"gems": 40}, {"chest": "magic", "item": ["frame", "peak"]},
+]
+
+## Saison-Nummer (ab 1) fuer einen Unix-Zeitpunkt.
+static func pass_season_at(unix: float) -> int:
+	var days: int = int(floor((unix - float(PASS_EPOCH_UNIX)) / 86400.0))
+	return maxi(1, int(floor(float(days) / float(PASS_SEASON_DAYS))) + 1)
+
+static func pass_season_end(season: int) -> float:
+	return float(PASS_EPOCH_UNIX) + float(season * PASS_SEASON_DAYS) * 86400.0
+
+static func pass_season_name(season: int) -> String:
+	return PASS_SEASON_NAMES[(maxi(1, season) - 1) % PASS_SEASON_NAMES.size()]
+
+static func pass_max_xp() -> int:
+	return PASS_TIERS.size() * PASS_XP_PER_TIER
+
+## Pass-XP fuer ein beendetes Match.
+static func pass_xp_for_match(rank: int, player_count: int, style_points: int, holes_in_one: int, practice: bool) -> int:
+	if practice or player_count <= 1:
+		return PASS_XP_PRACTICE
+	var xp: int = PASS_XP_MATCH + PASS_XP_RANK[clampi(rank - 1, 0, PASS_XP_RANK.size() - 1)]
+	xp += mini(PASS_XP_STYLE_CAP, int(style_points / 10))
+	xp += PASS_XP_HOLE_IN_ONE * maxi(0, holes_in_one)
+	return xp
+
+## Kurztext einer Pass-Belohnung, z.B. "250 Coins" oder "Goldtruhe".
+static func pass_reward_text(tier_index: int) -> String:
+	if tier_index < 0 or tier_index >= PASS_TIERS.size():
+		return ""
+	var e: Dictionary = PASS_TIERS[tier_index]
+	var parts := PackedStringArray()
+	if e.has("coins"):
+		parts.append("%d Coins" % int(e["coins"]))
+	if e.has("gems"):
+		parts.append("%d Gems" % int(e["gems"]))
+	if e.has("chest"):
+		parts.append(str(CHESTS[str(e["chest"])]["name"]))
+	if e.has("item"):
+		var it: Array = e["item"]
+		parts.append("%s „%s“" % [kind_name(str(it[0])), item_name(str(it[0]), str(it[1]))])
+	return " + ".join(parts)
+
+## Symbol einer Pass-Belohnung fuer die UI (UIIcon-Art).
+static func pass_reward_icon(tier_index: int) -> String:
+	var e: Dictionary = PASS_TIERS[clampi(tier_index, 0, PASS_TIERS.size() - 1)]
+	if e.has("item"):
+		var kind: String = str((e["item"] as Array)[0])
+		return "ball" if kind == "ball" else ("star" if kind == "frame" else "gift")
+	if e.has("chest"):
+		return "chest"
+	if e.has("gems"):
+		return "gem"
+	return "coin"
 
 # ---------------------------------------------------------------- Match-Belohnungen
 const RANK_COINS: Array[int] = [120, 80, 55, 40, 30, 20]

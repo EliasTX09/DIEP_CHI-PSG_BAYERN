@@ -481,6 +481,8 @@ func _reward_lines(box: VBoxContainer, rewards: Dictionary) -> void:
 		var line := _reward_line("chest", str(chest["name"]) + "!", UIKit.TEXT)
 		(line.get_child(0) as UIIcon).set_kind("chest", chest["color"])
 		box.add_child(line)
+	if int(rewards.get("pass_xp", 0)) > 0:
+		box.add_child(_reward_line("star", "+%d Pass-XP · Stufe %d" % [int(rewards["pass_xp"]), GameManager.pass_tier()], Color(0.75, 0.55, 1.0)))
 	if bool(rewards.get("league_up", false)):
 		box.add_child(_reward_line("star", "Aufstieg: Liga %s!" % str(rewards.get("league", "")), UIKit.GOLD))
 	if str(rewards.get("label", "")) != "":
