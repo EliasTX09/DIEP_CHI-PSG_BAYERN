@@ -236,9 +236,9 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 		return _reject("winkel")
 	var dist_h: float = lane_len + fly
 	var dh: float = land.y - lip.y
-	if fly < 6.0 or fly > 38.0:
+	if fly < 6.0 or fly > 44.0:
 		return _reject("flugweite")
-	if dh < -16.0 or dh > 6.0:
+	if dh < -16.0 or dh > 8.0:
 		return _reject("hoehe")
 	for bl in c.blockers:
 		if Vector2(bl.x - g.x, bl.z - g.z).length() < 4.5:
@@ -568,8 +568,8 @@ static func _e2(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 
 static func _e3(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
 	k.tee_box(5.0)
-	_creek(c, k, 5.0)
-	k.straight(8.0)
+	_creek(c, k, 9.5)
+	k.straight(12.0)
 	k.set_surface(TrackKit.S_ALT)
 	k.hill(16.0, 2.4)
 	k.set_surface(TrackKit.S_FLOOR)
@@ -634,6 +634,8 @@ static func _v1(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.straight(14.0)
 	k.taper(4.0, 5.0)
 	k.set_wall_height(TrackKit.WALL_H)
+	# Knick nach rechts: die Abkuerzung springt quer ueber die Lava direkt aufs Gruen
+	k.turn(-90.0, 7.0)
 	_block(c, k, 4.5, 3.0)
 	k.straight(9.0)
 	k.green(12.0, 9.0)
@@ -771,7 +773,7 @@ static func _n3(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 
 static func _p1(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.tee_box(5.0)
-	k.straight(4.0)
+	k.straight(6.0)
 	k.set_walls(false, false)
 	k.taper(3.0, 3.2)
 	k.straight(12.0)

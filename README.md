@@ -1,6 +1,7 @@
 # ⛳ Golf Battle 3D – Arcade-Multiplayer-Minigolf für Android (Godot 4)
 
-Echtes 3D-Arcade-Minigolf: 15 Bahnen in 4 Welten, Loopings, Kanonen, Teleporter, Hämmer, Lava und Wasser,
+Echtes 3D-Arcade-Minigolf: 15 Bahnen in 4 Welten, eingebettet in Täler mit Bergen, Klippen, Wäldern und Schluchten,
+riskante Abkürzungen, Loopings, Kanonen, Teleporter, Hämmer, Bäche, Lava und Wasser,
 bis zu 6 Spieler gleichzeitig, Bots für den Offline-Modus, Schlägertasche mit Upgrades, Truhen, Ligen
 und ein täglicher „Golden Shot“. **Alles** – Bahnen, Modelle, Effekte, Shader und Sounds – wird per Code erzeugt.
 Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
@@ -11,8 +12,10 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 > Die `index.html` im Repo-Root gehört nicht zum Spiel.
 
 > **Umbau-Stand:** Hochformat-Hauptmenü (Arena-Auswahl mit 3D-Hintergrund, Tab-Leiste Spielen · Tasche · Pass ·
-> Freunde · Shop), Hochformat-HUD und ein kostenloser Battle Pass (28-Tage-Saisons, 30 Stufen) sind fertig.
-> Noch offen: Bergkulissen mit riskanten Shortcuts, Flyover-Vorschau, Trophäen pro Bahn, adaptive Bots, Clans.
+> Freunde · Shop), Hochformat-HUD, kostenloser Battle Pass (28-Tage-Saisons, 30 Stufen), Bahnen in Berg-Tälern
+> statt im offenen Wasser, eine riskante Abkürzung pro Bahn, Hindernisse auf der Bahn (Bach, Rough, Baumstämme,
+> Felsen) und die neue Ziel-Vorschau (Gummiband + Punkt-Kette) sind fertig.
+> Noch offen: Flyover-Vorschau, Trophäen pro Bahn, adaptive Bots, Clans.
 
 ---
 
@@ -114,7 +117,7 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
 
 | Geste | Wirkung |
 |---|---|
-| Am Ball ziehen und loslassen | Schlag (Slingshot: nach hinten ziehen = nach vorn schießen). 3D-Kraftpfeil + echte Flugbahn-Vorschau inkl. Banden und Rampen |
+| Am Ball ziehen und loslassen | Schlag: nach hinten ziehen wie ein Gummiband (das Band spannt sich hinter dem Ball zum Finger), loslassen schießt nach vorn. Vorn zeigt eine Punkt-Kette auf dem Boden, wo der Ball aufkommt, abprallt und ausrollt (echte Simulation). Länge der Kette = Guide-Wert des Schlägers, Größe des Landerings = Accuracy |
 | Ein Finger irgendwo sonst | Kamera 360° drehen und neigen |
 | Zwei Finger | Pinch-Zoom |
 | Auge-Button | Vogelperspektive |
@@ -127,6 +130,15 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
 
 - **Welten & Bahnen (15 + Daily):** Emerald Valley (5), Volcano Canyon (4), Cyber Neon City (3), Pirate Cove / Sky Ruins (3),
   jede Welt mit eigenem Himmel, Licht, Nebel und Shadern (Wasser, Lava, Neon-Hologramm, Holzplanken, Wasserfall …).
+- **Landschaft:** Jede Bahn liegt in einem Tal: Randstreifen, Wiesen-Böschungen, Felsterrassen und Klippen,
+  Bergrücken mit Schnee, ein Bergkranz im Nebel, Tannen-/Laub-/Palmenwälder bzw. tote Bäume und Hochhäuser (Neon),
+  Wasserfall-Kaskade oder Lavastrom, Piratenbucht mit Meer und Schiff. Unter Sprüngen und Stücken ohne Bande klafft
+  eine Schlucht. Wer das Gelände neben der Bahn berührt, ist **aus** (+1 Strafschlag).
+- **Abkürzungen:** Auf jeder Bahn außer der geraden Einsteiger-Bahn e1 (und dem Golden Shot) gibt es eine Öffnung in
+  der Bande: ein schmaler Steg ohne Banden führt über eine Schlucht durch ein Felsentor zu einem Sprungpad, das den
+  Ball mit Schwung aufs Grün (bzw. ein späteres Fairway-Stück) schießt. Daneben oder zu langsam = Schlucht = Aus.
+- **Hindernisse:** Bäche quer über die Bahn mit schmalem Holzsteg, tiefes Rough am Rand, Baumstämme und Felsbrocken,
+  Lianen-Bögen, Sandbunker.
 - **Bahn-Baukasten:** Rampen, Steilkurven, Spiralen, Loopings, Brücken, Lücken, Boost-Pads, Windzonen, Teleporter,
   Kanonen, Laser-Tore, Sandbunker, Windmühlen, Pendel-Hämmer, Schiebeblöcke, fahrende Plattformen.
 - **Multiplayer:** Gast-Login per Geräte-ID, Verknüpfen mit E-Mail/Passwort, Spielername, Avatar-Farbe und -Rahmen,
@@ -151,14 +163,15 @@ config/backend.cfg                Supabase-URL + anon-Key + Web-Portal-Adresse (
 .github/workflows/pages.yml           Web-Portal auf GitHub Pages veröffentlichen (manuell)
 webapp/                           Web-Portal: index.html, app.js, style.css, config.js
 scenes/                           MainMenuView.tscn, Game.tscn, GameHUD.tscn
-shaders/                          15 eigene Shader (Wasser, Lava, Himmel, Neon, Portal, Ball-Skins …)
+shaders/                          17 eigene Shader (Gelände, Gras/Grün, Sand, Wasser, Lava, Himmel, Neon, Portal, Ball-Skins …)
 scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen, Ligen),
                                   AuthManager (Login, Session, Web-Code), ProfileManager (Profilbild),
                                   NetworkManager (Profil-Sync, Freunde, Lobbys, Realtime), SoundManager (Synthesizer)
 scripts/data/Catalog.gd           Alle Spieldaten (Schläger, Bälle, Truhen, Ligen, Welten)
-scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D, TrackKit, WorldTheme, Gadgets,
-                                  Obstacles, ShotSim (Vorhersage), BotBrain (KI), Match3D (Spielablauf)
-scripts/fx/                       Materialien, Partikel, Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons
+scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D (inkl. Abkürzungs-Planung), TrackKit, Terrain3D (Gelände),
+                                  WorldTheme (Landschaft, Licht), Gadgets, Obstacles, ShotSim (Vorhersage), BotBrain (KI),
+                                  Match3D (Spielablauf)
+scripts/fx/                       Materialien, Partikel, Flora (Bäume, Felsen), Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons
 scripts/ui/                       MainMenu (MainMenuView), MenuPages, Preview3D, GameHUD, UIKit, UIIcon, UIAvatar
 tests/                            Smoke-Test, Schein-Supabase-Server, Screenshot-Runner, Physik-Fingerabdruck,
                                   SQL-Tests, web/portal_test.js (Browser-Test)
@@ -183,6 +196,9 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Web-Portal (Registrieren, Profilbild, Freunde, Spiel-Code, XSS-Schutz, Handy-Breite) | in CI im Browser (Chromium) gegen simulierte Supabase-Antworten getestet |
 | Supabase-Login, Freunde, Lobbys, Realtime, Portal gegen ein **echtes** Supabase-Projekt | **nicht getestet** |
 | Hochformat-HUD | in CI geprüft (Layout oben/unten, Daumenzone) |
+| Gelände-Tal | in CI geprüft: liegt auf allen 16 Bahnen überall unter dem Belag, Schluchten unter allen Sprüngen/Flügen, Aus-Grenze greift neben der Bahn; Bau ~40 ms pro Bahn |
+| Abkürzungen | in CI geprüft: Vorhersage landet im Ziel, seitlich vom Steg = Aus; echter Ball auf drei Bahnen. Die Ersparnis wird gemessen (siehe Smoke-Log), nicht pauschal „2 Schläge“ |
+| Hindernisse (Bach, Rough, Stamm, Fels) | in CI geprüft (Wirkung + Bots locht weiter auf allen 15 Bahnen ein) |
 | Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen) |
 | APK-Export + Artifact `GolfBattle3D-apk` | in CI gebaut (Entwicklungs-Branch) |
 | GitHub-Release-Schritt | läuft nur auf `main` – **erst nach dem Merge geprüft** |
