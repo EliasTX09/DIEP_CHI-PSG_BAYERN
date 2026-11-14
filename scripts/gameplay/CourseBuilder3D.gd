@@ -501,6 +501,8 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 	var kind: String = {"volcano": "dead", "pirate": "jungle"}.get(th.id, "broadleaf")
 	var moss: float = float(th.land.get("moss", 0.0))
 	var easy: bool = c.course_id == "e1"
+	# Lange Par-4-Bahnen sind schon schwer genug: dort nur Randbaeume (mit Ast), keine Wurzeln/Felsen auf der Bahn
+	var trees_only: bool = easy or c.par >= 4
 	var avoid: Array[Vector3] = []
 	for g in c.gadgets:
 		if g.get_parent() == c and not (g is Gadgets.TerrainBounds):
@@ -543,12 +545,12 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 		var center: Vector3 = xf.origin
 		var edge: Vector3 = xf * Vector3(side * half, 0.0, 0.0)
 		var what: String = cycle[turn % cycle.size()]
-		if easy and what != "tree":
+		if trees_only and what != "tree":
 			what = "tree"
 		if (what == "root" and roots >= EDGE_ROOTS) or (what == "rock" and rocks >= EDGE_ROCKS):
 			what = "tree"
 		if what == "tree" and trees >= EDGE_TREES:
-			what = "root" if roots < EDGE_ROOTS and not easy else ("rock" if rocks < EDGE_ROCKS and not easy else "")
+			what = "root" if roots < EDGE_ROOTS and not trees_only else ("rock" if rocks < EDGE_ROCKS and not trees_only else "")
 		if what == "":
 			break
 		var why: String = _edge_blocked(c, center, edge, avoid, movers, what != "tree")
@@ -589,6 +591,11 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 				if not _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, near_all):
 					_edge_stat("ast_frei")
 					reach = 0.0
+			# Quote halten: ein Baum ohne Ast nur, wenn danach noch >= BRANCH_SHARE der Randbaeume einen Ast haben
+			if reach <= 0.0 and float(branches) < BRANCH_SHARE * float(trees + 1):
+				_edge_stat("quote")
+				next_d = d_along + 1.5
+				continue
 			var trunk_h: float = floor_l + (BRANCH_CLEAR + 2.0 if reach > 0.0 else rng.randf_range(3.4, 4.6))
 			var tree := Obstacles.edge_tree(kind, trunk_h, reach, attach_h, end_h, trees + nature_seed % 7, moss)
 			tree.transform = Transform3D(Basis(Vector3.UP, atan2(-inward.z, inward.x)), Vector3(base.x, ground - 0.15, base.z))
