@@ -365,7 +365,9 @@ func _stage_shortcuts() -> void:
 		var start: Vector3 = (sc["gate"] as Vector3) + dir * 1.2 + Vector3.UP * (Ball3D.RADIUS + 0.01)
 		var space := c.get_world_3d().direct_space_state
 		var prof := _test_profile()
-		var res: Dictionary = ShotSim.run(c, space, start, dir * 9.0, {"max_time": 12.0, "profile": prof})
+		# Anstoss mit Schwung passend zur Steg-Laenge (5 - 9.5 m), damit der Ball das Sprungpad erreicht
+		var push: float = 9.0 + 0.45 * maxf(0.0, (sc["lip"] as Vector3).distance_to(start) - 5.0)
+		var res: Dictionary = ShotSim.run(c, space, start, dir * push, {"max_time": 12.0, "profile": prof})
 		var end: Vector3 = res["end_pos"]
 		var to_green: bool = bool(sc.get("green", true))
 		var target_d: float = float(sc.get("target_d", c.total_length()))
@@ -383,12 +385,12 @@ func _stage_shortcuts() -> void:
 			"aus" if bool(miss["out"]) else "NICHT aus", "aus" if bool(weak["out"]) else ("bleibt auf dem Steg" if not bool(weak["out"]) else "")])
 		check(on_green, "%s: Abkuerzung landet im Ziel (Vorhersage)" % id)
 		check(bool(miss["out"]), "%s: seitlich vom Steg = aus" % id)
-		if id in ["e2", "v3", "p1"]:
+		if id in ["e2", "v3", "p1", "n3"]:
 			var ball := _new_ball(c)
 			ball.place_on_tee(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
 			await _frames(3)
 			ball.unfreeze()
-			var power: float = 9.0 / (Ball3D.MAX_SPEED * float(prof.get("power", 1.0)))
+			var power: float = push / (Ball3D.MAX_SPEED * float(prof.get("power", 1.0)))
 			ball.shoot(dir, power, false, Vector2.ZERO)
 			await _wait_ball(ball, 16.0)
 			var bp: Vector3 = ball.global_position

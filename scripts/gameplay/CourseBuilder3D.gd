@@ -657,7 +657,6 @@ static func _v2(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 
 static func _v3(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.tee_box(5.0)
-	_log(c, k, 5.5, 1.0, true)
 	k.straight(9.0)
 	_hammer(c, k, 4.5, 2.6, 0.0)
 	k.straight(9.0)
