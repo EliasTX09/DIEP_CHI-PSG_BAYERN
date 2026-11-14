@@ -150,6 +150,8 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   (sonst würde die Zielrichtung unter dem Finger wandern). Dazu Tiefenunschärfe (`CameraAttributesPractical`,
   nur Fern-Unschärfe, im Mobile-Renderer unterstützt): scharf bis zum weitesten Punkt der Vorschau + 3,5 m, dahinter
   verschwimmt die Umgebung. Außerhalb des Zielens und in der Vogelperspektive ist die Unschärfe aus.
+  Kantenglättung deshalb per **SMAA statt MSAA**: Mit MSAA rendert der Mobile-Renderer (Godot 4.5) in einen eigenen
+  Mehrfach-Tiefenpuffer und reicht der Unschärfe nur einen leeren Tiefenpuffer weiter – sie verwischte das ganze Bild.
 - Kamera-Führung: kritisch gedämpfte Federn (`CameraManager3D.spring_step`, feste 1/120-s-Schritte) für Blickpunkt,
   Kameraposition und Blickziel – weicher Start beim Schuss, sauberer Nachlauf, kein Nachschwingen; bei ruhendem Ball
   straffer, damit Drehen mit dem Finger direkt reagiert. Keine Kollisions-Verkürzung (die Äste über der Bahn würden

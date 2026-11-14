@@ -150,7 +150,7 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
   bemooste Felsen und Säulen-Ruinen, satter Rasen mit dunkel-/hellgrünem Schachbrett, feinem Glanz und
   Kontaktschatten an den Banden, weicher Kontaktschatten unter jedem Ball, Tiefenunschärfe beim Zielen, Wasser mit
   Gerstner-Wellen, Golfball mit ~330 Dellen und Klarlack, Squash & Stretch, Staubwolke + Kamerawackeln bei harten
-  Abprallern, weiche Schatten („Soft High“), 4× MSAA. SSAO und volumetrischer Nebel gibt es im Mobile-Renderer
+  Abprallern, weiche Schatten („Soft High“), Kantenglättung SMAA. SSAO und volumetrischer Nebel gibt es im Mobile-Renderer
   nicht (siehe Ehrlicher Status).
 - **Arenen & Trophäen:** Arena 1 ist offen, die weiteren ab 150 / 400 / 800 Trophäen (beste erreichte Zahl).
   Jede Bahn führt eigene Trophäen (Aufteilung der Match-Trophäen nach deiner Platzierung auf der Bahn).
@@ -174,7 +174,7 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
 ## Projektstruktur
 
 ```
-project.godot                     Godot 4.5, Mobile-Renderer, Jolt Physics, Hochformat (720 x 1280), MSAA, Schatten
+project.godot                     Godot 4.5, Mobile-Renderer, Jolt Physics, Hochformat (720 x 1280), SMAA, Schatten
 export_presets.cfg                Android-Export (arm64, INTERNET, ACCESS_NETWORK_STATE, VIBRATE)
 supabase_schema.sql               Tabellen, RLS-Policies, Trigger, Spiel-Code-Funktionen, Storage-Bucket "avatars"
 config/backend.cfg                Supabase-URL + anon-Key + Web-Portal-Adresse (Platzhalter = Offline-Modus)
@@ -228,7 +228,7 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Golfball-Dellen, Bäume, Ruinen, Rasen-, Wasser-, Flora-Shader | Shader kompilieren im CI-Rendering; Aussehen per Screenshot angesehen (Software-Rendering, nicht Handy-GPU) |
 | SSAO, volumetrischer Nebel | **nicht vorhanden** – der Mobile-Renderer unterstützt beides nicht (nur Forward+); Ersatz: eingebackene Schatten, Kontaktschatten, Tiefen-/Höhennebel |
 | Mehrfach-Einladung, Account-Knopf, `auth.save` | Oberfläche und Datei-Migration in CI geprüft; das Versenden gegen ein echtes Supabase-Projekt **nicht getestet** |
-| Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen). Besonders die Bildrate: weiche Schatten „Soft High“, 4× MSAA, mehr schattenwerfende Bäume und die neuen Shader kosten GPU-Zeit – das kann die CI nicht messen. Hinweis: Das Software-Rendering der CI-Screenshots dauert seit diesem Umbau ~17 statt ~7 Minuten |
+| Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen). Besonders die Bildrate: weiche Schatten „Soft High“, SMAA, Tiefenunschärfe beim Zielen, mehr schattenwerfende Bäume und die neuen Shader kosten GPU-Zeit – das kann die CI nicht messen. Hinweis: Das Software-Rendering der CI-Screenshots dauert seit diesem Umbau ~17 statt ~7 Minuten |
 | APK-Export + Artifact `GolfBattle3D-apk` | in CI gebaut (Entwicklungs-Branch) |
 | GitHub-Release-Schritt | läuft nur auf `main` – **erst nach dem Merge geprüft** |
 

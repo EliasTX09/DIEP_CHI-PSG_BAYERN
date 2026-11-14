@@ -349,6 +349,8 @@ func _process(delta: float) -> void:
 
 ## Tiefenunschaerfe nur beim Zielen: scharf bis hinter Ball UND Ende der Punkt-Kette, dahinter weich unscharf.
 ## Keine Nah-Unschaerfe (das Gummiband liegt zwischen Kamera und Ball).
+## Wichtig: Das Projekt glaettet Kanten mit SMAA statt MSAA. Mit MSAA rendert der Mobile-Renderer in einen eigenen
+## Tiefenpuffer, die Unschaerfe saehe nur "unendlich weit" und wuerde das ganze Bild verwischen.
 func _update_dof() -> void:
 	if attributes == null:
 		return

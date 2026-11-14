@@ -63,7 +63,10 @@ func _stage_environment() -> void:
 		"Orientierung = Sensor-Hochformat")
 	check(int(ProjectSettings.get_setting("display/window/size/viewport_width")) < int(ProjectSettings.get_setting("display/window/size/viewport_height")),
 		"Basis-Aufloesung ist hochkant")
-	check(int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d")) >= 1, "MSAA aktiv")
+	# Kantenglaettung per SMAA statt MSAA: Im Mobile-Renderer schreibt MSAA nur in einen eigenen Tiefenpuffer, die
+	# Tiefenunschaerfe liest dann einen leeren Puffer und verwischt das ganze Bild (Ball und Punkte inklusive).
+	check(int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/screen_space_aa")) == Viewport.SCREEN_SPACE_AA_SMAA
+		and int(ProjectSettings.get_setting("rendering/anti_aliasing/quality/msaa_3d")) == 0, "Kantenglaettung SMAA aktiv, MSAA aus (vertraegt sich mit der Tiefenunschaerfe)")
 	check(Engine.physics_ticks_per_second == 120, "Physik-Takt 120 Hz")
 
 # ---------------------------------------------------------------- Kompilieren
