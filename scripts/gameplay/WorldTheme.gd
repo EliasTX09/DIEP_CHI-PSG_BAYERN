@@ -246,19 +246,19 @@ func dress_course(course: Course3D, supports: PackedVector3Array, full: bool = t
 		"dead":
 			_forest(decor, terr, ["dead"], [1.0], 0.12, Vector2(0.8, 1.5))
 			_rock_field(decor, terr, 120, Color(0.13, 0.1, 0.09), true)
-			_edge_details(decor, terr, 0, 160, Color(0.2, 0.16, 0.14))
+			_edge_details(decor, course, terr, 0, 160, Color(0.2, 0.16, 0.14))
 			_volcano_extras(decor, course, terr, hazard_y)
 		"towers":
 			_neon_extras(decor, course, terr, hazard_y)
 		"jungle":
 			_forest(decor, terr, ["palm", "broadleaf"], [0.45, 0.55], 0.32, Vector2(0.9, 1.5))
 			_rock_field(decor, terr, 70, Color(0.62, 0.55, 0.45), false)
-			_edge_details(decor, terr, 380, 90, Color(0.6, 0.54, 0.44))
+			_edge_details(decor, course, terr, 380, 90, Color(0.6, 0.54, 0.44))
 			_pirate_extras(decor, course, terr, hazard_y, sea)
 		_:
 			_forest(decor, terr, ["pine", "broadleaf"], [0.62, 0.38], 0.42, Vector2(0.85, 1.7))
 			_rock_field(decor, terr, 90, Color(0.52, 0.5, 0.48), false)
-			_edge_details(decor, terr, 520, 110, Color(0.5, 0.48, 0.45))
+			_edge_details(decor, course, terr, 520, 110, Color(0.5, 0.48, 0.45))
 			_emerald_extras(decor, course, terr)
 	_build_supports(decor, supports, terr, hazard_y)
 
@@ -417,7 +417,17 @@ func _flora_multimesh(decor: Node3D, mesh: Mesh, xfs: Array, shadows: bool) -> M
 
 ## Grasbueschel und lose Steine als echte 3D-Meshes am Bahnrand (nur Optik, keine Kollision:
 ## sie liegen ausserhalb der Banden auf dem Randstreifen und stoeren keinen Schlag).
-func _edge_details(decor: Node3D, terr: Terrain3D, tufts: int, pebbles: int, stone: Color) -> void:
+func _edge_details(decor: Node3D, course: Course3D, terr: Terrain3D, tufts: int, pebbles: int, stone: Color) -> void:
+	# Raster aller Belag-Proben + der (alle 1 m nachgetasteten) Mittellinie: nichts darf unter/auf der Bahn landen
+	var grid := {}
+	for sp in course.surface_pts:
+		_grid_add(grid, sp)
+	for i in range(1, course.path_points.size()):
+		var a: Vector3 = course.path_points[i - 1]
+		var b: Vector3 = course.path_points[i]
+		var n: int = maxi(1, int(ceil(a.distance_to(b))))
+		for j in n:
+			_grid_add(grid, a.lerp(b, float(j) / float(n)), true)
 	var tuft_xf: Array = []
 	var peb_xf: Array = []
 	var tries := 0
@@ -430,7 +440,7 @@ func _edge_details(decor: Node3D, terr: Terrain3D, tufts: int, pebbles: int, sto
 		if d < 1.2 or d > Terrain3D.SHOULDER + 4.0 or terr.wet[c] > 0.3:
 			continue
 		var pos: Vector3 = terr.world_pos(ix, iz) + Vector3(rng.randf_range(-1.25, 1.25), 0.0, rng.randf_range(-1.25, 1.25))
-		if terr.distance_at(pos.x, pos.z) < 1.0:
+		if terr.distance_at(pos.x, pos.z) < 1.0 or not _grid_clear(grid, pos, 1.6, 3.6):
 			continue
 		pos.y = terr.height_at(pos.x, pos.z) - 0.03
 		var up: Vector3 = terr.normal_at_index(ix, iz)
@@ -461,6 +471,30 @@ func _edge_details(decor: Node3D, terr: Terrain3D, tufts: int, pebbles: int, sto
 		pm.material_override = Flora.material(float(land.get("moss", 0.0)) * 0.5, 0.0)
 		pm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		decor.add_child(pm)
+
+const _GRID_CELL := 4.0
+
+## Punkt ins Suchraster (path = Mittellinien-Punkt, sonst Belag-Probe).
+static func _grid_add(grid: Dictionary, p: Vector3, path: bool = false) -> void:
+	var key := Vector2i(int(floor(p.x / _GRID_CELL)), int(floor(p.z / _GRID_CELL)))
+	if not grid.has(key):
+		grid[key] = []
+	(grid[key] as Array).append(Vector3(p.x, 1.0 if path else 0.0, p.z))
+
+## Frei, wenn alle Belag-Proben weiter als min_surface und alle Mittellinien-Punkte weiter als min_path entfernt sind (XZ).
+static func _grid_clear(grid: Dictionary, p: Vector3, min_surface: float, min_path: float) -> bool:
+	var cx: int = int(floor(p.x / _GRID_CELL))
+	var cz: int = int(floor(p.z / _GRID_CELL))
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var key := Vector2i(cx + dx, cz + dz)
+			if not grid.has(key):
+				continue
+			for q: Vector3 in grid[key]:
+				var d: float = Vector2(q.x - p.x, q.z - p.z).length()
+				if d < (min_path if q.y > 0.5 else min_surface):
+					return false
+	return true
 
 ## Eingestuerzte antike Saeulenhallen: halbrunde Saeulen-Reihe (teils abgebrochen), ein Architrav auf zwei
 ## heilen Saeulen, umgestuerzte Trommeln und Bloecke. Stein mit Moos (je nach Welt).
