@@ -295,6 +295,7 @@ func _stage_courses() -> void:
 		c.queue_free()
 		await _frames(2)
 	print("[SMOKE] Rand-Natur gesamt: %d Baeume, davon %d mit Ast ueber der Bahn, %d Wurzeln, %d Felsen" % [_edge_sum["trees"], _edge_sum["branches"], _edge_sum["roots"], _edge_sum["rocks"]])
+	check(int(_edge_sum["roots"]) > 0 and int(_edge_sum["rocks"]) > 0, "Wurzeln und Randfelsen kommen vor (%d / %d)" % [_edge_sum["roots"], _edge_sum["rocks"]])
 	check(int(_edge_sum.get("courses", 0)) >= 10, "Mind. 10 der 12 Natur-Bahnen haben Aeste ueber der Bahn (%d)" % int(_edge_sum.get("courses", 0)))
 	check(int(_edge_sum["trees"]) >= 20 and float(_edge_sum["branches"]) >= 0.3 * float(_edge_sum["trees"]),
 		"Gesamt: mind. 20 Randbaeume, mind. 30 %% davon mit Ast ueber der Bahn (%d/%d)" % [_edge_sum["branches"], _edge_sum["trees"]])
@@ -311,6 +312,7 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 	var low := 0
 	var under_hits := 0
 	var branch_hits := 0
+	var over_floor := 0
 	var space := c.get_world_3d().direct_space_state
 	var q := PhysicsShapeQueryParameters3D.new()
 	var sph := SphereShape3D.new()
@@ -335,6 +337,11 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 						if (h["collider"] as Object).has_meta("edge_tree"):
 							branch_hits += 1
 							break
+					# unabhaengig vom Baum: senkrecht unter der Astspitze muss Bahnbelag liegen (Ast ragt wirklich ueber die Bahn)
+					var down := PhysicsRayQueryParameters3D.create(tip + Vector3.DOWN * 0.4, tip + Vector3.DOWN * 6.0, 1)
+					var fh: Dictionary = space.intersect_ray(down)
+					if not fh.is_empty() and fh["collider"] == c.floor_body and absf((fh["position"] as Vector3).y - float(it["floor_y"])) < 0.3:
+						over_floor += 1
 			"root":
 				roots += 1
 			"rock":
@@ -351,6 +358,7 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 	check(float(branches) >= 0.3 * float(trees), "%s: mind. 30 %% der Randbaeume mit Ast ueber der Bahn (%d/%d)" % [id, branches, trees])
 	check(low == 0 and under_hits == 0, "%s: rollender Ball passt unter allen Aesten durch" % id)
 	check(branch_hits == branches, "%s: Aeste haben Kollision (%d/%d)" % [id, branch_hits, branches])
+	check(over_floor == branches, "%s: unter jeder Astspitze liegt Bahnbelag (%d/%d)" % [id, over_floor, branches])
 	print("[SMOKE] %s Rand-Natur: %d Baeume (%d mit Ast), %d Wurzeln, %d Felsen | verworfen: %s" % [id, trees, branches, roots, rocks, str(CourseBuilder3D.edge_stats)])
 
 ## Gelaende-Tal: liegt ueberall unter dem Belag, Schluchten unter Spruengen/Fluegen, Aus-Grenze greift neben der Bahn.
@@ -762,6 +770,16 @@ func _stage_adaptive_bots() -> void:
 	print("[SMOKE] Versehentlich auf die Schanze gerollt (Zielfehler, nicht geplant): %s" % (", ".join(accidental) if not accidental.is_empty() else "nirgends"))
 	print("[SMOKE] Bots ohne Abkuerzung: %d von 15 eingelocht, %d Schlaege gesamt; offen: %s" % [holed, total_strokes, ", ".join(open_ids)])
 	check(holed >= 12, "Bots ohne Abkuerzung (Koennen 0.7) lochen auf mind. 12 von 15 Bahnen ein (%d, offen: %s)" % [holed, ", ".join(open_ids)])
+	# Echte Einsteiger-Bots: so stark wie fuer einen neuen Spieler (make_bot_entry: ca. 0.35) auf den offenen Bahnen e1-e5
+	var newbie_holed := 0
+	var newbie_strokes := PackedStringArray()
+	for id in ["e1", "e2", "e3", "e4", "e5"]:
+		var rn: Dictionary = await _bot_playthrough(id, false, 0.35, 0)
+		if bool(rn["holed"]):
+			newbie_holed += 1
+		newbie_strokes.append("%s=%s" % [id, str(rn["strokes"]) if bool(rn["holed"]) else "DNF"])
+		check(int(rn["choices"]) == 0, "Einsteiger-Bot (Koennen 0.35) plant auf %s keine Abkuerzung" % id)
+	print("[SMOKE] Einsteiger-Bots (Koennen 0.35, 0 Bahn-Trophaeen) auf Arena 1: %d von 5 eingelocht (%s)" % [newbie_holed, ", ".join(newbie_strokes)])
 	# Profi-Stufe: viele Bahn-Trophaeen -> Bots nutzen die Abkuerzung, wo sie sich lohnt
 	var pro_used := PackedStringArray()
 	for id in ["e2", "v3", "p1"]:

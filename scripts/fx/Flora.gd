@@ -1,7 +1,7 @@
 class_name Flora
 extends RefCounted
 ## Prozedurale Natur-Modelle: Laubbaeume und Tannen aus dickem Stamm + 3-5 klumpigen Kronen-Clustern,
-## Palmen, tote Baeume, Wurzeln, Grasbueschel, Steine, Saeulen-Truemmer und Eisberge.
+## Palmen, tote Baeume, Randbaeume mit Ast, Lianen, Wurzeln, Grasbueschel, Steine und Saeulen-Truemmer.
 ## Jedes Modell ist EIN Mesh mit Vertex-Farben (passt in eine MultiMesh-Instanz: hunderte Baeume in einem Draw-Call).
 ## Vertex-Farbe rgb = Farbe mit eingebackenem Kronen-Schatten (innen/unten dunkler), a = Materialart fuer
 ## shaders/flora.gdshader: LEAF (Laub, wiegt im Wind), WOOD (Rinde mit Furchen), STONE (Stein, optional Moos).
@@ -323,16 +323,6 @@ static func beam() -> ArrayMesh:
 	var stone := Color(0.42, 0.4, 0.36)
 	var out := _merge([_part(_box(Vector3(1.6, 0.5, 0.8)), Vector3.ZERO, stone.darkened(0.08), STONE, stone.lightened(0.05))])
 	_cache["beam"] = out
-	return out
-
-## Eisberg: zerkluefteter, kantiger Block (weiss-blau). Hoehe ~1 (wird skaliert).
-static func iceberg(variant: int = 0) -> ArrayMesh:
-	var key := "ice_%d" % variant
-	if _cache.has(key):
-		return _cache[key]
-	var blob: Array = _blob(1.0, Vector3(1.0, 1.25, 0.85), 91 + variant * 5, 0.45, 7, 5)
-	var out := _merge([_part(blob, Vector3(0.0, 0.6, 0.0), Color(0.5, 0.72, 0.85), STONE, Color(0.97, 0.99, 1.0))])
-	_cache[key] = out
 	return out
 
 # ---------------------------------------------------------------- Helfer

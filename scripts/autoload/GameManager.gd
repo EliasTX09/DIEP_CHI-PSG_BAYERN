@@ -63,7 +63,8 @@ func default_save() -> Dictionary:
 		"trophies": 0,
 		"best_trophies": 0,
 		# Trophaeen je Bahn: Aufschluesselung der Match-Trophaeen nach Leistung auf der jeweiligen Bahn
-		# (Summe folgt der Gesamtzahl; steuert, wie clever die Bots dort spielen)
+		# (jede Bahn bleibt >= 0 und bestehende Spielstaende starten hier bei 0 - die Summe ist daher nicht
+		# zwingend gleich der Gesamtzahl; steuert, wie clever die Bots auf der Bahn spielen)
 		"course_trophies": {},
 		"clubs": {Catalog.START_CLUB: {"level": 1, "cards": 0}},
 		"equipped": {"club": Catalog.START_CLUB, "ball": "standard", "trail": "none", "explosion": "confetti"},

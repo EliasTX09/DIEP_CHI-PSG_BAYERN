@@ -68,13 +68,14 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Steg) und Landezone (`Gadgets.LandingZone`: fängt den Ball weich ab). Ohne Abkürzung: e1 (gerade Einsteiger-Bahn) und
   der Golden Shot. Hindernisse auf der Bahn: Bach mit Holzsteg (`Gadgets.Creek`), Rough (`Gadgets.RoughZone`),
   Baumstämme und Felsbrocken (`Obstacles.log_obstacle/boulder`), Lianen-Bögen (Deko).
-  **Natur am Bahnrand** (`CourseBuilder3D._edge_nature`, nach dem Gelände, immer gebaut, Seed aus Bahn-ID): auf
-  geraden Stücken mit Bande stehen Randbäume (`Obstacles.edge_tree`), mindestens 40 % davon mit einem dicken Ast quer
+  **Natur am Bahnrand** (`CourseBuilder3D._edge_nature`, nach dem Gelände, immer gebaut, Seed nur aus der Bahn-ID →
+  in jedem Match und im Test identisch): entlang aller ebenen Querschnitte der Hauptbahn mit Bande stehen Randbäume (`Obstacles.edge_tree`), mindestens 40 % davon mit einem dicken Ast quer
   über die Bahn (Kollision: Stamm-Zylinder + zwei Ast-Kapseln, Unterkante 2,55 m über dem Belag → rollende Bälle passen
   drunter durch, hohe Schläge prallen ab), dazu Wurzeln (`Obstacles.root_obstacle`, flache Kapsel, ragt 0,6–0,95 m in
   die Bahn) und Randfelsen. Frei bleiben Abschlag, Grün, Abkürzung (Öffnung, Tor, Flug), Flug-Korridore, Gadgets und
   Hindernisse. Laub, Lianen (`Motion.swinger`), Grasbüschel und lose Steine sind reine Optik. Neon-Welt und Golden
-  Shot haben keine Rand-Natur. Der Smoke-Test prüft Quote, Höhe (Ball-Kugel passt drunter durch) und Kollision der Äste.
+  Shot haben keine Rand-Natur, Par-4-Bahnen nur Bäume (keine Wurzeln/Felsen auf der Bahn). Der Smoke-Test prüft Quote,
+  Höhe (Ball-Kugel passt drunter durch), Kollision der Äste und dass unter jeder Astspitze Bahnbelag liegt.
 - `Course3D` – Tee-Transform, Loch-Position, Par, Mittellinie (`path_points`), Gadgets, Kill-Höhe, Kollisions-Körper,
   Belag-Proben, Flug-Korridore, Gelände (`terrain`) und Abkürzung (`shortcut`).
 - `Terrain3D` – Höhenfeld (2,5-m-Raster, 80 m Rand) um die Bahn: Abstandsfeld zur Bahn (Chamfer), flacher Randstreifen
@@ -89,7 +90,7 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 - `Flora` – alle Natur-Modelle als ein Mesh mit Vertex-Farben (MultiMesh-tauglich): Laubbaum = dicker Stamm mit
   Wurzelansatz + Äste + 3–5 klumpige, überlappende Kronen-Ellipsoide (Farbverlauf unten→oben, eingebackener
   Kronen-Schatten), Tanne = 4–5 gestapelte Nadel-Klumpen, Palme, toter Baum, Wurzel, Grasbüschel, Säule, Block,
-  Architrav, Eisberg; je Baumart 2–3 Varianten und eine sparsame Fern-Version. Shader `flora.gdshader`:
+  Architrav, Randbaum mit Ast, Liane; je Baumart 2–3 Varianten und eine sparsame Fern-Version. Shader `flora.gdshader`:
   Vertex-Farbe a = Materialart (Laub/Rinde/Stein), Rinden-Furchen, Blatt-Klumpen und Stein-Körnung als Bump-Map
   ohne Tangenten, Wind (Wiegen + Flattern), Durchscheinen des Laubs, Moos auf Stein-Oberseiten.
 - **Renderer-Grenzen:** Der Mobile-Renderer unterstützt laut Godot-Doku **kein SSAO und keinen volumetrischen Nebel**
@@ -134,8 +135,10 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 
 ## Trophäen, Arenen, adaptive Bots
 - Gesamt-Trophäen (Ligen, Cloud-Profil) bleiben eine Zahl. `GameManager.split_course_trophies` teilt das Match-Delta
-  nach der Platzierung auf jeder gespielten Bahn auf (`summary.course_ranks` aus `Match3D._end_hole`); die Summe ist
-  exakt das Delta. Gespeichert in `course_trophies` im Spielstand (kein neues SQL-Feld).
+  nach der Platzierung auf jeder gespielten Bahn auf (`summary.course_ranks` aus `Match3D._end_hole`); die Aufteilung
+  eines Matches summiert exakt zum Delta. Gespeichert in `course_trophies` im Spielstand (kein neues SQL-Feld); jede
+  Bahn bleibt ≥ 0 und bestehende Spielstände starten dort bei 0, daher ist die Summe aller Bahn-Trophäen nicht
+  zwingend gleich der Gesamtzahl.
 - Arenen öffnen ab `Catalog.WORLDS[].unlock` (0 / 150 / 400 / 800) – gemessen an `best_trophies`, damit sich nichts
   wieder sperrt und bestehende Spielstände nichts verlieren. Gesperrt ist nur das Starten (Bots, Schnellspiel, eigene
   Lobby); Einladungen in Lobbys anderer bleiben möglich. Die Welttour bei vielen Runden läuft offline nur durch offene

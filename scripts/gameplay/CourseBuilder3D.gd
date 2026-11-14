@@ -66,10 +66,10 @@ static func build(course_id: String, rng_seed: int = 0, with_environment: bool =
 		gm.set_shader_parameter("ring_strength", 0.5)
 	_flag(c, th)
 	th.dress_course(c, k.supports, with_environment)
-	# Natur mit Kollision am Bahnrand: immer (auch ohne Umgebung) und nur aus Bahn-ID + Seed, damit Handy,
-	# Mitspieler und Tests dieselbe Bahn spielen
+	# Natur mit Kollision am Bahnrand: immer (auch ohne Umgebung) und NUR aus der Bahn-ID (wie das Gelaende),
+	# damit jedes Match, alle Mitspieler und die Tests exakt dieselbe Bahn spielen
 	if id != "daily":
-		_edge_nature(c, k, th, absi(hash(id + "|edge")) ^ rng_seed)
+		_edge_nature(c, k, th, absi(hash(id + "|edge")))
 	if with_environment:
 		th.build_environment(c)
 	return c
@@ -518,7 +518,7 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 	var branches := 0
 	var roots := 0
 	var rocks := 0
-	var cycle: Array[String] = ["tree", "root", "tree", "rock", "tree", "tree", "root", "rock", "tree", "tree"]
+	var cycle: Array[String] = ["tree", "rock", "tree", "root", "tree", "tree", "rock", "root", "tree", "tree"]
 	var turn := 0
 	var flip := 1.0
 	var next_d: float = -INF
