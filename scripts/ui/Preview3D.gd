@@ -39,19 +39,15 @@ func _init(p_kind: String = "ball", p_id: String = "standard", p_size: float = 1
 func _build_scene() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
-	e.background_mode = Environment.BG_CLEAR_COLOR
-	# Himmel nur fuer Licht und Spiegelungen (Metall-Baelle waeren sonst schwarz); der Hintergrund bleibt durchsichtig
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.35, 0.55, 0.95)
-	sky_mat.sky_horizon_color = Color(0.85, 0.9, 1.0)
-	sky_mat.ground_horizon_color = Color(0.6, 0.65, 0.75)
-	sky_mat.ground_bottom_color = Color(0.25, 0.28, 0.35)
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
-	e.sky = sky
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	e.ambient_light_energy = 0.9
-	e.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	# Hintergrundfarbe nur fuer Umgebungslicht und Spiegelungen (Metall-Baelle waeren sonst schwarz);
+	# der Viewport selbst bleibt durchsichtig. Bewusst ohne eigenen Sky: mit einem zweiten Himmel in einer
+	# SubViewport-Welt war die Spielszene in den CI-Bildern danach dunkler.
+	e.background_mode = Environment.BG_COLOR
+	e.background_color = Color(0.62, 0.7, 0.85)
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color(0.75, 0.8, 0.95)
+	e.ambient_light_energy = 0.8
+	e.reflected_light_source = Environment.REFLECTION_SOURCE_BG
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.glow_enabled = true
 	e.glow_intensity = 0.6
