@@ -1025,6 +1025,16 @@ func _stage_input() -> void:
 	if m._preview_end != Vector3.INF:
 		check(dof_far >= m.rig.camera.global_position.distance_to(m._preview_end), "Ende der Punkt-Kette liegt im scharfen Bereich")
 	check(ball.has_contact_shadow(), "Weicher Kontaktschatten unter dem ruhenden Ball")
+	# Kein Punkt der Kette klebt auf der Kugel: alles, was von der Kamera aus hinter dem Ball liegt, wird weggelassen
+	var stuck := 0
+	var cam_p: Vector3 = m.rig.camera.global_position
+	for dp in m._drawn_dots:
+		if Match3D._hidden_by_ball(dp, ball.global_position, m._drawn_cam):
+			stuck += 1
+	check(m._drawn_dots.size() > 3 and stuck == 0, "Keine Vorschau-Punkte auf dem Ball gezeichnet (%d von %d)" % [stuck, m._drawn_dots.size()])
+	check(Match3D._hidden_by_ball(ball.global_position + (ball.global_position - cam_p).normalized() * 0.5, ball.global_position, cam_p)
+		and not Match3D._hidden_by_ball(ball.global_position + (cam_p - ball.global_position).normalized() * 0.6, ball.global_position, cam_p),
+		"Verdeckungs-Test: Punkt hinter dem Ball verdeckt, Punkt davor sichtbar")
 	# Spin live: Seiten-Effet waehrend des Zielens verschiebt die Punkt-Kette
 	await _process_frames(4)
 	var end_before: Vector3 = m._preview_end

@@ -81,6 +81,9 @@ var _arc_dots: MultiMeshInstance3D
 var _air_dots: MultiMeshInstance3D
 ## true = die Vorschau endet im Aus (Kette rot)
 var _dots_out: bool = false
+## Positionen aller gezeichneten Punkte (Boden + Bogen) - headless liefert MultiMesh-Transforms nicht zurueck (Tests)
+var _drawn_dots: PackedVector3Array = PackedVector3Array()
+var _drawn_cam: Vector3 = Vector3.ZERO
 var _landing: MeshInstance3D
 ## Zielkreis am vorhergesagten Ende des Schlags
 var _target_ring: MeshInstance3D
@@ -329,6 +332,9 @@ func _update_play(delta: float, real_dt: float) -> void:
 		thinkers[_bot_turn].think(get_world_3d().direct_space_state)
 	# Zielen: Vorschau aktualisieren (auch wenn Spin oder Schlagart waehrend des Zielens geaendert werden)
 	if _aiming and (hud.spin != _preview_spin or hud.chip_mode != _preview_chip):
+		_preview_dirty = true
+	# Waehrend der Ziel-Zoom einfaehrt, aendert sich, welche Punkte der Ball verdeckt -> Vorschau nachziehen
+	if _aiming and rig.aim_blend() < 0.999:
 		_preview_dirty = true
 	if _aiming or _band_release > 0.0:
 		_update_band(real_dt)
@@ -684,7 +690,13 @@ func _update_preview() -> void:
 	var air_mm: MultiMesh = _air_dots.multimesh
 	var n_ground := 0
 	var n_air := 0
+	# n_steps zaehlt alle Punkte der Kette (auch die vom Ball verdeckten), damit die Laenge dem Guide-Wert entspricht
+	var n_steps := 0
+	var has_ground := false
 	var last_ground := Transform3D()
+	var cam_pos: Vector3 = rig.camera.global_position
+	_drawn_dots.clear()
+	_drawn_cam = cam_pos
 	var spacing: float = 0.6
 	var acc: float = spacing * 0.6
 	var ray := PhysicsRayQueryParameters3D.new()
@@ -693,7 +705,7 @@ func _update_preview() -> void:
 		var a: Vector3 = pts[i - 1]
 		var b: Vector3 = pts[i]
 		var seg: float = a.distance_to(b)
-		while acc <= seg and n_ground + n_air < max_dots:
+		while acc <= seg and n_steps < max_dots:
 			var p: Vector3 = a.lerp(b, acc / maxf(seg, 0.0001))
 			acc += spacing
 			ray.from = p + Vector3.UP * 0.05
@@ -705,18 +717,24 @@ func _update_preview() -> void:
 			var gn: Vector3 = hit["normal"]
 			var b2: Basis = _basis_from_up(gn)
 			# nach hinten kleiner werden (Tiefe), aber nie unter 55 %
-			var s: float = 1.0 - 0.45 * float(n_ground + n_air) / float(max_dots)
+			var s: float = 1.0 - 0.45 * float(n_steps) / float(max_dots)
+			n_steps += 1
 			if p.y - gp.y > Ball3D.RADIUS + 0.25:
 				# im Flug: leuchtender Punkt genau auf dem Bogen (Mitte der Kugel) + Schatten darunter am Boden
-				arc_mm.set_instance_transform(n_air, Transform3D(Basis.IDENTITY.scaled(Vector3(s, s, s)), p))
-				air_mm.set_instance_transform(n_air, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.03))
-				n_air += 1
+				if not _hidden_by_ball(p, origin, cam_pos):
+					arc_mm.set_instance_transform(n_air, Transform3D(Basis.IDENTITY.scaled(Vector3(s, s, s)), p))
+					_drawn_dots.append(p)
+					air_mm.set_instance_transform(n_air, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.03))
+					n_air += 1
 			else:
-				ground_mm.set_instance_transform(n_ground, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.035))
 				last_ground = Transform3D(b2, gp + gn * 0.035)
-				n_ground += 1
+				has_ground = true
+				if not _hidden_by_ball(gp, origin, cam_pos):
+					ground_mm.set_instance_transform(n_ground, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.035))
+					_drawn_dots.append(gp)
+					n_ground += 1
 		acc -= seg
-		if n_ground + n_air >= max_dots:
+		if n_steps >= max_dots:
 			break
 	ground_mm.visible_instance_count = n_ground
 	arc_mm.visible_instance_count = n_air
@@ -728,8 +746,8 @@ func _update_preview() -> void:
 	if out != _dots_out:
 		_set_dots_out(out)
 	# Zielkreis am Ende der Kette (dort, wo die Vorhersage den Ball liegen sieht)
-	_target_ring.visible = n_ground > 0 and not out
-	_preview_end = last_ground.origin if n_ground > 0 else Vector3.INF
+	_target_ring.visible = has_ground and not out
+	_preview_end = last_ground.origin if has_ground else Vector3.INF
 	if _target_ring.visible:
 		var last: Transform3D = last_ground
 		var ring_s: float = 1.0 + 0.6 * float(prof.get("scatter_deg", 1.0)) / 3.0
@@ -750,6 +768,19 @@ func _update_preview() -> void:
 	if impact != Vector3.INF and (focus_pt == Vector3.INF or impact.distance_to(origin) > focus_pt.distance_to(origin)):
 		focus_pt = impact
 	rig.set_aim_focus(focus_pt)
+
+## Liegt der Punkt von der Kamera aus gesehen hinter dem eigenen Ball? Dann wird er nicht gezeichnet: Die Marker
+## haben keinen Tiefentest (sie sollen nie in Bodenwellen versinken) und klebten sonst sichtbar auf der Kugel.
+static func _hidden_by_ball(p: Vector3, ball_pos: Vector3, cam: Vector3) -> bool:
+	var to_p: Vector3 = p - cam
+	var dist: float = to_p.length()
+	if dist < 0.001:
+		return false
+	var dir: Vector3 = to_p / dist
+	var t: float = (ball_pos - cam).dot(dir)
+	if t <= 0.0 or t >= dist:
+		return false
+	return (cam + dir * t).distance_to(ball_pos) < Ball3D.RADIUS * 1.15
 
 static func _basis_from_up(up: Vector3) -> Basis:
 	var u: Vector3 = up.normalized()
