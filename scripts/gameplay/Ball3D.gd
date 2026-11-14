@@ -497,6 +497,8 @@ func _go_out(kind: String) -> void:
 		SoundManager.play("laser", 1.0, 1.0, sound_gain)
 	elif kind == "water":
 		SoundManager.play("splash_water", 1.0, 1.0, sound_gain)
+	elif kind == "ob":
+		SoundManager.play_bounce("stone", 0.6 * sound_gain)
 	else:
 		SoundManager.play("whoosh", 1.0, 0.6, sound_gain)
 	visible = kind == "laser"

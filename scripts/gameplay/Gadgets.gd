@@ -89,15 +89,41 @@ class SandTrap extends Gadget:
 	func _init(size: Vector2 = Vector2(3.0, 3.0), decel_factor: float = 4.5) -> void:
 		half = size * 0.5
 		drag = decel_factor
-		var mat := Mat.flat(Color(0.93, 0.84, 0.58), 1.0)
-		var mi := Mat.cylinder(1.0, 1.0, 0.05, mat, Vector3(0.0, 0.025, 0.0), 28)
+		# Sandflaeche mit Koernung und Rippeln, leicht gewoelbt, darum eine weiche Gras-Lippe
+		var mat := Mat.shader("sand", {})
+		var bowl := _bowl(28, 5)
+		var mi := MeshInstance3D.new()
+		mi.mesh = bowl
+		mi.material_override = mat
 		mi.scale = Vector3(half.x, 1.0, half.y)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
-		var rim := Mat.cylinder(1.06, 1.06, 0.03, Mat.flat(Color(0.8, 0.7, 0.45), 1.0), Vector3(0.0, 0.012, 0.0), 28)
-		rim.scale = Vector3(half.x, 1.0, half.y)
-		rim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(rim)
+		var lip := Mat.torus(0.97, 1.09, Mat.flat(Color(0.3, 0.55, 0.22), 0.95), Vector3(0.0, 0.035, 0.0))
+		lip.scale = Vector3(half.x, 0.55, half.y)
+		lip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(lip)
+
+	## Flache Schale: Rand auf Hoehe 0.05, Mitte etwas tiefer (rein optisch; die Kollision bleibt der Bahnboden).
+	static func _bowl(segments: int, rings: int) -> ArrayMesh:
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for r in rings:
+			var r0: float = float(r) / float(rings)
+			var r1: float = float(r + 1) / float(rings)
+			var y0: float = 0.05 - 0.035 * (1.0 - r0 * r0)
+			var y1: float = 0.05 - 0.035 * (1.0 - r1 * r1)
+			for i in segments:
+				var a0: float = TAU * float(i) / float(segments)
+				var a1: float = TAU * float(i + 1) / float(segments)
+				var p00 := Vector3(cos(a0) * r0, y0, sin(a0) * r0)
+				var p01 := Vector3(cos(a1) * r0, y0, sin(a1) * r0)
+				var p10 := Vector3(cos(a0) * r1, y1, sin(a0) * r1)
+				var p11 := Vector3(cos(a1) * r1, y1, sin(a1) * r1)
+				for v in [p00, p10, p11, p00, p11, p01]:
+					st.set_normal(Vector3.UP)
+					st.set_uv(Vector2(v.x, v.z))
+					st.add_vertex(v)
+		return st.commit()
 
 	func affect(st: SimState, _dt: float) -> void:
 		var l := to_local_point(st.pos)
@@ -335,6 +361,31 @@ class KillBox extends Gadget:
 	func affect(st: SimState, _dt: float) -> void:
 		if in_local_box(st.pos, half):
 			st.out_kind = kind
+
+# ================================================================ Gelaende-Grenze (Aus)
+
+## Beruehrt der Ball das Gelaende neben der Bahn (Randstreifen, Hang, Schlucht), ist er "aus".
+## Analytisch ueber das Hoehenfeld - wirkt identisch fuer echte Baelle, Vorschau und Bots.
+class TerrainBounds extends Gadget:
+	var terrain: Terrain3D
+	var hole: Vector3
+	var hole_r2: float
+
+	func _init(p_terrain: Terrain3D = null, hole_pos: Vector3 = Vector3.ZERO, hole_radius: float = 0.75) -> void:
+		terrain = p_terrain
+		hole = hole_pos
+		hole_r2 = (hole_radius + 0.4) * (hole_radius + 0.4)
+
+	func affect(st: SimState, _dt: float) -> void:
+		if terrain == null:
+			return
+		if st.pos.y >= terrain.height_at(st.pos.x, st.pos.z) + 0.15:
+			return
+		var dx: float = st.pos.x - hole.x
+		var dz: float = st.pos.z - hole.z
+		if dx * dx + dz * dz < hole_r2:
+			return
+		st.out_kind = "ob"
 
 # ================================================================ Helfer
 

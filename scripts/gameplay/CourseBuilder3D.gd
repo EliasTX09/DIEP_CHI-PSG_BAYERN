@@ -86,8 +86,13 @@ static func build(course_id: String, rng_seed: int = 0, with_environment: bool =
 		"daily":
 			_daily(c, k, th, rng)
 	k.commit(th.materials)
+	# Feine Putt-Ringe rund ums Loch
+	var gm := th.materials[TrackKit.S_GREEN] as ShaderMaterial
+	if gm != null:
+		gm.set_shader_parameter("ring_center", Vector2(c.hole_pos.x, c.hole_pos.z))
+		gm.set_shader_parameter("ring_strength", 0.5)
 	_flag(c, th)
-	th.dress_course(c, k.supports)
+	th.dress_course(c, k.supports, with_environment)
 	if with_environment:
 		th.build_environment(c)
 	return c
@@ -158,6 +163,8 @@ static func _cannon(c: Course3D, k: TrackKit, back: float, target: Vector3, elev
 	var cn := Gadgets.Cannon.new(v)
 	cn.transform = Transform3D(Basis.IDENTITY, base)
 	c.add_gadget(cn)
+	# Unter der Flugbahn liegt eine Schlucht (das Gelaende darf den Flug nicht schneiden)
+	c.add_corridor(base, target, 3.0)
 
 static func _flag(c: Course3D, th: WorldTheme) -> void:
 	var root := Node3D.new()

@@ -37,6 +37,8 @@ var _in_run: bool = false
 ## Stellen, an denen die Deko Stuetzpfeiler unter die Bahn setzen darf.
 var supports: PackedVector3Array = PackedVector3Array()
 var _support_acc: float = 6.0
+## Nebenstrang (z.B. Abkuerzung): erweitert weder Mittellinie noch Stuetzen/Bounds der Bahn.
+var branch: bool = false
 
 func _init(target: Course3D) -> void:
 	course = target
@@ -156,7 +158,17 @@ func _profile(half: float) -> Array:
 	kinds.append(E_UNDER)
 	return [pts, kinds]
 
+## Belag-Proben quer ueber die Bahn (Grundlage fuer das Gelaende; Kanten ohne Bande werden markiert).
+func _sample_frame(f: Transform3D, half: float) -> void:
+	var n: int = maxi(1, int(ceil(half * 2.0 / 1.8)))
+	for j in n + 1:
+		var x: float = -half + half * 2.0 * float(j) / float(n)
+		var open_edge: bool = (j == 0 and not wall_l) or (j == n and not wall_r) or (j > 0 and j < n and not wall_l and not wall_r)
+		course.add_surface_sample(f * Vector3(x, 0.0, 0.0), open_edge)
+
 func _emit_ribbon(frames: Array[Transform3D], dists: PackedFloat32Array, widths: PackedFloat32Array = PackedFloat32Array()) -> void:
+	for i in frames.size():
+		_sample_frame(frames[i], (widths[i] if widths.size() > i else width) * 0.5)
 	for i in frames.size() - 1:
 		var fa: Transform3D = frames[i]
 		var fb: Transform3D = frames[i + 1]
@@ -224,6 +236,8 @@ func end_run() -> void:
 		_emit_cap(xf, width * 0.5, false)
 
 func _add_path(frames: Array[Transform3D], with_supports: bool = true) -> void:
+	if branch:
+		return
 	var prev: Vector3 = frames[0].origin if frames.size() > 0 else Vector3.ZERO
 	for f in frames:
 		var p: Vector3 = f.origin + f.basis.y * BALL_R
@@ -453,6 +467,7 @@ func gap(length: float, drop: float = 0.0, side: float = 0.0) -> TrackKit:
 	level()
 	xf.origin += xf.basis * Vector3(side, -drop, -length)
 	var to: Vector3 = xf.origin + Vector3.UP * BALL_R
+	course.add_corridor(from, to, width * 0.5 + 1.0)
 	# Mittellinie ueber die Luecke als flacher Bogen (fuer Fortschritt/Bots)
 	for i in range(1, 5):
 		var t: float = float(i) / 5.0
@@ -568,6 +583,12 @@ func green(length: float = 12.0, gwidth: float = 9.0, hole_dist: float = -1.0, h
 		var fy: float = wall_h * 0.5
 		box(Transform3D(Basis.IDENTITY, Vector3(-open_half - seg * 0.5, fy, -WALL_T * 0.5)), Vector3(seg, wall_h, WALL_T), S_TRIM, C_WALL)
 		box(Transform3D(Basis.IDENTITY, Vector3(open_half + seg * 0.5, fy, -WALL_T * 0.5)), Vector3(seg, wall_h, WALL_T), S_TRIM, C_WALL)
+	# Belag-Proben ueber das ganze Gruen (fuer das Gelaende darunter)
+	var gnx: int = int(ceil(gwidth / 1.5))
+	var gnz: int = int(ceil(length / 1.5))
+	for ix in gnx + 1:
+		for iz in gnz + 1:
+			course.add_surface_sample(xf * Vector3(-hw + gwidth * float(ix) / float(gnx), 0.0, -length * float(iz) / float(gnz)), false)
 	course.hole_pos = xf * c
 	course.hole_radius = r
 	course.add_path_point(xf * Vector3(0.0, BALL_R, 0.0))

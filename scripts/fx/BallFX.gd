@@ -116,6 +116,11 @@ static func splash(parent: Node3D, pos: Vector3, kind: String) -> void:
 		_burst(parent, pos, {"amount": 50, "lifetime": 1.0, "direction": Vector3.UP, "spread": 30.0, "speed": Vector2(4.0, 8.0),
 			"gravity": Vector3(0, -15, 0), "size": 0.3, "additive": false,
 			"colors": [Color(1, 1, 1, 0.95), Color(0.7, 0.9, 1.0, 0.8), Color(0.6, 0.85, 1.0, 0.0)]}, 2.0)
+	elif kind == "ob":
+		# Aus: Erd- und Grasbrocken spritzen auf
+		_burst(parent, pos, {"amount": 40, "lifetime": 0.9, "direction": Vector3.UP, "spread": 50.0, "speed": Vector2(3.0, 7.0),
+			"gravity": Vector3(0, -16, 0), "size": 0.22, "additive": false,
+			"colors": [Color(0.45, 0.32, 0.2, 1.0), Color(0.3, 0.5, 0.2, 0.9), Color(0.35, 0.3, 0.2, 0.0)]}, 1.8)
 	else:
 		_burst(parent, pos, {"amount": 30, "lifetime": 0.6, "spread": 180.0, "speed": Vector2(2.0, 6.0), "gravity": Vector3.ZERO,
 			"size": 0.25, "colors": [Color(1, 0.3, 0.4, 1), Color(1, 0.2, 0.8, 0.0)]}, 1.5)

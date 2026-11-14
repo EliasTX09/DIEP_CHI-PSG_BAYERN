@@ -258,10 +258,13 @@ func _stage_courses() -> void:
 	var ids: Array[String] = Catalog.all_course_ids()
 	ids.append("daily")
 	for id in ids:
+		var t_build: int = Time.get_ticks_usec()
 		var c: Course3D = CourseBuilder3D.build(id, 4242, false)
+		t_build = Time.get_ticks_usec() - t_build
 		add_child(c)
 		await _frames(3)
 		check(c.path_points.size() > 8 and c.total_length() > 15.0, "%s: Mittellinie vorhanden" % id)
+		_check_terrain(c, id, t_build)
 		check(c.floor_body != null and c.floor_body.get_child_count() > 0, "%s: Boden-Kollision" % id)
 		check(c.par >= 1 and c.par <= 5 and c.title != "", "%s: Titel/Par" % id)
 		var space := c.get_world_3d().direct_space_state
@@ -286,6 +289,53 @@ func _stage_courses() -> void:
 		print("[SMOKE] %s '%s' Par %d, Laenge %.0f m, %d Gadgets, %d Hindernisse" % [id, c.title, c.par, c.total_length(), c.gadgets.size(), c.obstacles.size()])
 		c.queue_free()
 		await _frames(2)
+
+## Gelaende-Tal: liegt ueberall unter dem Belag, Schluchten unter Spruengen/Fluegen, Aus-Grenze greift neben der Bahn.
+func _check_terrain(c: Course3D, id: String, build_usec: int) -> void:
+	check(c.terrain != null, "%s: Gelaende vorhanden" % id)
+	if c.terrain == null:
+		return
+	var t: Terrain3D = c.terrain
+	var bad := 0
+	for i in c.surface_pts.size():
+		var sp: Vector3 = c.surface_pts[i]
+		var gap: float = sp.y - t.height_at(sp.x, sp.z)
+		if gap < 0.15:
+			bad += 1
+			if bad <= 4:
+				print("[SMOKE]   %s: Gelaende zu hoch bei (%.1f, %.1f, %.1f): nur %.2f m unter dem Belag" % [id, sp.x, sp.y, sp.z, gap])
+	check(bad == 0, "%s: Gelaende liegt unter dem ganzen Belag (%d Proben, %d zu hoch)" % [id, c.surface_pts.size(), bad])
+	var bad_cor := 0
+	for cor in c.corridors:
+		var a: Vector3 = cor["a"]
+		var b: Vector3 = cor["b"]
+		for k in range(1, 10):
+			var p: Vector3 = a.lerp(b, float(k) / 10.0)
+			if t.height_at(p.x, p.z) > minf(a.y, b.y) - 1.0:
+				bad_cor += 1
+				if bad_cor <= 3:
+					print("[SMOKE]   %s: Schlucht zu flach bei (%.1f, %.1f): Gelaende %.1f m" % [id, p.x, p.z, t.height_at(p.x, p.z)])
+	check(bad_cor == 0, "%s: Schluchten unter %d Spruengen/Fluegen" % [id, c.corridors.size()])
+	var bounds: Gadget = null
+	for g in c.gadgets:
+		if g is Gadgets.TerrainBounds:
+			bounds = g
+	check(bounds != null, "%s: Aus-Grenze (Gelaende) aktiv" % id)
+	if bounds != null:
+		var st := SimState.new()
+		st.begin_tick(c.tee.origin, Vector3.ZERO, true, 0.0, 1.0 / 60.0)
+		bounds.affect(st, 1.0 / 60.0)
+		var on_tee: String = st.out_kind
+		var side: Vector3 = c.tee.origin + c.tee.basis.x * (TrackKit.WIDTH * 0.5 + 4.5)
+		side.y = t.height_at(side.x, side.z) + 0.05
+		st.begin_tick(side, Vector3.ZERO, true, 0.0, 1.0 / 60.0)
+		bounds.affect(st, 1.0 / 60.0)
+		check(on_tee == "" and st.out_kind == "ob", "%s: Ball auf dem Tee im Spiel, auf dem Hang daneben aus ('%s'/'%s')" % [id, on_tee, st.out_kind])
+	var ridge: float = -INF
+	for iz in range(0, t.nz, 4):
+		for ix in range(0, t.nx, 4):
+			ridge = maxf(ridge, t.heights[iz * t.nx + ix] - t.base_y)
+	print("[SMOKE] %s Gelaende: %dx%d Punkte, Berge bis %.0f m ueber der Bahn, %d Schluchten, Bau %.0f ms" % [id, t.nx, t.nz, ridge, c.corridors.size(), float(build_usec) / 1000.0])
 
 # ---------------------------------------------------------------- Physik: Vorhersage gegen echten Ball
 

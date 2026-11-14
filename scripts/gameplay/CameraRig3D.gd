@@ -37,6 +37,8 @@ var _cam_look: Vector3 = Vector3.ZERO
 var _replay_point: Vector3 = Vector3.ZERO
 var _replay_angle: float = 0.0
 var _snap: bool = true
+## Bahn mit Gelaende: die Kamera bleibt immer ueber den Hangen (nie in einem Berg).
+var course: Course3D = null
 var _base_fov: float = 62.0
 var _want_fov: float = 62.0
 
@@ -204,6 +206,8 @@ func _process(delta: float) -> void:
 			want_pos = _replay_point + Vector3(sin(_replay_angle) * 7.0, 3.2, cos(_replay_angle) * 7.0)
 			want_look = _replay_point + Vector3.UP * 0.3
 			k_pos = 4.0
+	if course != null and mode != Mode.TOP:
+		want_pos.y = maxf(want_pos.y, course.ground_height(want_pos.x, want_pos.z) + 2.2)
 	if _snap:
 		_snap = false
 		_cam_pos = want_pos
@@ -212,6 +216,10 @@ func _process(delta: float) -> void:
 	else:
 		camera.global_position = camera.global_position.lerp(want_pos, 1.0 - exp(-k_pos * dt))
 		_look = _look.lerp(want_look, 1.0 - exp(-12.0 * dt))
+	if course != null and mode != Mode.TOP:
+		var floor_y: float = course.ground_height(camera.global_position.x, camera.global_position.z) + 1.6
+		if camera.global_position.y < floor_y:
+			camera.global_position.y = floor_y
 	if mode != Mode.HOLE_CAM:
 		_cam_pos = camera.global_position
 	var to_look: Vector3 = _look - camera.global_position

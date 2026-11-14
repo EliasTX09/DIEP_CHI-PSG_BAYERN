@@ -79,7 +79,9 @@ func _course_camera(c: Course3D) -> Camera3D:
 	add_child(cam)
 	var center: Vector3 = c.bounds.get_center()
 	var ext: float = maxf(c.bounds.size.x, c.bounds.size.z) * 0.5 + 8.0
-	cam.global_position = center + Vector3(ext * 0.75, ext * 1.0 + 6.0, ext * 1.05)
+	var pos: Vector3 = center + Vector3(ext * 0.75, ext * 1.0 + 6.0, ext * 1.05)
+	pos.y = maxf(pos.y, c.ground_height(pos.x, pos.z) + 8.0)
+	cam.global_position = pos
 	cam.look_at(center, Vector3.UP)
 	cam.current = true
 	return cam

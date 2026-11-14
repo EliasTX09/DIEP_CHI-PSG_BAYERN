@@ -141,15 +141,6 @@ func _build_world(world_id: String) -> void:
 	_center = b.get_center()
 	_center.y = maxf(_center.y, 0.0)
 	var radius: float = maxf(b.size.x, b.size.z) * 0.5
-	# Schwebende Inseln (gruene Welten) rund um die Bahn
-	if world_id in ["emerald", "pirate"]:
-		for i in 6:
-			var ang: float = TAU * float(i) / 6.0 + _rng.randf_range(-0.25, 0.25)
-			var dist: float = radius + _rng.randf_range(16.0, 30.0)
-			var pos := _center + Vector3(sin(ang) * dist, _rng.randf_range(7.0, 15.0), cos(ang) * dist)
-			var island := _make_floating_island(_rng.randf_range(3.0, 5.5), i % 2 == 0)
-			island.position = pos
-			_world_root.add_child(island)
 	# Glitzer bzw. Glut-Partikel ueber der ganzen Szene
 	var warm: bool = world_id == "volcano"
 	var sparkle := Mat.particles({"amount": 90, "lifetime": 7.0, "spread": 180.0, "speed": Vector2(0.1, 0.4),
@@ -161,37 +152,6 @@ func _build_world(world_id: String) -> void:
 	sparkle.position = _center + Vector3(0.0, 6.0, 0.0)
 	_world_root.add_child(sparkle)
 	_build_curve()
-
-func _make_floating_island(r: float, with_windmill: bool) -> Node3D:
-	var root := Node3D.new()
-	var bob := Motion.bobber(_rng.randf_range(0.4, 0.9), _rng.randf_range(0.35, 0.6), _rng.randf_range(0.0, TAU))
-	root.add_child(bob)
-	var holder := Node3D.new()
-	bob.add_child(holder)
-	var grass := Mat.shader("terrain", {"slope_strength": 0.0})
-	holder.add_child(Mat.cylinder(r, r * 0.92, 0.9, grass, Vector3(0.0, 0.0, 0.0), 20))
-	holder.add_child(Mat.cylinder(r * 0.9, 0.35, r * 1.7, Mat.flat(Color(0.45, 0.36, 0.3), 0.95), Vector3(0.0, -r * 0.85 - 0.45, 0.0), 9))
-	holder.add_child(Mat.cylinder(r * 0.5, 0.2, r * 0.9, Mat.flat(Color(0.38, 0.3, 0.26), 0.95), Vector3(r * 0.3, -r * 1.6, 0.2), 7))
-	var trunk := Mat.flat(Color(0.42, 0.28, 0.16), 0.9)
-	var leaves := Mat.flat(Color(0.22, 0.62, 0.28), 0.8)
-	for t in _rng.randi_range(1, 3):
-		var a: float = _rng.randf_range(0.0, TAU)
-		var d: float = _rng.randf_range(r * 0.25, r * 0.7)
-		var tp := Vector3(sin(a) * d, 0.45, cos(a) * d)
-		holder.add_child(Mat.cylinder(0.15, 0.22, 1.6, trunk, tp + Vector3(0.0, 0.8, 0.0), 8))
-		holder.add_child(Mat.sphere(_rng.randf_range(0.8, 1.2), leaves, tp + Vector3(0.0, 2.0, 0.0), 12))
-	if with_windmill:
-		var wm := Obstacles.Windmill.new(_rng.randf_range(0.6, 1.1), _rng.randf_range(0.0, TAU), Color(0.92, 0.88, 0.78), Color(0.8, 0.28, 0.22), 0.8)
-		wm.scale = Vector3.ONE * 0.55
-		wm.position = Vector3(0.0, 0.45, 0.0)
-		wm.rotation.y = _rng.randf_range(0.0, TAU)
-		holder.add_child(wm)
-		_decor_windmills.append(wm)
-	if _rng.randf() < 0.6:
-		var fall := Mat.vplane(Vector2(1.2, r * 2.2), Mat.shader("waterfall"), Vector3(r * 0.95, -r * 1.1, 0.0), 6)
-		fall.rotation.y = PI * 0.5
-		holder.add_child(fall)
-	return root
 
 ## Wechselt die Arena: Hintergrund-Bahn wird mit kurzer Abblende neu aufgebaut.
 func select_world(world_id: String) -> void:
@@ -279,15 +239,17 @@ func _update_fireballs(delta: float) -> void:
 
 func _build_curve() -> void:
 	var b: AABB = course.bounds
-	var r: float = maxf(b.size.x, b.size.z) * 0.5 + 12.0
+	# Ellipse knapp ausserhalb der Bahn: die Kamera fliegt durchs Tal, nicht durch die Berge
+	var rx: float = b.size.x * 0.5 + 9.0
+	var rz: float = b.size.z * 0.5 + 9.0
 	_curve = Curve3D.new()
 	var pts: Array[Vector3] = []
 	var n := 8
 	for i in n:
 		var a: float = TAU * float(i) / float(n)
-		var rr: float = r * (1.0 + 0.18 * sin(a * 2.0 + 0.7))
+		var k: float = 1.0 + 0.12 * sin(a * 2.0 + 0.7)
 		var h: float = 14.0 + 6.0 * sin(a * 3.0 + 1.3)
-		pts.append(_center + Vector3(sin(a) * rr, h, cos(a) * rr))
+		pts.append(_center + Vector3(sin(a) * rx * k, h, cos(a) * rz * k))
 	pts.append(pts[0])
 	for i in pts.size():
 		var prev: Vector3 = pts[(i - 1 + n) % n] if i > 0 else pts[n - 1]
@@ -302,7 +264,11 @@ func _update_camera(delta: float) -> void:
 	if length <= 0.0:
 		return
 	_cam_offset = fmod(_cam_offset + delta * length / CAMERA_LOOP_SECONDS, length)
-	camera.global_position = _curve.sample_baked(_cam_offset, true)
+	var pos: Vector3 = _curve.sample_baked(_cam_offset, true)
+	# Ueber den Bergen bleiben (die Bahn liegt in einem Tal)
+	if course != null:
+		pos.y = maxf(pos.y, course.ground_height(pos.x, pos.z) + 6.0)
+	camera.global_position = pos
 	var look: Vector3 = _center + Vector3(sin(_time * 0.11) * 6.0, 1.5, cos(_time * 0.09) * 6.0)
 	camera.look_at(look, Vector3.UP)
 

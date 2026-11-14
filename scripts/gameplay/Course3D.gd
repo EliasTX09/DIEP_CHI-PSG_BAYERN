@@ -37,6 +37,14 @@ var clock_running: bool = true
 var one_shot: bool = false
 ## Zeitlimit der Bahn in Sekunden.
 var time_limit: float = 75.0
+## Proben der Belag-Oberflaeche (vom TrackKit) - daraus wird das Gelaende geformt.
+var surface_pts: PackedVector3Array = PackedVector3Array()
+## 1 = Probe liegt an einer Kante ohne Bande (dort faellt das Gelaende in eine Schlucht ab).
+var surface_open: PackedByteArray = PackedByteArray()
+## Flug-Korridore (Spruenge, Kanonen, Abkuerzungen): {a, b, half} - darunter liegt eine Schlucht.
+var corridors: Array[Dictionary] = []
+## Gelaende-Hoehenfeld (Aus-Grenze, Kamera-Boden) oder null.
+var terrain: Terrain3D = null
 
 # Schatten-Physikraum fuer Vorhersagen mit beweglichen Teilen (statische Kopien aller Bahn-Kollisionen)
 var _shadow_space: RID = RID()
@@ -64,6 +72,22 @@ func set_time(t: float) -> void:
 	time = t
 	for o in obstacles:
 		o.call("update_time", time)
+
+# ---------------------------------------------------------------- Gelaende
+
+func add_surface_sample(p: Vector3, open_edge: bool) -> void:
+	surface_pts.append(p)
+	surface_open.append(1 if open_edge else 0)
+
+## Flug-Korridor von a nach b (halbe Breite in m): das Gelaende darunter wird zur Schlucht.
+func add_corridor(a: Vector3, b: Vector3, half_width: float) -> void:
+	corridors.append({"a": a, "b": b, "half": half_width})
+
+## Gelaendehoehe (oder -INF ohne Gelaende).
+func ground_height(x: float, z: float) -> float:
+	if terrain == null:
+		return -INF
+	return terrain.height_at(x, z)
 
 # ---------------------------------------------------------------- Mittellinie
 

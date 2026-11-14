@@ -23,7 +23,7 @@ var hold_left: float = 0.0
 var holder: Gadget = null
 ## Wurde in diesem Tick teleportiert / per Gadget versetzt?
 var teleported: bool = false
-## "" = alles gut, sonst Grund fuer Out-of-Bounds ("water" | "lava" | "void" | "laser").
+## "" = alles gut, sonst Grund fuer Out-of-Bounds ("water" | "lava" | "void" | "laser" | "ob" = Gelaende neben der Bahn).
 var out_kind: String = ""
 ## Abklingzeiten je Gadget (instance_id -> Sekunden).
 var cooldowns: Dictionary = {}

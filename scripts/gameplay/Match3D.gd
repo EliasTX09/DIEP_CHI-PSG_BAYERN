@@ -188,6 +188,7 @@ func _start_hole(index: int) -> void:
 	course = CourseBuilder3D.build(course_id, seed_value)
 	course.clock_running = false
 	add_child(course)
+	rig.course = course
 	time_left = course.time_limit
 	var n: int = players.size()
 	for i in n:
@@ -562,7 +563,7 @@ func _on_ball_out(kind: String, rec: PlayerRec) -> void:
 	if rec == local:
 		_end_slowmo()
 		rig.shake(0.3)
-		var what: String = "Lava!" if kind == "lava" else ("Laser!" if kind == "laser" else ("Wasser!" if kind == "water" else "Abgrund!"))
+		var what: String = {"lava": "Lava!", "laser": "Laser!", "water": "Wasser!", "ob": "Aus!"}.get(kind, "Abgrund!")
 		hud.toast(what + " +1 Strafschlag")
 	elif rec.kind == "bot" and rec.tag != null and _rng.randf() < 0.3:
 		_emote(rec, "oops")
