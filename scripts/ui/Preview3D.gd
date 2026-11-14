@@ -139,7 +139,7 @@ func _process(delta: float) -> void:
 	_spin += _spin_velocity * delta
 	if kind == "trail" and _mover != null:
 		var a: float = _time * 2.4
-		_mover.position = Vector3(cos(a) * 0.42, sin(_time * 1.3) * 0.08, sin(a) * 0.42)
+		_mover.position = Vector3(cos(a) * 0.3, sin(_time * 1.3) * 0.08, sin(a) * 0.3)
 	else:
 		_pivot.rotation.y = _spin
 

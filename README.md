@@ -174,7 +174,8 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Ball-Physik vs. Vorhersage, Out-of-Bounds, Einlochen auf allen Bahnen | in CI geprüft (Smoke-Test) |
 | Bots spielen alle 15 Bahnen | in CI geprüft |
 | Komplette Partie mit Bots inkl. Belohnungen, Golden Shot, Touch-Gesten | in CI geprüft |
-| Hochformat-Menü, alle Seiten, Battle Pass | in CI geprüft (Aufbau, Kernaktionen, Layout: alles im Bild, keine Überlappung, Mindestbreite ≤ 720 px) |
+| Hochformat-Menü, alle Seiten, Battle Pass | in CI geprüft (Aufbau, Kernaktionen, Layout: alles im Bild, keine Überlappung, Mindestbreite ≤ 720 px); Freunde/Lobby im Online-Zustand mit Testdaten gegen den Schein-Server |
+| Battle-Pass-Stand im Cloud-Spielstand | gegen den Schein-Server geprüft; Saisons richten sich nach der Geräte-Uhr |
 | Darstellung aller Welten, HUD und Menü | per Software-Rendering in CI gerendert (720×1280 und 720×1600) und angesehen |
 | SQL-Schema + RLS-Regeln | in CI gegen PostgreSQL 16 getestet |
 | Login-Ablauf im Spiel (Gast, Web-Code, Profil-Abgleich, Profilbild) | in CI gegen einen **lokalen Schein-Server** getestet – prüft das Spiel, nicht den echten Supabase-Server |
