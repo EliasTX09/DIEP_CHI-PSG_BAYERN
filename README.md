@@ -136,7 +136,8 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
   eine Schlucht. Wer das Gelände neben der Bahn berührt, ist **aus** (+1 Strafschlag).
 - **Abkürzungen:** Auf jeder Bahn außer der geraden Einsteiger-Bahn e1 (und dem Golden Shot) gibt es eine Öffnung in
   der Bande: ein schmaler Steg ohne Banden führt über eine Schlucht durch ein Felsentor zu einem Sprungpad, das den
-  Ball mit Schwung aufs Grün (bzw. ein späteres Fairway-Stück) schießt. Daneben oder zu langsam = Schlucht = Aus.
+  Ball mit Schwung aufs Grün (bzw. ein späteres Fairway-Stück) schießt. Vom Steg gerollt = Schlucht = Aus, zu
+  langsam = der Ball bleibt auf dem Steg; wer seitlich versetzt oder mit falschem Tempo aufs Pad kommt, landet versetzt.
 - **Hindernisse:** Bäche quer über die Bahn mit schmalem Holzsteg, tiefes Rough am Rand, Baumstämme und Felsbrocken,
   Lianen-Bögen, Sandbunker.
 - **Bahn-Baukasten:** Rampen, Steilkurven, Spiralen, Loopings, Brücken, Lücken, Boost-Pads, Windzonen, Teleporter,
@@ -197,7 +198,7 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Supabase-Login, Freunde, Lobbys, Realtime, Portal gegen ein **echtes** Supabase-Projekt | **nicht getestet** |
 | Hochformat-HUD | in CI geprüft (Layout oben/unten, Daumenzone) |
 | Gelände-Tal | in CI geprüft: liegt auf allen 16 Bahnen überall unter dem Belag, Schluchten unter allen Sprüngen/Flügen, Aus-Grenze greift neben der Bahn; Bau ~40 ms pro Bahn |
-| Abkürzungen | in CI geprüft: Vorhersage landet im Ziel, seitlich vom Steg = Aus; echter Ball auf drei Bahnen. Die Ersparnis wird gemessen (siehe Smoke-Log), nicht pauschal „2 Schläge“ |
+| Abkürzungen | in CI geprüft auf allen 14 Bahnen: Vorhersage landet auf dem Grün, seitlich vom Steg = Aus, zu langsam = bleibt auf dem Steg; echter Ball auf e2, v3, n3, p1 landet wie vorhergesagt (≤ 0,1 m Abweichung). Die Ersparnis wird gemessen (11–101 m Weg), nicht pauschal „2 Schläge“ |
 | Hindernisse (Bach, Rough, Stamm, Fels) | in CI geprüft (Wirkung + Bots locht weiter auf allen 15 Bahnen ein) |
 | Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen) |
 | APK-Export + Artifact `GolfBattle3D-apk` | in CI gebaut (Entwicklungs-Branch) |
