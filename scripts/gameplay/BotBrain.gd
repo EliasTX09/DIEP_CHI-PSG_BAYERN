@@ -276,7 +276,7 @@ func _score(res: Dictionary, cand: Dictionary) -> float:
 	var penalty: float = _failure_penalty(cand)
 	# Abkuerzung fuer diesen Schlag nicht erlaubt -> wie ein Fehlschlag werten
 	if not _allow_shortcut and bool(res.get("launched", false)):
-		return -480.0 - penalty
+		return -900.0 - penalty   # schlechter als jeder andere Schlag, auch als ein Aus
 	if bool(res.get("holed", false)):
 		return 100000.0 - float(res.get("time", 0.0)) - penalty * 200.0
 	if bool(res.get("out", false)):

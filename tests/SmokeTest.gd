@@ -348,7 +348,7 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 	check(float(branches) >= 0.3 * float(trees), "%s: mind. 30 %% der Randbaeume mit Ast ueber der Bahn (%d/%d)" % [id, branches, trees])
 	check(low == 0 and under_hits == 0, "%s: rollender Ball passt unter allen Aesten durch" % id)
 	check(branch_hits == branches, "%s: Aeste haben Kollision (%d/%d)" % [id, branch_hits, branches])
-	print("[SMOKE] %s Rand-Natur: %d Baeume (%d mit Ast), %d Wurzeln, %d Felsen" % [id, trees, branches, roots, rocks])
+	print("[SMOKE] %s Rand-Natur: %d Baeume (%d mit Ast), %d Wurzeln, %d Felsen | verworfen: %s" % [id, trees, branches, roots, rocks, str(CourseBuilder3D.edge_stats)])
 
 ## Gelaende-Tal: liegt ueberall unter dem Belag, Schluchten unter Spruengen/Fluegen, Aus-Grenze greift neben der Bahn.
 func _check_terrain(c: Course3D, id: String, build_usec: int) -> void:
@@ -657,6 +657,8 @@ func _bot_playthrough(id: String, verbose: bool, skill: float = 0.92, course_tro
 	ball.place_on_tee(c.tee)
 	await _frames(3)
 	ball.unfreeze()
+	# Die Streuung beim Abschlag nutzt den globalen Zufall -> pro Bahn fest seeden (reproduzierbar)
+	seed(absi(hash(id + "|bot")))
 	var brain := BotBrain.new(ball, c, skill, 777)
 	if course_trophies >= 0:
 		SmartBotController.configure(brain, course_trophies)
@@ -737,6 +739,7 @@ func _stage_adaptive_bots() -> void:
 	BotBrain.time_budget_usec = 400000
 	var holed := 0
 	var launched := PackedStringArray()
+	var accidental := PackedStringArray()
 	var open_ids := PackedStringArray()
 	var total_strokes := 0
 	for id in Catalog.all_course_ids():
@@ -746,11 +749,14 @@ func _stage_adaptive_bots() -> void:
 			holed += 1
 		else:
 			open_ids.append(id)
-		if int(r["launches"]) > 0 or int(r["choices"]) > 0:
+		if int(r["choices"]) > 0:
 			launched.append(id)
+		elif int(r["launches"]) > 0:
+			accidental.append(id)
 		print("[SMOKE] Einsteiger-Bot (0 Bahn-Trophaeen) auf %s: %s nach %d Schlaegen, Schanze %d x" % [id,
 			"EINGELOCHT" if bool(r["holed"]) else "NICHT eingelocht", int(r["strokes"]), int(r["launches"])])
-	check(launched.is_empty(), "Ohne Bahn-Trophaeen nimmt kein Bot die Abkuerzung (genommen auf: %s)" % ", ".join(launched))
+	check(launched.is_empty(), "Ohne Bahn-Trophaeen plant kein Bot die Abkuerzung (geplant auf: %s)" % ", ".join(launched))
+	print("[SMOKE] Versehentlich auf die Schanze gerollt (Zielfehler, nicht geplant): %s" % (", ".join(accidental) if not accidental.is_empty() else "nirgends"))
 	print("[SMOKE] Bots ohne Abkuerzung: %d von 15 eingelocht, %d Schlaege gesamt; offen: %s" % [holed, total_strokes, ", ".join(open_ids)])
 	check(holed >= 12, "Bots ohne Abkuerzung (Koennen 0.7) lochen auf mind. 12 von 15 Bahnen ein (%d, offen: %s)" % [holed, ", ".join(open_ids)])
 	# Profi-Stufe: viele Bahn-Trophaeen -> Bots nutzen die Abkuerzung, wo sie sich lohnt

@@ -486,12 +486,16 @@ const BRANCH_SHARE := 0.4
 ## Unterkante der Aeste ueber dem Belag (rollende Baelle passen immer drunter durch)
 const BRANCH_CLEAR := 2.55
 
+## Diagnose der letzten Rand-Natur-Platzierung: verworfene Stellen je Grund (fuer den Smoke-Test).
+static var edge_stats: Dictionary = {}
+
 ## Randbaeume (ein Teil mit dickem Ast quer ueber die Bahn), Wurzeln und Felsen, die von der Bande in die Bahn ragen.
 ## Platziert auf geraden Stuecken der Hauptbahn; frei bleiben Abschlag, Gruen, Abkuerzung (Oeffnung, Tor, Flug),
 ## Fluege ueber Luecken/Kanonen (Korridore), Gadgets und bestehende Hindernisse.
 static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: int) -> void:
 	if th.id == "neon":
 		return
+	edge_stats = {}
 	var rng := RandomNumberGenerator.new()
 	rng.seed = nature_seed
 	var kind: String = {"volcano": "dead", "pirate": "jungle"}.get(th.id, "broadleaf")
@@ -499,31 +503,38 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 	var easy: bool = c.course_id == "e1"
 	var avoid: Array[Vector3] = []
 	for g in c.gadgets:
-		if g.get_parent() == c:
+		if g.get_parent() == c and not (g is Gadgets.TerrainBounds):
 			avoid.append(g.position)
-	for o in c.obstacles:
-		if o is Node3D:
-			avoid.append((o as Node3D).position)
 	for p in c.blockers:
 		avoid.append(p)
+	# bewegliche Hindernisse (Windmuehle, Hammer, Faehre) mit mehr Abstand
+	var movers: Array[Vector3] = []
+	for o in c.obstacles:
+		if o is Node3D:
+			movers.append((o as Node3D).position)
 	var trees := 0
 	var branches := 0
 	var roots := 0
 	var rocks := 0
 	var cycle: Array[String] = ["tree", "root", "tree", "rock", "tree", "tree", "root", "rock", "tree", "tree"]
 	var turn := 0
+	var flip := 1.0
 	for st: Dictionary in k.straights:
 		var length: float = float(st["length"])
-		if length < 5.0:
+		if length < 3.5:
+			_edge_stat("kurz")
 			continue
 		var xf: Transform3D = st["xf"]
 		var half: float = float(st["width"]) * 0.5
-		var s: float = 2.5 + rng.randf_range(0.0, 1.5)
-		while s < length - 2.0:
-			var side: float = -1.0 if rng.randf() < 0.5 else 1.0
+		var s: float = 1.5 + rng.randf_range(0.0, 1.0)
+		while s < length - 1.2:
+			# Seiten abwechseln (beide Bahnraender bekommen Natur)
+			flip = -flip
+			var side: float = flip
 			if not bool(st["wall_l" if side < 0.0 else "wall_r"]):
 				side = -side
 			if not bool(st["wall_l" if side < 0.0 else "wall_r"]):
+				_edge_stat("ohne_bande")
 				break
 			var center: Vector3 = xf * Vector3(0.0, 0.0, -s)
 			var edge: Vector3 = xf * Vector3(side * half, 0.0, -s)
@@ -534,8 +545,12 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 				what = "tree"
 			if what == "tree" and trees >= EDGE_TREES:
 				what = "root" if roots < EDGE_ROOTS and not easy else ("rock" if rocks < EDGE_ROCKS and not easy else "")
-			if what == "" or not _edge_free(c, center, edge, avoid, 4.5):
-				s += 3.0
+			if what == "":
+				break
+			var why: String = _edge_blocked(c, center, edge, avoid, movers, what != "tree")
+			if why != "":
+				_edge_stat(why)
+				s += 2.0
 				continue
 			turn += 1
 			# Rahmen am Bahnrand: +X zeigt in die Bahn, Z entlang der Bahn
@@ -548,8 +563,9 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 			if what == "tree":
 				var base: Vector3 = edge - inward * (TrackKit.WALL_T + 1.55)
 				var ground: float = c.ground_height(base.x, base.z)
-				if ground == -INF or ground < edge.y - 3.5:
-					s += 3.0
+				if ground == -INF or ground < edge.y - 9.0 or ground > edge.y + 0.5:
+					_edge_stat("gelaende")
+					s += 2.0
 					continue
 				# Hoehen im Baum-Raum (Ursprung = Stammfuss, 0.15 m eingegraben): Belag liegt bei floor_l
 				var drop: float = edge.y - ground
@@ -562,7 +578,10 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 				if want_branch:
 					reach = TrackKit.WALL_T + 1.55 + half * (1.25 if not easy else 0.7)
 					var tip: Vector3 = base + inward * reach
-					if not _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, avoid):
+					var near_all: Array[Vector3] = avoid.duplicate()
+					near_all.append_array(movers)
+					if not _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, near_all):
+						_edge_stat("ast_frei")
 						reach = 0.0
 				var trunk_h: float = floor_l + (BRANCH_CLEAR + 2.0 if reach > 0.0 else rng.randf_range(3.4, 4.6))
 				var tree := Obstacles.edge_tree(kind, trunk_h, reach, attach_h, end_h, trees + nature_seed % 7, moss)
@@ -598,26 +617,36 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 				rocks += 1
 				c.edge_items.append({"kind": "rock", "pos": rock.position, "branch": false, "clearance": 0.0})
 			avoid.append(edge)
-			s += rng.randf_range(5.0, 7.5)
+			s += rng.randf_range(3.8, 5.5)
 
-## Ist die Stelle frei? (Abstand zu Abschlag, Loch, Abkuerzung, Oeffnungen, Korridoren, Gadgets, Hindernissen)
-static func _edge_free(c: Course3D, center: Vector3, edge: Vector3, avoid: Array[Vector3], min_dist: float) -> bool:
-	if center.distance_to(c.tee.origin) < 6.0 or center.distance_to(c.hole_pos) < 7.5:
-		return false
+static func _edge_stat(reason: String) -> void:
+	edge_stats[reason] = int(edge_stats.get(reason, 0)) + 1
+
+## Grund, warum die Stelle nicht frei ist ("" = frei): Abschlag, Loch, Abkuerzung, Gadgets/Hindernisse, bewegliche
+## Hindernisse; Dinge AUF der Bahn (Wurzel, Fels) zusaetzlich nicht unter Fluegen/Spruengen (Korridore).
+static func _edge_blocked(c: Course3D, center: Vector3, edge: Vector3, avoid: Array[Vector3], movers: Array[Vector3], on_track: bool) -> String:
+	if center.distance_to(c.tee.origin) < 5.0:
+		return "abschlag"
+	if center.distance_to(c.hole_pos) < 6.5:
+		return "loch"
 	for p in avoid:
-		if p.distance_to(edge) < min_dist or p.distance_to(center) < min_dist:
-			return false
+		if p.distance_to(edge) < 3.2 or p.distance_to(center) < 3.2:
+			return "hindernis"
+	for p in movers:
+		if Vector2(p.x - center.x, p.z - center.z).length() < (7.0 if on_track else 4.5):
+			return "beweglich"
 	if not c.shortcut.is_empty():
-		for key in ["gate", "lane_start", "lip", "landing"]:
-			if (c.shortcut[key] as Vector3).distance_to(center) < 7.0:
-				return false
-	for cor in c.corridors:
-		var a: Vector3 = cor["a"]
-		var b: Vector3 = cor["b"]
-		var q: Vector3 = Geometry3D.get_closest_point_to_segment(center, a, b)
-		if Vector2(q.x - center.x, q.z - center.z).length() < float(cor["half"]) + 3.0:
-			return false
-	return true
+		for key in ["gate", "lane_start", "lip"]:
+			if (c.shortcut[key] as Vector3).distance_to(center) < 5.0:
+				return "abkuerzung"
+		if (c.shortcut["landing"] as Vector3).distance_to(center) < 6.0:
+			return "abkuerzung"
+	if on_track:
+		for cor in c.corridors:
+			var q: Vector3 = Geometry3D.get_closest_point_to_segment(center, cor["a"], cor["b"])
+			if Vector2(q.x - center.x, q.z - center.z).length() < float(cor["half"]) + 1.5:
+				return "korridor"
+	return ""
 
 ## Liegt der Ast (Strecke a-b in Weltkoordinaten) frei von Flug-Korridoren und der Abkuerzung?
 static func _branch_free(c: Course3D, a: Vector3, b: Vector3, avoid: Array[Vector3]) -> bool:
