@@ -119,6 +119,7 @@ static func boulder(radius: float, tint: Color = Color(0.55, 0.52, 0.48), moss: 
 static func edge_tree(kind: String, trunk_h: float, reach: float, attach_h: float, end_h: float, variant: int, moss: float = 0.0) -> StaticBody3D:
 	var b := StaticBody3D.new()
 	b.name = "EdgeTree"
+	b.set_meta("edge_tree", true)
 	b.collision_layer = 1
 	b.collision_mask = 0
 	var pm := PhysicsMaterial.new()

@@ -326,11 +326,11 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 					var tip: Vector3 = it["tip"]
 					q.transform = Transform3D(Basis.IDENTITY, Vector3(tip.x, float(it["floor_y"]) + Ball3D.RADIUS + 0.02, tip.z))
 					for h in space.intersect_shape(q, 16):
-						if (h["collider"] as Node).name.begins_with("EdgeTree"):
+						if (h["collider"] as Object).has_meta("edge_tree"):
 							under_hits += 1
 					q.transform = Transform3D(Basis.IDENTITY, tip)
 					for h in space.intersect_shape(q, 16):
-						if (h["collider"] as Node).name.begins_with("EdgeTree"):
+						if (h["collider"] as Object).has_meta("edge_tree"):
 							branch_hits += 1
 							break
 			"root":

@@ -50,6 +50,9 @@ var straights: Array[Dictionary] = []
 var openings: Array[Dictionary] = []
 ## Tatsaechlich gebaute Oeffnungen: {xf (Turtle am Oeffnungs-Anfang), length, side, width}
 var built_openings: Array[Dictionary] = []
+## Alle Querschnitt-Rahmen der Hauptbahn (Geraden, Kurven, Huegel, Rampen): {xf, half, wall_l, wall_r, dist}
+## - Grundlage fuer die Natur am Bahnrand (Baeume, Wurzeln, Felsen).
+var edge_frames: Array[Dictionary] = []
 ## Gruen: Rahmen am Gruen-Anfang + Groesse (fuer Landezonen)
 var green_xf: Transform3D = Transform3D.IDENTITY
 var green_size: Vector2 = Vector2.ZERO
@@ -195,6 +198,9 @@ func _sample_frame(f: Transform3D, half: float) -> void:
 func _emit_ribbon(frames: Array[Transform3D], dists: PackedFloat32Array, widths: PackedFloat32Array = PackedFloat32Array()) -> void:
 	for i in frames.size():
 		_sample_frame(frames[i], (widths[i] if widths.size() > i else width) * 0.5)
+		if not branch:
+			edge_frames.append({"xf": frames[i], "half": (widths[i] if widths.size() > i else width) * 0.5,
+				"wall_l": wall_l, "wall_r": wall_r, "dist": dists[i]})
 	for i in frames.size() - 1:
 		var fa: Transform3D = frames[i]
 		var fb: Transform3D = frames[i + 1]
