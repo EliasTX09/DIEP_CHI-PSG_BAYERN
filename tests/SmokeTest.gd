@@ -842,6 +842,14 @@ func _stage_menu() -> void:
 		check(play.get_global_rect().position.y > vp_rect.size.y * 0.5, "SPIELEN in der unteren Haelfte (Daumen)")
 		check(nav.get_global_rect().end.y >= vp_rect.size.y - 60.0, "Tab-Leiste am unteren Rand")
 	check(menu.showcase.visible, "Vitrine auf der Startseite sichtbar")
+	# Einladungs-Leiste
+	NetworkManager.invites = [{"id": 9, "code": "QX42", "from_id": "f9", "from_name": "Einlader"}]
+	menu._refresh_invites()
+	check(menu._invite_bar.visible and _min_width(menu._invite_bar) <= 700.0, "Einladungs-Leiste sichtbar und passt auf 720 px")
+	check((menu._nav_badges["social"] as Label).visible, "Freunde-Abzeichen zeigt Einladung")
+	NetworkManager.invites = []
+	menu._refresh_invites()
+	check(not menu._invite_bar.visible, "Einladungs-Leiste verschwindet")
 	# Wischen dreht die Vitrine
 	var start: Vector2 = menu._showcase_slot.get_global_rect().get_center()
 	var ang0: float = menu._spin_angle
@@ -1007,6 +1015,12 @@ func _min_width(root: Control) -> float:
 			w = maxf(w, _min_width(c as Control))
 	return w
 
+func _count_avatars(root: Node) -> int:
+	var n: int = 1 if root is UIAvatar else 0
+	for c in root.get_children():
+		n += _count_avatars(c)
+	return n
+
 func _count_type(root: Node, type_name: String) -> int:
 	var n: int = 1 if root.is_class(type_name) else 0
 	for c in root.get_children():
@@ -1100,6 +1114,57 @@ func _count_backups() -> int:
 	return n
 
 ## Kompletter Ablauf gegen einen lokalen Schein-Server: Gast-Login, Web-Code einloesen, Profil + Profilbild.
+## Freunde- und Lobby-Seite im Online-Zustand (mit Testdaten): bauen sich auf und passen auf 720 px.
+func _check_online_pages() -> void:
+	check(NetworkManager.is_online(), "Online fuer Seiten-Test")
+	var host := Control.new()
+	host.size = Vector2(720, 1280)
+	add_child(host)
+	var pg := MenuPages.new(null, host, host)
+	var me: String = AuthManager.user_id
+	var friends_data: Array = [
+		{"row_id": 1, "id": "f1", "name": "Kumpel", "trophies": 420, "frame": "silver", "color": 2, "online": true, "state": "accepted"},
+		{"row_id": 2, "id": "f2", "name": "Sehr langer Name", "trophies": 12, "frame": "bronze", "color": 3, "online": false, "state": "incoming"},
+		{"row_id": 3, "id": "f3", "name": "Wartender", "trophies": 99, "frame": "gold", "color": 4, "online": false, "state": "outgoing"},
+	]
+	var invites_data: Array = [{"id": 7, "code": "AB12", "from_id": "f1", "from_name": "Kumpel"}]
+	pg.open("friends")
+	await _process_frames(1)
+	NetworkManager.friends = friends_data.duplicate(true)
+	NetworkManager.invites = invites_data.duplicate(true)
+	pg._search_results = [{"id": "s1", "name": "Gesucht", "code": "SUCH1234", "trophies": 5, "color": 1, "frame": "bronze"}]
+	pg.refresh()
+	var froot := pg.modal["root"] as Control
+	check(froot.find_child("FriendCode", true, false) != null and _count_avatars(froot) >= 3, "Freunde online: Code, Suche, Anfragen, Freunde")
+	check(_min_width(froot) <= 700.0, "Freunde-Seite online passt auf 720 px (%.0f)" % _min_width(froot))
+	pg.open("lobby")
+	await _process_frames(1)
+	NetworkManager.friends = friends_data.duplicate(true)
+	NetworkManager.invites = invites_data.duplicate(true)
+	pg.refresh()
+	var lroot := pg.modal["root"] as Control
+	check(lroot.find_child("CodeEdit", true, false) != null, "Lobby online: Erstellen / Beitreten mit Code")
+	check(_min_width(lroot) <= 700.0, "Lobby-Start online passt auf 720 px (%.0f)" % _min_width(lroot))
+	NetworkManager.lobby = {"code": "AB12", "host_id": me, "world": "volcano", "rounds": 5}
+	NetworkManager.roster = [
+		{"id": me, "name": "WebHeld", "color": 1, "frame": "gold", "trophies": 777},
+		{"id": "f1", "name": "Kumpel", "color": 2, "frame": "silver", "trophies": 420},
+	]
+	pg.refresh()
+	lroot = pg.modal["root"] as Control
+	check(lroot.find_child("RoomCode", true, false) != null and _count_avatars(lroot) >= 2, "Lobby online: Raum mit Spielern")
+	check(_min_width(lroot) <= 700.0, "Lobby-Raum (Host) passt auf 720 px (%.0f)" % _min_width(lroot))
+	NetworkManager.lobby["host_id"] = "f1"
+	pg.refresh()
+	check(_min_width(pg.modal["root"] as Control) <= 700.0, "Lobby-Raum (Gast) passt auf 720 px")
+	NetworkManager.lobby = {}
+	NetworkManager.roster = []
+	NetworkManager.friends = []
+	NetworkManager.invites = []
+	pg.close_all()
+	host.queue_free()
+	await _process_frames(2)
+
 func _stage_auth_mock() -> void:
 	print("[SMOKE] Stage: Anmelde-Ablauf gegen lokalen Schein-Server")
 	var mock := MockSupabase.new()
@@ -1133,10 +1198,12 @@ func _stage_auth_mock() -> void:
 	var ok_web: bool = await _wait_until(func() -> bool: return GameManager.trophies() == 777, 240)
 	check(ok_web and str(GameManager.data["account_id"]) == MockSupabase.WEB_ID, "Spielstand des Web-Accounts geladen")
 	check(GameManager.player_name() == "WebHeld", "Name aus dem Web-Portal uebernommen")
+	check(GameManager.pass_xp() == 450 and GameManager.pass_claimed(0) and not GameManager.pass_claimed(1), "Battle-Pass-Stand aus dem Cloud-Spielstand")
 	check(_count_backups() > 0, "Gast-Fortschritt vor dem Wechsel gesichert")
 	var ok_pic: bool = await _wait_until(func() -> bool: return ProfileManager.avatar_texture != null, 240)
 	check(ok_pic and ProfileManager.avatar_path.begins_with(MockSupabase.WEB_ID + "/"), "Profilbild vom Server geladen")
 	check(mock.requests_log.has("POST /rest/v1/rpc/redeem_game_link_code"), "Code wurde per RPC eingeloest")
+	await _check_online_pages()
 	# Abmelden ohne Gast-Neustart
 	AuthManager.sign_out(false)
 	check(AuthManager.user_id == "" and not FileAccess.file_exists(AuthManager.AUTH_PATH), "Abmelden verwirft die Session")

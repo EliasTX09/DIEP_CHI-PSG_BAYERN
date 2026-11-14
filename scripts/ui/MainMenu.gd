@@ -453,6 +453,7 @@ func _build_ui() -> void:
 	safe.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.add_child(safe)
 	UIKit.apply_safe_area(safe, 10)
+	get_viewport().size_changed.connect(func() -> void: UIKit.apply_safe_area(safe, 10))
 	var col := UIKit.vbox(8)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	safe.add_child(col)

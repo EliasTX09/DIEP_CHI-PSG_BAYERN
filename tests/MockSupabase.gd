@@ -34,6 +34,7 @@ func start() -> bool:
 	web_save["best_trophies"] = 777
 	web_save["coins"] = 4321
 	web_save["revision"] = 5
+	web_save["pass"] = {"season": GameManager.pass_season(), "xp": 450, "claimed": [0]}
 	return true
 
 func base_url() -> String:

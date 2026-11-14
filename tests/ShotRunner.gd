@@ -200,6 +200,16 @@ func _shot_pages() -> void:
 				break
 		await _capture("page_" + page_id)
 	menu.pages.close_all()
+	# Trails (live 3D-Vorschau mit Partikeln) und Avatar-Rahmen
+	GameManager.grant({"items": [{"kind": "trail", "id": "fire"}, {"kind": "trail", "id": "rainbow"}]})
+	for kind in ["trail", "frame"]:
+		menu.pages._sel_kind = kind
+		menu.pages.open("cosmetics")
+		for i in 40:
+			await get_tree().process_frame
+		await _capture("page_cosmetics_" + kind)
+	menu.pages._sel_kind = "ball"
+	menu.pages.close_all()
 	menu.pages.open("clubs")
 	for i in 6:
 		await get_tree().process_frame
