@@ -470,15 +470,20 @@ class Launcher extends Gadget:
 		target = target_pos
 		elevation = elevation_deg
 		min_speed = need_speed
-		# Optik: Schanzen-Keil + leuchtende Pfeile
-		var lift: float = 0.5
-		var ramp := Mat.box(Vector3(zone.x, 0.12, zone.z * 1.02), Mat.flat(Color(0.42, 0.3, 0.18), 0.85), Vector3(0.0, lift * 0.5 - 0.04, 0.0))
-		ramp.rotation.x = atan2(lift, zone.z)
-		add_child(ramp)
-		var pad := Mat.plane(Vector2(zone.x * 0.8, zone.z * 0.9), Mat.shader("booster", {"arrow": color, "base": color.darkened(0.85)}), Vector3(0.0, lift * 0.5 + 0.03, 0.0))
-		pad.rotation = Vector3(-atan2(lift, zone.z), PI, 0.0)
+		# Optik: rundes Sprungpad (Feder-Pilz) mit leuchtendem Ring und Pfeilen - schiesst in jede Richtung
+		var base_mat := Mat.flat(Color(0.3, 0.22, 0.14), 0.8)
+		add_child(Mat.cylinder(0.95, 1.05, 0.14, base_mat, Vector3(0.0, 0.07, 0.0), 20))
+		var ring := Mat.torus(0.82, 0.95, Mat.glow(color, 2.2))
+		ring.position = Vector3(0.0, 0.15, 0.0)
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(ring)
+		var pad := Mat.plane(Vector2(1.3, 1.3), Mat.shader("booster", {"arrow": color, "base": color.darkened(0.85)}), Vector3(0.0, 0.16, 0.0))
+		pad.rotation.y = PI
 		pad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(pad)
+		for i in 4:
+			var a: float = TAU * float(i) / 4.0 + PI * 0.25
+			add_child(Mat.cylinder(0.05, 0.05, 0.3, Mat.flat(Color(0.75, 0.75, 0.8), 0.3, 0.8), Vector3(cos(a) * 0.7, -0.05, sin(a) * 0.7), 6))
 
 	func affect(st: SimState, _dt: float) -> void:
 		if st.on_cooldown(self):

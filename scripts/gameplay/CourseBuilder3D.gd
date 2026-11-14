@@ -156,7 +156,7 @@ static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
 	for st in k.straights:
 		var length: float = float(st["length"])
 		var xf0: Transform3D = st["xf"]
-		if float(st["dist"]) < 5.5 or length < OPENING_LEN + 0.6 or xf0.basis.y.y < 0.98:
+		if float(st["dist"]) < 1.0 or length < OPENING_LEN + 0.6 or xf0.basis.y.y < 0.98:
 			continue
 		var half: float = float(st["width"]) * 0.5
 		for side: int in [-1, 1]:
@@ -217,14 +217,24 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 	var rect_xf: Transform3D = tg["xf"]
 	var rect_size: Vector2 = tg["size"]
 	var flat := Vector3(land.x - g.x, 0.0, land.z - g.z)
-	var dist_h: float = flat.length()
-	if dist_h < 1.0:
+	if flat.length() < 1.0:
 		return {}
-	var dir: Vector3 = flat / dist_h
-	if dir.dot(nrm) < 0.45:
-		return _reject("winkel")
+	var to_target: Vector3 = flat.normalized()
+	# Steg zeigt moeglichst Richtung Ziel, aber immer deutlich von der Hauptbahn weg;
+	# das Sprungpad am Ende schiesst den Ball dann in jede Richtung zum Ziel.
+	var dir: Vector3 = to_target
+	if to_target.dot(nrm) < 0.6:
+		var tang: Vector3 = to_target - nrm * to_target.dot(nrm)
+		if tang.length() < 0.001:
+			dir = nrm
+		else:
+			dir = (nrm * 0.6 + tang.normalized() * 0.8).normalized()
 	var lip: Vector3 = g + dir * lane_len
-	var fly: float = dist_h - lane_len
+	var fly_vec := Vector3(land.x - lip.x, 0.0, land.z - lip.z)
+	var fly: float = fly_vec.length()
+	if fly < 1.0 or fly_vec.normalized().dot(dir) < 0.1:
+		return _reject("winkel")
+	var dist_h: float = lane_len + fly
 	var dh: float = land.y - lip.y
 	if fly < 6.0 or fly > 38.0:
 		return _reject("flugweite")
@@ -280,7 +290,7 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 				break
 		if clear:
 			var score: float = remaining - dist_h + dir.dot(nrm) * 4.0 - (elev - 38.0) * 0.15 - absf(lane_len - 7.0) * 0.5 + (12.0 if green else 0.0)
-			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": lane_len, "remaining": remaining, "direct": dist_h,
+			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": lane_len, "remaining": remaining, "direct": dist_h, "lane_dir": dir,
 				"green": green, "zone": float(tg["zone"]), "target_d": float(tg["d"])}
 	return _reject("flugbahn")
 
@@ -297,7 +307,7 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	var half: float = float(o["width"]) * 0.5
 	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -OPENING_LEN * 0.5)
 	var land: Vector3 = plan["landing"]
-	var dir := Vector3(land.x - g.x, 0.0, land.z - g.z).normalized()
+	var dir: Vector3 = plan.get("lane_dir", Vector3(land.x - g.x, 0.0, land.z - g.z).normalized())
 	var perp: Vector3 = dir.cross(Vector3.UP).normalized()
 	var back_off: float = 2.6
 	var start: Vector3 = g - dir * back_off + Vector3(0.0, -0.012, 0.0)

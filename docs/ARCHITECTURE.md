@@ -42,8 +42,12 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 - Kugel ohne Reibung (Reibung 0), Rollen ist rein visuell. Rollwiderstand, Luftwiderstand, Spin und alle
   Feld-Effekte werden in `_integrate_forces` berechnet – identisch zur Vorhersage in `ShotSim`.
 - Abprallen: Boden 0,45 · Banden 0,75 (zwei getrennte StaticBodies: `floor_body`, `wall_body`).
-- **Gadgets** (Boost, Wind, Sand, Teleporter, Looping-Schiene, Kanone, Laser, Kill-Zonen) sind analytische Volumen
-  mit `affect(state, dt)`. Der echte Ball und die Simulation rufen dieselbe Funktion auf.
+- **Gadgets** (Boost, Wind, Sand, Rough, Bach, Teleporter, Looping-Schiene, Kanone, Laser, Kill-Zonen,
+  Abkürzungs-Schanze + Landezone, Gelände-Grenze) sind analytische Volumen mit `affect(state, dt)`.
+  Der echte Ball und die Simulation rufen dieselbe Funktion auf.
+- **Aus (Out of Bounds):** `Gadgets.TerrainBounds` prüft gegen das Höhenfeld des Geländes: berührt der Ball den
+  Randstreifen, einen Hang oder eine Schlucht neben der Bahn, ist er „aus“ (Strafschlag, zurück zur letzten Ruhelage).
+  Wasser/Lava/Leere unten in den Schluchten lösen weiter über die Kill-Höhe aus.
 - Loopings sind „Schienen“: Ist der Ball schnell genug, wird er entlang der Looping-Kurve geführt (energieerhaltend).
 - Bewegliche Hindernisse (Windmühle, Hammer, Schiebeblock, Fähre) sind `AnimatableBody3D`, die nur von der Bahn-Uhr
   (`Course3D.time`) gesteuert werden. Jolt übernimmt neue Posen kinematischer Körper erst im nächsten Physik-Schritt,
@@ -52,14 +56,33 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Die Bots planen damit einen Abschlag-Zeitpunkt und prüfen mehrere Zeitfenster (Hammer/Fähre abpassen).
 
 ## Bahn-Baukasten
-- `TrackKit` – „Turtle“, die Querschnitte entlang eines Pfades extrudiert (Gerade, Rampe, Hügel, Steilkurve, Sprung, Looping, Grün mit Loch).
-- `CourseBuilder3D` – definiert die 15 Bahnen + Daily-Parcours und liefert ein `Course3D`.
-- `Course3D` – Tee-Transform, Loch-Position, Par, Mittellinie (`path_points`), Gadgets, Kill-Höhe, Kollisions-Körper.
+- `TrackKit` – „Turtle“, die Querschnitte entlang eines Pfades extrudiert (Gerade, Rampe, Hügel, Steilkurve, Sprung,
+  Looping, Grün mit Loch). Zeichnet dabei Belag-Proben auf (Grundlage fürs Gelände; Kanten ohne Bande markiert),
+  Flug-Korridore unter Sprüngen, alle geraden Stücke und kann Banden-Öffnungen aussparen. Im `branch`-Modus baut er
+  Nebenstränge (Abkürzungs-Steg), ohne Mittellinie, Stützen oder Bounds der Bahn zu verändern.
+- `CourseBuilder3D` – definiert die 15 Bahnen + Daily-Parcours und liefert ein `Course3D`. Baut jede Bahn zweimal:
+  ein Probelauf sucht die Stelle für die **Abkürzung** (gerades Stück mit Bande, Steg 5–9,5 m, Flug auf das Grün oder
+  ein späteres Fairway-Stück, kreuzt keine anderen Bahnteile, hält Abstand zu Hindernissen), der zweite Lauf baut sie:
+  Banden-Öffnung, schmaler Steg ohne Banden über einer Schlucht, Felsentor mit Kollision, Schanze
+  (`Gadgets.Launcher`: fester ballistischer Flug inkl. Luftwiderstands-Ausgleich, nur mit Schwung und mittig auf dem
+  Steg) und Landezone (`Gadgets.LandingZone`: fängt den Ball weich ab). Ohne Abkürzung: e1 (gerade Einsteiger-Bahn) und
+  der Golden Shot. Hindernisse auf der Bahn: Bach mit Holzsteg (`Gadgets.Creek`), Rough (`Gadgets.RoughZone`),
+  Baumstämme und Felsbrocken (`Obstacles.log_obstacle/boulder`), Lianen-Bögen (Deko).
+- `Course3D` – Tee-Transform, Loch-Position, Par, Mittellinie (`path_points`), Gadgets, Kill-Höhe, Kollisions-Körper,
+  Belag-Proben, Flug-Korridore, Gelände (`terrain`) und Abkürzung (`shortcut`).
+- `Terrain3D` – Höhenfeld (2,5-m-Raster, 80 m Rand) um die Bahn: Abstandsfeld zur Bahn (Chamfer), flacher Randstreifen
+  knapp unter dem Belag, Böschungen, Felsterrassen (Klippen), Bergrücken, Schluchten unter Korridoren und Stücken ohne
+  Bande, Küstenseite (Piratenbucht). Hängt nur von der Bahn-Geometrie und einem festen Seed ab (für alle Spieler gleich).
+  Der Smoke-Test prüft, dass es auf allen 16 Bahnen überall unter dem Belag liegt.
+- `WorldTheme` – Materialien, Himmel, Sonne mit weichen Schatten, Tiefen- und Talnebel, Bloom; kleidet die Bahn ein:
+  Gelände-Mesh (`landscape.gdshader`: Rough, Wiese mit Farbverlauf, Fels an Steilhängen, Schnee, Ufer), Bergkranz,
+  Wald (`Flora`: Tannen, Laubbäume, Palmen, tote Bäume als MultiMesh), Felsen, Wasserfall-Kaskade bzw. Lavastrom,
+  Neon-Hochhäuser, Piratenschiff in der Bucht. Kameras (Spiel, Menü, Screenshots) bleiben über dem Gelände.
 
 ## Hauptmenü
 - `MainMenuView` (`scenes/MainMenuView.tscn`, `scripts/ui/MainMenu.gd`) – Hochformat, einhändig bedienbar:
   - Hintergrund ist die echte 3D-Bahn der gewählten Arena (je Welt eine, `BACKDROPS`), Kamera fliegt auf einer
-    geschlossenen `Curve3D`; dazu schwebende Inseln, Glitzer/Glut und brennende Golfbälle. Arena-Wechsel per Pfeil
+    geschlossenen `Curve3D` (Ellipse knapp außerhalb der Bahn, über dem Gelände); dazu Glitzer/Glut und brennende Golfbälle. Arena-Wechsel per Pfeil
     oder Wischen baut den Hintergrund mit kurzer Abblende neu.
   - Kopfleiste: Profilbild (Web-Account) / Name / Trophäen → Profil, Trophäen-Knopf, Coins, Gems, Einstellungen.
   - Startseite (VBox): Arena-Banner, freier Platz für die Vitrine (Ball + Schläger als Kind der Kamera; Position und
@@ -71,6 +94,14 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Truhen-Dialog, Belohnungsfenster und Rückfragen. `page`/`modal` zeigen immer die oberste Seite.
 - `Preview3D` – kleine 3D-Vorschau in einem eigenen `SubViewport` (eigene Welt): Bälle und Schläger als einmal
   gerenderte Bilder, Trails und das Schläger-Detail live.
+
+## Zielen
+- Am Ball ziehen = Gummiband: ein Keil mit zwei Strängen spannt sich vom Ball **nach hinten** Richtung Finger,
+  Länge und Farbe zeigen die Kraft. Loslassen schießt in die Gegenrichtung.
+- Nach vorn eine **Punkt-Kette auf dem Boden** aus der echten Simulation (`ShotSim`, inkl. Banden, Rampen, Gadgets):
+  Rollen und Aufsetzen als helle Punkte, der Flugabschnitt als Schatten-Punkte senkrecht darunter. Die Länge der Kette
+  kommt vom **Guide**-Wert des Schlägers, die Größe des Landerings von der **Accuracy** (mögliche Streuung).
+  Endet der Schlag im Aus, wird die Kette rot.
 
 ## Battle Pass
 - Kostenlos, Saisons zu 28 Tagen ab 05.01.2026 (`Catalog.pass_season_at`), 30 Stufen à 150 XP (`Catalog.PASS_TIERS`).
