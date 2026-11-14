@@ -158,7 +158,7 @@ func _build_top(area: Control) -> void:
 	_exit_btn = UIKit.icon_button("exit", UIKit.RED, confirm_exit, 60.0)
 	_exit_btn.name = "ExitButton"
 	row.add_child(_exit_btn)
-	# Live-Rangliste: Chips, 3 pro Zeile
+	# Live-Rangliste: Chips, 2 pro Zeile
 	_board = HFlowContainer.new()
 	_board.name = "Board"
 	_board.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -348,7 +348,7 @@ func set_leaderboard(rows: Array) -> void:
 	while _board.get_child_count() < rows.size():
 		var chip := UIKit.panel(Color(0.04, 0.06, 0.14, 0.8), 12, Color(1, 1, 1, 0.12), 1)
 		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.custom_minimum_size = Vector2(218, 0)
+		chip.custom_minimum_size = Vector2(342, 0)
 		var h := UIKit.hbox(6)
 		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		chip.add_child(UIKit.margin(h, 4, 1, 6, 1))

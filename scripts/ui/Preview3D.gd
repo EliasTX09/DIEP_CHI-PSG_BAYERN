@@ -40,9 +40,18 @@ func _build_scene() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_CLEAR_COLOR
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.75, 0.8, 0.95)
-	e.ambient_light_energy = 0.7
+	# Himmel nur fuer Licht und Spiegelungen (Metall-Baelle waeren sonst schwarz); der Hintergrund bleibt durchsichtig
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.35, 0.55, 0.95)
+	sky_mat.sky_horizon_color = Color(0.85, 0.9, 1.0)
+	sky_mat.ground_horizon_color = Color(0.6, 0.65, 0.75)
+	sky_mat.ground_bottom_color = Color(0.25, 0.28, 0.35)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	e.sky = sky
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	e.ambient_light_energy = 0.9
+	e.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	e.glow_enabled = true
 	e.glow_intensity = 0.6
@@ -67,10 +76,11 @@ func _build_scene() -> void:
 	match kind:
 		"club":
 			var club := ClubModel.make(item_id)
-			club.rotation = Vector3(0.0, 0.0, deg_to_rad(-28.0))
+			club.rotation = Vector3(0.0, 0.0, deg_to_rad(-38.0))
+			club.scale = Vector3.ONE * 1.25
 			_pivot.add_child(club)
 			_pivot.rotation.y = 0.6
-			cam.position = Vector3(0.0, 0.0, 2.55)
+			cam.position = Vector3(0.0, -0.05, 2.0)
 		"trail":
 			_mover = Node3D.new()
 			_pivot.add_child(_mover)

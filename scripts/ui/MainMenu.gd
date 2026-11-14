@@ -375,8 +375,9 @@ func _place_showcase() -> void:
 	var c: Vector2 = rect.get_center()
 	var ndc := Vector2(c.x / vp.x * 2.0 - 1.0, 1.0 - c.y / vp.y * 2.0)
 	var unit: float = 2.0 * hh / vp.y
-	# Schlaeger (ca. 1.35 hoch) soll ~80% der Hoehe fuellen, beides zusammen (ca. 1.4 breit) ~80% der Breite
-	var s: float = minf(rect.size.y * 0.8 * unit / 1.35, rect.size.x * 0.8 * unit / 1.4)
+	# Schlaeger (ca. 1.35 hoch) fuellt ~60% der Hoehe, beides zusammen (ca. 1.4 breit) hoechstens ~65% der Breite;
+	# so bleibt rundherum die Arena sichtbar
+	var s: float = minf(rect.size.y * 0.6 * unit / 1.35, rect.size.x * 0.65 * unit / 1.4)
 	showcase.position = Vector3(ndc.x * hw, ndc.y * hh, -SHOWCASE_DEPTH)
 	showcase.scale = Vector3.ONE * clampf(s, 0.25, 2.0)
 

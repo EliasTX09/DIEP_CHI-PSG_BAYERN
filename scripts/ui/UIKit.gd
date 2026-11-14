@@ -227,7 +227,7 @@ static func modal(host: Control, title: String, size: Vector2 = Vector2(820, 560
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(center)
-	var p := panel(PANEL, 22, Color(0.35, 0.5, 0.9, 0.8), 3)
+	var p := panel(Color(PANEL.r, PANEL.g, PANEL.b, 1.0), 22, Color(0.35, 0.5, 0.9, 0.8), 3)
 	p.custom_minimum_size = size
 	center.add_child(p)
 	var outer := vbox(10)
