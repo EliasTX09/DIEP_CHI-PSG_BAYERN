@@ -46,7 +46,8 @@ vec4 nearest_dimple(vec3 n) {
 	}
 	vec3 d = best_c - p;
 	vec3 dt = d - n * dot(d, n);
-	float radius = 0.46;
+	// Dellen-Radius relativ zum Gitter: kleiner als der halbe Abstand -> runde Dellen mit flachem Steg dazwischen
+	float radius = 0.37;
 	return vec4(dt / radius, length(dt) / radius);
 }
 

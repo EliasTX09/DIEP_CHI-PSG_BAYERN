@@ -72,7 +72,7 @@ func _shot_game() -> void:
 		close.fov = 30.0
 		close.near = 0.02
 		m.add_child(close)
-		close.global_position = bp + Vector3(0.35, 0.22, 0.45)
+		close.global_position = bp + Vector3(0.75, 0.45, 1.0)
 		close.look_at(bp, Vector3.UP)
 		close.current = true
 		for i in 6:

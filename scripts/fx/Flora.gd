@@ -138,13 +138,22 @@ static func _palm_parts(v: int, low: bool) -> Array:
 		for k in 3:
 			var a: float = TAU * float(k) / 3.0
 			parts.append(_part(_sph(0.17, 1.0, 7, 4), top + Vector3(cos(a) * 0.22, -0.25, sin(a) * 0.22), Color(0.3, 0.22, 0.1), WOOD))
+	# Wedel: je drei schmale, immer staerker haengende Blatt-Segmente (gebogener Palmwedel statt Brett)
 	var fronds: int = 6 if low else 8
 	for k in fronds:
 		var a: float = TAU * float(k) / float(fronds) + float(v) * 0.3
-		var leaf := _sph(1.0, 1.0, 6, 3)
-		var b := Basis(Vector3.UP, a) * Basis(Vector3.BACK, -0.45 - 0.1 * float(k % 2)) * Basis.from_scale(Vector3(1.75, 0.08, 0.45))
-		parts.append(_part(leaf, Transform3D(b, top + Basis(Vector3.UP, a) * Vector3(1.35, -0.25, 0.0)),
-			Color(0.13, 0.36, 0.13), LEAF, Color(0.3, 0.6, 0.22)))
+		var turn := Basis(Vector3.UP, a)
+		var p := top
+		var pitch: float = 0.25 + 0.1 * float(k % 2)
+		for seg in 3:
+			var seg_len: float = 0.95 - 0.18 * float(seg)
+			var dir: Vector3 = turn * Vector3(cos(pitch), -sin(pitch), 0.0)
+			var mid: Vector3 = p + dir * seg_len * 0.5
+			var b := turn * Basis(Vector3.BACK, -pitch) * Basis.from_scale(Vector3(seg_len * 0.55, 0.035, 0.32 - 0.07 * float(seg)))
+			parts.append(_part(_sph(1.0, 1.0, 6, 3), Transform3D(b, mid), Color(0.12, 0.34, 0.12).lightened(0.05 * float(seg)), LEAF,
+				Color(0.28, 0.58, 0.2)))
+			p += dir * seg_len * 0.92
+			pitch += 0.38
 	return parts
 
 ## Verkohlter, toter Baum (Vulkan): dicker Stamm + drei bis vier knorrige Aeste.
