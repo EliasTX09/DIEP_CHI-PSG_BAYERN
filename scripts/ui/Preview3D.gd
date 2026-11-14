@@ -89,7 +89,19 @@ func _build_scene() -> void:
 			cam.position = Vector3(0.0, 0.75, 1.7)
 			cam.look_at_from_position(cam.position, Vector3.ZERO, Vector3.UP)
 		_:
-			_pivot.add_child(BallFX.make_ball(item_id, 0.42, GameManager.avatar_color()))
+			var ball := BallFX.make_ball(item_id, 0.42, GameManager.avatar_color())
+			if item_id == "gold" and ball is MeshInstance3D:
+				# Voll-Metall braucht eine Umgebung zum Spiegeln; ohne Himmel wirkt es schwarz -> Vorschau-Gold
+				var gm := StandardMaterial3D.new()
+				gm.albedo_color = Color(1.0, 0.78, 0.25)
+				gm.metallic = 0.45
+				gm.roughness = 0.25
+				gm.rim_enabled = true
+				gm.rim = 0.6
+				gm.emission_enabled = true
+				gm.emission = Color(0.35, 0.22, 0.02)
+				(ball as MeshInstance3D).material_override = gm
+			_pivot.add_child(ball)
 			_pivot.rotation = Vector3(0.35, 0.5, 0.0)
 			cam.position = Vector3(0.0, 0.0, 2.1)
 
