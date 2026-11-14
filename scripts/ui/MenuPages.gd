@@ -933,6 +933,10 @@ func _pass_row(i: int) -> PanelContainer:
 	var icon: Control
 	if e.has("item") and str((e["item"] as Array)[0]) == "ball":
 		icon = Preview3D.new("ball", str((e["item"] as Array)[1]), 56.0)
+	elif e.has("item") and str((e["item"] as Array)[0]) == "trail" and str((e["item"] as Array)[1]) != "none":
+		# Trail als bewegte 3D-Vorschau (Ball fliegt im Kreis, der Schweif ist sichtbar)
+		icon = Preview3D.new("trail", str((e["item"] as Array)[1]), 56.0, true)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	elif e.has("item") and str((e["item"] as Array)[0]) == "frame":
 		icon = UIAvatar.new(GameManager.player_name(), int(GameManager.data.get("avatar_color", 0)), str((e["item"] as Array)[1]), 52.0)
 	elif e.has("chest"):
