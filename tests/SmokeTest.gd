@@ -1028,8 +1028,12 @@ func _stage_input() -> void:
 	# Kein Punkt der Kette klebt auf der Kugel: alles, was von der Kamera aus hinter dem Ball liegt, wird weggelassen
 	var stuck := 0
 	var cam_p: Vector3 = m.rig.camera.global_position
+	var all_balls: PackedVector3Array = PackedVector3Array()
+	for rec in m.players:
+		if rec.node() != null and rec.node().is_visible_in_tree():
+			all_balls.append(rec.node().global_position)
 	for dp in m._drawn_dots:
-		if Match3D._hidden_by_ball(dp, ball.global_position, m._drawn_cam):
+		if Match3D._hidden_by_balls(dp, all_balls, m._drawn_cam):
 			stuck += 1
 	check(m._drawn_dots.size() > 3 and stuck == 0, "Keine Vorschau-Punkte auf dem Ball gezeichnet (%d von %d)" % [stuck, m._drawn_dots.size()])
 	check(Match3D._hidden_by_ball(ball.global_position + (ball.global_position - cam_p).normalized() * 0.5, ball.global_position, cam_p)
@@ -1056,8 +1060,11 @@ func _stage_input() -> void:
 	check(band_col.r > 0.9 and band_col.b < 0.3, "Gummiband-Kern leuchtet neon-orange/rot (%s)" % band_col)
 	m.hud._spin_pad.set_value(Vector2.ZERO)
 	await _process_frames(6)
+	var far_before: float = m.rig.attributes.dof_blur_far_distance
 	_touch(0, screen + Vector2(0.0, 320.0), false)
 	await _process_frames(2)
+	check(m.rig.dof_amount() == 0.0 or m.rig.attributes.dof_blur_far_distance >= far_before - 1.5,
+		"Beim Loslassen bleibt die Bahn vor dem Ball scharf (scharf bis %.1f m, vorher %.1f m)" % [m.rig.attributes.dof_blur_far_distance, far_before])
 	var sq: float = ball.squash_factor()
 	var mesh_scale: Vector3 = ball._mesh.transform.basis.get_scale()
 	check(sq > 1.05 and maxf(mesh_scale.x, maxf(mesh_scale.y, mesh_scale.z)) > 1.04, "Squash & Stretch: Ball streckt sich beim Abschlag (%.2f)" % sq)

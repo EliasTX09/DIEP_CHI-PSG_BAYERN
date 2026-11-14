@@ -65,6 +65,12 @@ func _shot_game() -> void:
 		for i in 40:
 			await get_tree().process_frame
 		await _capture("game_aim")
+		# Chip: Punkte entlang des Flugbogens (Billboards) + Schatten am Boden + Aufsetz-Ring
+		m.hud.set_chip_mode(true)
+		for i in 30:
+			await get_tree().process_frame
+		await _capture("game_aim_chip")
+		m.hud.set_chip_mode(false)
 		m._cancel_aim()
 	# Nahaufnahme des eigenen Balls: sind die Dellen (Dimples) und der Klarlack zu sehen?
 	if m.local != null and m.local.ball != null:

@@ -695,6 +695,12 @@ func _update_preview() -> void:
 	var has_ground := false
 	var last_ground := Transform3D()
 	var cam_pos: Vector3 = rig.camera.global_position
+	# Alle Baelle auf der Bahn (eigener + Gegner): Punkte dahinter werden nicht gezeichnet
+	var blockers: PackedVector3Array = PackedVector3Array()
+	for rec in players:
+		var bn: Node3D = rec.node()
+		if bn != null and bn.is_visible_in_tree() and not rec.holed:
+			blockers.append(bn.global_position)
 	_drawn_dots.clear()
 	_drawn_cam = cam_pos
 	var spacing: float = 0.6
@@ -721,7 +727,7 @@ func _update_preview() -> void:
 			n_steps += 1
 			if p.y - gp.y > Ball3D.RADIUS + 0.25:
 				# im Flug: leuchtender Punkt genau auf dem Bogen (Mitte der Kugel) + Schatten darunter am Boden
-				if not _hidden_by_ball(p, origin, cam_pos):
+				if not _hidden_by_balls(p, blockers, cam_pos):
 					arc_mm.set_instance_transform(n_air, Transform3D(Basis.IDENTITY.scaled(Vector3(s, s, s)), p))
 					_drawn_dots.append(p)
 					air_mm.set_instance_transform(n_air, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.03))
@@ -729,7 +735,7 @@ func _update_preview() -> void:
 			else:
 				last_ground = Transform3D(b2, gp + gn * 0.035)
 				has_ground = true
-				if not _hidden_by_ball(gp, origin, cam_pos):
+				if not _hidden_by_balls(gp, blockers, cam_pos):
 					ground_mm.set_instance_transform(n_ground, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.035))
 					_drawn_dots.append(gp)
 					n_ground += 1
@@ -746,7 +752,7 @@ func _update_preview() -> void:
 	if out != _dots_out:
 		_set_dots_out(out)
 	# Zielkreis am Ende der Kette (dort, wo die Vorhersage den Ball liegen sieht)
-	_target_ring.visible = has_ground and not out
+	_target_ring.visible = has_ground and not out and not _hidden_by_balls(last_ground.origin, blockers, cam_pos)
 	_preview_end = last_ground.origin if has_ground else Vector3.INF
 	if _target_ring.visible:
 		var last: Transform3D = last_ground
@@ -781,6 +787,12 @@ static func _hidden_by_ball(p: Vector3, ball_pos: Vector3, cam: Vector3) -> bool
 	if t <= 0.0 or t >= dist:
 		return false
 	return (cam + dir * t).distance_to(ball_pos) < Ball3D.RADIUS * 1.15
+
+static func _hidden_by_balls(p: Vector3, balls: PackedVector3Array, cam: Vector3) -> bool:
+	for bp in balls:
+		if _hidden_by_ball(p, bp, cam):
+			return true
+	return false
 
 static func _basis_from_up(up: Vector3) -> Basis:
 	var u: Vector3 = up.normalized()

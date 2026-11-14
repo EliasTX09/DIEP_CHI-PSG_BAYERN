@@ -115,9 +115,9 @@ func aim_at(dir: Vector3, instant: bool = false) -> void:
 ## Zielen an/aus: Kamera faehrt naeher heran, Blickwinkel enger, Hintergrund verschwimmt.
 ## Dreht die Kamera dabei nie (aim_direction() liest die Kamera-Ausrichtung).
 func set_aiming(on: bool) -> void:
+	# Der scharfe Bereich (Ende der Punkt-Kette) bleibt stehen, bis die Unschaerfe ausgeblendet ist -
+	# sonst wuerde die Bahn vor dem Ball beim Loslassen kurz unscharf aufblitzen.
 	_aiming = on
-	if not on:
-		_aim_focus = Vector3.INF
 
 func is_aiming() -> bool:
 	return _aiming
@@ -255,6 +255,8 @@ func _process(delta: float) -> void:
 	_aim_t = lerpf(_aim_t, aim_goal, 1.0 - exp(-AIM_EASE * dt))
 	if absf(_aim_t - aim_goal) < 0.002:
 		_aim_t = aim_goal
+	if not _aiming and _aim_t <= 0.0:
+		_aim_focus = Vector3.INF
 	var want_pos: Vector3 = _cam_pos
 	var want_look: Vector3 = _cam_look
 	var up := Vector3.UP
