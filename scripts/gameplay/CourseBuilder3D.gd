@@ -334,7 +334,8 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	var dn: float = clampf(dir.dot(nrm0), 0.3, 1.0)
 	var gate_along: float = clampf((1.48 * sqrt(1.0 - dn * dn) + 0.7) / dn, 2.6, lane_len - 0.4)
 	var gate_pos: Vector3 = g + dir * gate_along
-	var rock_mat := Mat.flat({"volcano": Color(0.2, 0.15, 0.13), "pirate": Color(0.62, 0.55, 0.45), "neon": Color(0.16, 0.16, 0.24)}.get(th.id, Color(0.42, 0.4, 0.37)), 0.95)
+	var rock_mat := Flora.stone_material({"volcano": Color(0.2, 0.15, 0.13), "pirate": Color(0.62, 0.55, 0.45), "neon": Color(0.16, 0.16, 0.24)}.get(th.id, Color(0.42, 0.4, 0.37)),
+		float(th.land.get("moss", 0.0)))
 	var body := StaticBody3D.new()
 	body.name = "ShortcutGate"
 	body.collision_layer = 1
@@ -465,7 +466,7 @@ static func _rock(c: Course3D, k: TrackKit, th: WorldTheme, local: Vector3, radi
 		tint = Color(0.24, 0.18, 0.16)
 	elif th.id == "pirate":
 		tint = Color(0.68, 0.6, 0.48)
-	var b := Obstacles.boulder(radius, tint)
+	var b := Obstacles.boulder(radius, tint, float(th.land.get("moss", 0.0)))
 	b.transform = k.frame(local)
 	c.add_child(b)
 	c.blockers.append(k.at(local))

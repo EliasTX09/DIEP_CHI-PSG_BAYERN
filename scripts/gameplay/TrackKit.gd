@@ -31,6 +31,10 @@ var floor_surface: int = S_FLOOR
 var _verts: Array[PackedVector3Array] = []
 var _norms: Array[PackedVector3Array] = []
 var _uvs: Array[PackedVector2Array] = []
+## UV2 fuer den Belag-Shader: x = seitliche Position / halbe Breite (-1..1), y = 1 wenn an dieser Seite eine Bande steht
+## (dort dunkelt der Shader den Rand ab = Kontaktschatten). Andere Flaechen: (0, 0).
+var _uv2s: Array[PackedVector2Array] = []
+var _edge_inv: float = 0.0
 var _col_floor: PackedVector3Array = PackedVector3Array()
 var _col_wall: PackedVector3Array = PackedVector3Array()
 var _in_run: bool = false
@@ -56,6 +60,7 @@ func _init(target: Course3D) -> void:
 		_verts.append(PackedVector3Array())
 		_norms.append(PackedVector3Array())
 		_uvs.append(PackedVector2Array())
+		_uv2s.append(PackedVector2Array())
 
 # ================================================================ Dreiecke
 
@@ -94,6 +99,11 @@ func tri(surface: int, col: int, a: Vector3, b: Vector3, c: Vector3, n: Vector3,
 		uu.append(uvb)
 		uu.append(uvc)
 		_uvs[surface] = uu
+		var u2: PackedVector2Array = _uv2s[surface]
+		u2.append(_edge_uv2(uva))
+		u2.append(_edge_uv2(uvb))
+		u2.append(_edge_uv2(uvc))
+		_uv2s[surface] = u2
 	if col == C_FLOOR:
 		_col_floor.append(a)
 		_col_floor.append(b)
@@ -102,6 +112,12 @@ func tri(surface: int, col: int, a: Vector3, b: Vector3, c: Vector3, n: Vector3,
 		_col_wall.append(a)
 		_col_wall.append(b)
 		_col_wall.append(c)
+
+func _edge_uv2(uv: Vector2) -> Vector2:
+	if _edge_inv <= 0.0:
+		return Vector2.ZERO
+	var walled: bool = wall_l if uv.x < 0.0 else wall_r
+	return Vector2(uv.x * _edge_inv, 1.0 if walled else 0.0)
 
 func quad(surface: int, col: int, a: Vector3, b: Vector3, c: Vector3, d: Vector3, n: Vector3,
 		uva: Vector2 = Vector2.ZERO, uvb: Vector2 = Vector2.ZERO, uvc: Vector2 = Vector2.ZERO, uvd: Vector2 = Vector2.ZERO,
@@ -212,6 +228,7 @@ func _emit_ribbon(frames: Array[Transform3D], dists: PackedFloat32Array, widths:
 				col = C_WALL
 			elif kind == E_UNDER:
 				surface = S_DARK
+			_edge_inv = 2.0 / (ha + hb) if kind == E_FLOOR else 0.0
 			var ua0 := Vector2(a0.x, dists[i])
 			var ua1 := Vector2(a1.x, dists[i])
 			var ub0 := Vector2(b0.x, dists[i + 1])
@@ -222,6 +239,7 @@ func _emit_ribbon(frames: Array[Transform3D], dists: PackedFloat32Array, widths:
 				ub0.x = b0.x + b0.y
 				ub1.x = b1.x + b1.y
 			quad(surface, col, va0, vb0, vb1, va1, (na + nb) * 0.5, ua0, ub0, ub1, ua1, na, nb, nb, na)
+	_edge_inv = 0.0
 
 func _emit_cap(f: Transform3D, half: float, facing_back: bool) -> void:
 	var prof: Array = _profile(half)
@@ -676,6 +694,7 @@ func commit(materials: Array) -> void:
 		arrays[Mesh.ARRAY_VERTEX] = _verts[s]
 		arrays[Mesh.ARRAY_NORMAL] = _norms[s]
 		arrays[Mesh.ARRAY_TEX_UV] = _uvs[s]
+		arrays[Mesh.ARRAY_TEX_UV2] = _uv2s[s]
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		var mat: Material = materials[s] if s < materials.size() else null
 		if mat != null:

@@ -65,6 +65,21 @@ func _shot_game() -> void:
 			await get_tree().process_frame
 		await _capture("game_aim")
 		m._cancel_aim()
+	# Nahaufnahme des eigenen Balls: sind die Dellen (Dimples) und der Klarlack zu sehen?
+	if m.local != null and m.local.ball != null:
+		var bp: Vector3 = m.local.ball.global_position
+		var close := Camera3D.new()
+		close.fov = 30.0
+		close.near = 0.02
+		m.add_child(close)
+		close.global_position = bp + Vector3(0.35, 0.22, 0.45)
+		close.look_at(bp, Vector3.UP)
+		close.current = true
+		for i in 6:
+			await get_tree().process_frame
+		await _capture("ball_closeup")
+		close.queue_free()
+		m.rig.camera.current = true
 	m.rig.set_top(true)
 	for i in 50:
 		await get_tree().process_frame
@@ -113,6 +128,18 @@ func _shot_course(id: String) -> void:
 		for i in 6:
 			await get_tree().process_frame
 		await _capture("shortcut_" + id)
+	# Kulisse aus der Naehe: Ruine (falls vorhanden) mit Wald dahinter
+	var ruin: Node3D = c.find_child("Ruin1", true, false) as Node3D
+	if ruin != null and ruin.get_child_count() > 0:
+		var rp: Vector3 = (ruin.get_child(0) as Node3D).global_position
+		var from: Vector3 = rp + (c.bounds.get_center() - rp).normalized() * 11.0
+		from.y = c.ground_height(from.x, from.z) + 3.0
+		cam.global_position = from
+		cam.look_at(rp + Vector3.UP * 2.0, Vector3.UP)
+		cam.fov = 60.0
+		for i in 6:
+			await get_tree().process_frame
+		await _capture("ruin_" + id)
 	cam.queue_free()
 	c.queue_free()
 	await get_tree().process_frame

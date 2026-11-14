@@ -33,13 +33,14 @@ static func create(world_id: String) -> WorldTheme:
 				Mat.shader("track_floor", {"color_a": Color(0.27, 0.22, 0.21), "color_b": Color(0.33, 0.27, 0.25),
 					"line_color": Color(1.0, 0.45, 0.08), "line_strength": 0.8, "emission_strength": 1.6, "surface_roughness": 0.85, "grass_detail": 0.0}),
 				Mat.flat(Color(0.19, 0.15, 0.14), 0.9),
-				Mat.shader("track_floor", {"color_a": Color(0.36, 0.5, 0.24), "color_b": Color(0.42, 0.57, 0.28), "stripe_length": 1.5, "half_width": 99.0}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.36, 0.5, 0.24), "color_b": Color(0.42, 0.57, 0.28), "stripe_length": 1.5,
+					"dry_color": Color(0.45, 0.42, 0.25)}),
 				Mat.shader("track_floor", {"color_a": Color(0.2, 0.2, 0.22), "color_b": Color(0.26, 0.26, 0.29), "stripe_length": 0.6,
 					"checker": 1.0, "surface_roughness": 0.4, "surface_metallic": 0.7, "grass_detail": 0.0}),
 				Mat.flat(Color(0.07, 0.05, 0.05), 1.0),
 			]
 			t.pillar_material = Mat.flat(Color(0.16, 0.12, 0.11), 0.95)
-			t.land = {"height": 34.0, "terrace": 6.0, "snow": 9999.0, "far": 62.0, "forest": "dead",
+			t.land = {"height": 34.0, "terrace": 6.0, "snow": 9999.0, "far": 62.0, "forest": "dead", "moss": 0.0,
 				"shader": {"rough_color": Color(0.15, 0.14, 0.14), "grass_a": Color(0.2, 0.18, 0.18), "grass_b": Color(0.27, 0.23, 0.21),
 					"rock_color": Color(0.26, 0.23, 0.22), "rock_dark": Color(0.1, 0.09, 0.09), "wet_color": Color(0.16, 0.08, 0.05),
 					"crack_strength": 1.1, "rock_slope": 0.45}}
@@ -64,7 +65,7 @@ static func create(world_id: String) -> WorldTheme:
 				Mat.flat(Color(0.02, 0.02, 0.05), 0.6),
 			]
 			t.pillar_material = Mat.glow(Color(0.2, 0.9, 1.0), 0.5, Color(0.05, 0.06, 0.12))
-			t.land = {"height": 9.0, "terrace": 3.0, "snow": 9999.0, "far": 0.0, "forest": "towers",
+			t.land = {"height": 9.0, "terrace": 3.0, "snow": 9999.0, "far": 0.0, "forest": "towers", "moss": 0.0,
 				"shader": {"rough_color": Color(0.05, 0.06, 0.12), "grass_a": Color(0.06, 0.07, 0.15), "grass_b": Color(0.09, 0.08, 0.2),
 					"rock_color": Color(0.12, 0.12, 0.2), "rock_dark": Color(0.04, 0.04, 0.09), "wet_color": Color(0.05, 0.03, 0.1),
 					"grid_strength": 1.0, "grid_color": Color(0.2, 0.85, 1.0), "rock_slope": 0.4}}
@@ -77,12 +78,12 @@ static func create(world_id: String) -> WorldTheme:
 			t.materials = [
 				Mat.shader("wood_planks", {"color_a": Color(0.62, 0.45, 0.26), "color_b": Color(0.74, 0.56, 0.33)}),
 				Mat.flat(Color(0.36, 0.23, 0.12), 0.9),
-				Mat.shader("track_floor", {"color_a": Color(0.25, 0.62, 0.3), "color_b": Color(0.3, 0.7, 0.35), "stripe_length": 1.5, "half_width": 99.0}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.25, 0.62, 0.3), "color_b": Color(0.3, 0.7, 0.35), "stripe_length": 1.5}),
 				Mat.shader("track_floor", {"color_a": Color(0.6, 0.6, 0.56), "color_b": Color(0.68, 0.67, 0.62), "checker": 1.0, "stripe_length": 1.6, "grass_detail": 0.0}),
 				Mat.flat(Color(0.2, 0.13, 0.07), 1.0),
 			]
 			t.pillar_material = Mat.flat(Color(0.3, 0.2, 0.1), 0.95)
-			t.land = {"height": 24.0, "terrace": 5.0, "snow": 9999.0, "far": 40.0, "forest": "jungle", "sea": true,
+			t.land = {"height": 24.0, "terrace": 5.0, "snow": 9999.0, "far": 40.0, "forest": "jungle", "sea": true, "moss": 0.55,
 				"shader": {"rough_color": Color(0.18, 0.43, 0.17), "grass_a": Color(0.17, 0.48, 0.19), "grass_b": Color(0.33, 0.6, 0.22),
 					"rock_color": Color(0.66, 0.58, 0.46), "rock_dark": Color(0.44, 0.37, 0.3), "wet_color": Color(0.9, 0.81, 0.58),
 					"rock_slope": 0.5}}
@@ -94,14 +95,14 @@ static func create(world_id: String) -> WorldTheme:
 			t.accent = Color(0.3, 0.9, 0.4)
 			t.boost_color = Color(0.2, 0.9, 1.0)
 			t.materials = [
-				Mat.shader("track_floor", {"color_a": Color(0.2, 0.6, 0.26), "color_b": Color(0.26, 0.69, 0.31)}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.19, 0.55, 0.24), "color_b": Color(0.27, 0.68, 0.31)}),
 				Mat.flat(Color(0.5, 0.33, 0.18), 0.85),
-				Mat.shader("track_floor", {"color_a": Color(0.3, 0.74, 0.34), "color_b": Color(0.36, 0.82, 0.4), "stripe_length": 1.5, "half_width": 99.0}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.3, 0.72, 0.34), "color_b": Color(0.36, 0.8, 0.4), "stripe_length": 1.5}),
 				Mat.shader("wood_planks", {}),
 				Mat.flat(Color(0.22, 0.15, 0.09), 1.0),
 			]
 			t.pillar_material = Mat.flat(Color(0.45, 0.3, 0.17), 0.9)
-			t.land = {"height": 30.0, "terrace": 7.0, "snow": 34.0, "far": 75.0, "forest": "pine",
+			t.land = {"height": 30.0, "terrace": 7.0, "snow": 34.0, "far": 75.0, "forest": "pine", "moss": 0.85,
 				"shader": {"rough_color": Color(0.15, 0.38, 0.14), "grass_a": Color(0.22, 0.5, 0.19), "grass_b": Color(0.44, 0.62, 0.24),
 					"rock_color": Color(0.55, 0.53, 0.5), "rock_dark": Color(0.32, 0.31, 0.3), "wet_color": Color(0.3, 0.29, 0.25),
 					"rock_slope": 0.52}}
@@ -202,6 +203,8 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 	sun.shadow_enabled = true
 	sun.shadow_blur = 1.6
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	# weicher Uebergang zwischen den beiden Schatten-Kaskaden (keine sichtbare Kante im Gras)
+	sun.directional_shadow_blend_splits = true
 	sun.directional_shadow_max_distance = 75.0
 	sun.directional_shadow_fade_start = 0.85
 	sun.shadow_bias = 0.06
@@ -241,18 +244,21 @@ func dress_course(course: Course3D, supports: PackedVector3Array, full: bool = t
 	_hazard_plane(decor, terr, hazard_y)
 	match str(land.get("forest", "pine")):
 		"dead":
-			_forest(decor, terr, [Flora.dead_tree()], [1.0], 0.12, Vector2(0.8, 1.5))
+			_forest(decor, terr, ["dead"], [1.0], 0.12, Vector2(0.8, 1.5))
 			_rock_field(decor, terr, 120, Color(0.13, 0.1, 0.09), true)
+			_edge_details(decor, terr, 0, 160, Color(0.2, 0.16, 0.14))
 			_volcano_extras(decor, course, terr, hazard_y)
 		"towers":
 			_neon_extras(decor, course, terr, hazard_y)
 		"jungle":
-			_forest(decor, terr, [Flora.palm(), Flora.broadleaf()], [0.45, 0.55], 0.32, Vector2(0.9, 1.5))
+			_forest(decor, terr, ["palm", "broadleaf"], [0.45, 0.55], 0.32, Vector2(0.9, 1.5))
 			_rock_field(decor, terr, 70, Color(0.62, 0.55, 0.45), false)
+			_edge_details(decor, terr, 380, 90, Color(0.6, 0.54, 0.44))
 			_pirate_extras(decor, course, terr, hazard_y, sea)
 		_:
-			_forest(decor, terr, [Flora.pine(), Flora.broadleaf()], [0.78, 0.22], 0.42, Vector2(0.85, 1.7))
+			_forest(decor, terr, ["pine", "broadleaf"], [0.62, 0.38], 0.42, Vector2(0.85, 1.7))
 			_rock_field(decor, terr, 90, Color(0.52, 0.5, 0.48), false)
+			_edge_details(decor, terr, 520, 110, Color(0.5, 0.48, 0.45))
 			_emerald_extras(decor, course, terr)
 	_build_supports(decor, supports, terr, hazard_y)
 
@@ -268,10 +274,10 @@ func _hazard_plane(decor: Node3D, terr: Terrain3D, hazard_y: float) -> void:
 			mi = Mat.plane(Vector2(size, size), Mat.shader("track_floor", {"color_a": Color(0.01, 0.01, 0.04), "color_b": Color(0.03, 0.02, 0.09),
 				"checker": 1.0, "stripe_length": 9.0, "half_width": 9999.0, "emission_strength": 1.5, "grass_detail": 0.0}), Vector3(c.x, hazard_y - 20.0, c.z))
 		"pirate":
-			mi = Mat.plane(Vector2(size, size), Mat.shader("water", {"shallow": Color(0.1, 0.55, 0.65), "deep": Color(0.02, 0.17, 0.36),
-				"wave_height": 0.3, "wave_scale": 0.22}), Vector3(c.x, hazard_y, c.z), 64)
+			mi = Mat.plane(Vector2(size, size), Mat.shader("water_realistic", {"shallow": Color(0.1, 0.55, 0.65), "deep": Color(0.02, 0.17, 0.36),
+				"wave_height": 0.3, "wave_scale": 0.22, "sky_tint": Color(0.95, 0.8, 0.66)}), Vector3(c.x, hazard_y, c.z), 64)
 		_:
-			mi = Mat.plane(Vector2(size, size), Mat.shader("water", {}), Vector3(c.x, hazard_y, c.z), 48)
+			mi = Mat.plane(Vector2(size, size), Mat.shader("water_realistic", {}), Vector3(c.x, hazard_y, c.z), 48)
 	mi.name = "Hazard"
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	decor.add_child(mi)
@@ -341,12 +347,11 @@ static func _up_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void
 	st.add_vertex(c)
 
 ## Wald auf den Hangen: dicht nahe am Tal, lichter weiter oben; keine Baeume an Klippen, Ufern und im Schnee.
-func _forest(decor: Node3D, terr: Terrain3D, meshes: Array, weights: Array, density: float, size_range: Vector2) -> void:
-	var near_lists: Array = []
-	var far_lists: Array = []
-	for m in meshes:
-		near_lists.append([])
-		far_lists.append([])
+## Wald auf den Hangen: Baumarten (Flora.tree) mit Varianten. Baeume nahe der Bahn bekommen das detaillierte
+## Modell und werfen Schatten, weiter entfernte nutzen die sparsame Fern-Version ohne Schatten.
+func _forest(decor: Node3D, terr: Terrain3D, kinds: Array, weights: Array, density: float, size_range: Vector2) -> void:
+	# Schluessel "art|variante" -> [nah-Transforms, fern-Transforms]
+	var lists: Dictionary = {}
 	var snow_y: float = terr.base_y + float(land.get("snow", 9999.0)) - 4.0
 	var count := 0
 	for iz in terr.nz:
@@ -373,24 +378,27 @@ func _forest(decor: Node3D, terr: Terrain3D, meshes: Array, weights: Array, dens
 				if pick <= acc:
 					which = w
 					break
+			var kind: String = str(kinds[which])
+			var variant: int = rng.randi_range(0, int(Flora.VARIANTS.get(kind, 1)) - 1)
 			var sc: float = rng.randf_range(size_range.x, size_range.y) * (1.0 + 0.25 * smoothstep(20.0, 60.0, d))
 			var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.9, 1.15), sc)), pos)
-			if d < 22.0:
-				(near_lists[which] as Array).append(xf)
-			else:
-				(far_lists[which] as Array).append(xf)
+			var key := "%s|%d" % [kind, variant]
+			if not lists.has(key):
+				lists[key] = [[], []]
+			((lists[key] as Array)[0 if d < 22.0 else 1] as Array).append(xf)
 			count += 1
 			if count >= 1500:
 				break
 		if count >= 1500:
 			break
-	for i in meshes.size():
-		_flora_multimesh(decor, meshes[i], near_lists[i], true)
-		_flora_multimesh(decor, meshes[i], far_lists[i], false)
+	for key: String in lists.keys():
+		var parts: PackedStringArray = key.split("|")
+		_flora_multimesh(decor, Flora.tree(parts[0], int(parts[1]), false), (lists[key] as Array)[0], true)
+		_flora_multimesh(decor, Flora.tree(parts[0], int(parts[1]), true), (lists[key] as Array)[1], false)
 
-func _flora_multimesh(decor: Node3D, mesh: Mesh, xfs: Array, shadows: bool) -> void:
+func _flora_multimesh(decor: Node3D, mesh: Mesh, xfs: Array, shadows: bool) -> MultiMeshInstance3D:
 	if xfs.is_empty():
-		return
+		return null
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
@@ -405,6 +413,118 @@ func _flora_multimesh(decor: Node3D, mesh: Mesh, xfs: Array, shadows: bool) -> v
 	mmi.material_override = Flora.material()
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	decor.add_child(mmi)
+	return mmi
+
+## Grasbueschel und lose Steine als echte 3D-Meshes am Bahnrand (nur Optik, keine Kollision:
+## sie liegen ausserhalb der Banden auf dem Randstreifen und stoeren keinen Schlag).
+func _edge_details(decor: Node3D, terr: Terrain3D, tufts: int, pebbles: int, stone: Color) -> void:
+	var tuft_xf: Array = []
+	var peb_xf: Array = []
+	var tries := 0
+	while (tuft_xf.size() < tufts or peb_xf.size() < pebbles) and tries < (tufts + pebbles) * 12:
+		tries += 1
+		var ix: int = rng.randi_range(1, terr.nx - 2)
+		var iz: int = rng.randi_range(1, terr.nz - 2)
+		var c: int = iz * terr.nx + ix
+		var d: float = terr.track_dist[c]
+		if d < 1.2 or d > Terrain3D.SHOULDER + 4.0 or terr.wet[c] > 0.3:
+			continue
+		var pos: Vector3 = terr.world_pos(ix, iz) + Vector3(rng.randf_range(-1.25, 1.25), 0.0, rng.randf_range(-1.25, 1.25))
+		if terr.distance_at(pos.x, pos.z) < 1.0:
+			continue
+		pos.y = terr.height_at(pos.x, pos.z) - 0.03
+		var up: Vector3 = terr.normal_at_index(ix, iz)
+		var b: Basis = Basis(Vector3.UP, rng.randf() * TAU)
+		if tuft_xf.size() < tufts and (peb_xf.size() >= pebbles or rng.randf() < 0.75):
+			var sc: float = rng.randf_range(0.7, 1.5)
+			tuft_xf.append(Transform3D(Basis(Quaternion(Vector3.UP, up)) * b.scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.3), sc)), pos))
+		elif peb_xf.size() < pebbles:
+			var ps: float = rng.randf_range(0.12, 0.38)
+			peb_xf.append(Transform3D(b.scaled(Vector3(ps * rng.randf_range(1.0, 1.6), ps * 0.7, ps)), pos))
+	if not tuft_xf.is_empty():
+		var mmi := _flora_multimesh(decor, Flora.tuft(0), tuft_xf, false)
+		mmi.name = "GrassTufts"
+	if not peb_xf.is_empty():
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = Flora.boulder()
+		mm.instance_count = peb_xf.size()
+		for i in peb_xf.size():
+			mm.set_instance_transform(i, peb_xf[i])
+			var t: Color = stone.lightened(rng.randf_range(-0.1, 0.2)) * 2.0
+			t.a = 1.0
+			mm.set_instance_color(i, t)
+		var pm := MultiMeshInstance3D.new()
+		pm.name = "Pebbles"
+		pm.multimesh = mm
+		pm.material_override = Flora.material(float(land.get("moss", 0.0)) * 0.5, 0.0)
+		pm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		decor.add_child(pm)
+
+## Eingestuerzte antike Saeulenhallen: halbrunde Saeulen-Reihe (teils abgebrochen), ein Architrav auf zwei
+## heilen Saeulen, umgestuerzte Trommeln und Bloecke. Stein mit Moos (je nach Welt).
+func _ruins(decor: Node3D, terr: Terrain3D, sites: int, stone: Color) -> void:
+	var mat: ShaderMaterial = Flora.stone_material(stone, float(land.get("moss", 0.0)))
+	var placed: Array[Vector3] = []
+	var tries := 0
+	while placed.size() < sites and tries < 900:
+		tries += 1
+		var ix: int = rng.randi_range(2, terr.nx - 3)
+		var iz: int = rng.randi_range(2, terr.nz - 3)
+		var c: int = iz * terr.nx + ix
+		var d: float = terr.track_dist[c]
+		if d < 11.0 or d > 40.0 or terr.wet[c] > 0.1 or terr.normal_at_index(ix, iz).y < 0.93:
+			continue
+		var base: Vector3 = terr.world_pos(ix, iz)
+		var ok := true
+		for q in placed:
+			if q.distance_to(base) < 22.0:
+				ok = false
+		if not ok:
+			continue
+		placed.append(base)
+		var site := Node3D.new()
+		site.name = "Ruin%d" % placed.size()
+		decor.add_child(site)
+		var yaw: float = rng.randf() * TAU
+		var cols: int = rng.randi_range(5, 7)
+		var intact: Array[Vector3] = []
+		for i in cols:
+			var a: float = yaw + PI * float(i) / float(cols - 1)
+			var p := base + Vector3(cos(a) * 4.2, 0.0, sin(a) * 4.2)
+			p.y = terr.height_at(p.x, p.z) - 0.15
+			var broken: bool = rng.randf() < 0.55 and i != 1 and i != 2
+			var mi := MeshInstance3D.new()
+			mi.mesh = Flora.column(broken, i)
+			mi.material_override = mat
+			mi.position = p
+			mi.rotation.y = rng.randf() * TAU
+			mi.rotation.z = rng.randf_range(-0.04, 0.04)
+			site.add_child(mi)
+			if not broken:
+				intact.append(p)
+		# Architrav ueber zwei benachbarten, heilen Saeulen
+		if intact.size() >= 2:
+			var a0: Vector3 = intact[0]
+			var a1: Vector3 = intact[1]
+			var lintel := MeshInstance3D.new()
+			lintel.mesh = Flora.beam()
+			lintel.material_override = mat
+			var mid: Vector3 = (a0 + a1) * 0.5
+			lintel.position = Vector3(mid.x, maxf(a0.y, a1.y) + 5.1, mid.z)
+			lintel.basis = Basis.looking_at(Vector3(a1.x - a0.x, 0.0, a1.z - a0.z).cross(Vector3.UP), Vector3.UP) \
+				* Basis.from_scale(Vector3(a0.distance_to(a1) / 1.6 + 0.4, 0.7, 0.9))
+			site.add_child(lintel)
+		for k in rng.randi_range(2, 4):
+			var bp := base + Vector3(rng.randf_range(-5.0, 5.0), 0.0, rng.randf_range(-5.0, 5.0))
+			bp.y = terr.height_at(bp.x, bp.z) - 0.1
+			var blk := MeshInstance3D.new()
+			blk.mesh = Flora.ruin_block(k)
+			blk.material_override = mat
+			blk.position = bp
+			blk.rotation.y = rng.randf() * TAU
+			site.add_child(blk)
 
 ## Felsbrocken (bzw. Felsnadeln) auf den Hangen.
 func _rock_field(decor: Node3D, terr: Terrain3D, count: int, color: Color, spires: bool) -> void:
@@ -437,7 +557,7 @@ func _rock_field(decor: Node3D, terr: Terrain3D, count: int, color: Color, spire
 		mm.set_instance_color(i, tint)
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
-	mmi.material_override = Flora.material()
+	mmi.material_override = Flora.material(float(land.get("moss", 0.0)), 0.0)
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	decor.add_child(mmi)
 
@@ -572,7 +692,7 @@ func _emerald_extras(decor: Node3D, course: Course3D, terr: Terrain3D) -> void:
 		_cascade(decor, terr, path, 3.2, Mat.shader("waterfall", {"speed": 1.2}))
 		if path.size() > 2:
 			var foot: Vector3 = path[path.size() - 1]
-			var pool := Mat.cylinder(2.6, 2.6, 0.05, Mat.shader("water", {"wave_height": 0.03}), foot + Vector3(0.0, 0.28, 0.0), 20)
+			var pool := Mat.cylinder(2.6, 2.6, 0.05, Mat.shader("water_realistic", {"wave_height": 0.03}), foot + Vector3(0.0, 0.28, 0.0), 20)
 			pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			decor.add_child(pool)
 			var mist := Mat.particles({"amount": 24, "lifetime": 1.6, "direction": Vector3.UP, "spread": 60.0, "speed": Vector2(0.8, 2.4),
@@ -580,6 +700,8 @@ func _emerald_extras(decor: Node3D, course: Course3D, terr: Terrain3D) -> void:
 				"colors": [Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.4), Color(1, 1, 1, 0.0)]})
 			mist.position = foot + Vector3(0.0, 0.5, 0.0)
 			decor.add_child(mist)
+	# Eingestuerzte, bemooste Saeulenhallen in den Wiesen
+	_ruins(decor, terr, 2, Color(0.62, 0.6, 0.55))
 	_clouds(decor, terr.center(), terr.half_extent(), 9, Color(1.0, 1.0, 1.0), terr.base_y + 70.0)
 	var pollen := Mat.particles({"amount": 40, "lifetime": 6.0, "direction": Vector3(1, 0.3, 0), "spread": 180.0, "speed": Vector2(0.2, 0.8),
 		"gravity": Vector3(0.15, 0.05, 0.0), "size": 0.12, "emission_box": Vector3(course.bounds.size.x * 0.5 + 6.0, 4.0, course.bounds.size.z * 0.5 + 6.0),
@@ -686,17 +808,8 @@ func _pirate_extras(decor: Node3D, course: Course3D, terr: Terrain3D, hazard_y: 
 		ship.position = Vector3(c.x + sea.x * dist, hazard_y + 0.2, c.z + sea.y * dist)
 		ship.rotation.y = rng.randf() * TAU
 		decor.add_child(ship)
-	# Ruinen-Saeulen auf einem Hang (stehen fest im Boden)
-	var spot := _slope_spot(terr, 12.0, 26.0, 2.0)
-	if spot.x >= 0:
-		var base: Vector3 = terr.world_pos(spot.x, spot.y)
-		var col_mat := Mat.flat(Color(0.82, 0.8, 0.72), 0.85)
-		for i in 4:
-			var ang: float = TAU * float(i) / 4.0 + 0.4
-			var p := base + Vector3(cos(ang) * 3.0, 0.0, sin(ang) * 3.0)
-			p.y = terr.height_at(p.x, p.z) - 0.3
-			var ch: float = rng.randf_range(2.0, 5.0)
-			decor.add_child(Mat.cylinder(0.38, 0.44, ch, col_mat, p + Vector3(0.0, ch * 0.5, 0.0), 10))
+	# Bemooste Tempel-Ruinen auf den Hangen
+	_ruins(decor, terr, 2, Color(0.8, 0.76, 0.66))
 
 ## Piratenschiff aus CSG-Koerpern (Rumpf = Quader minus Hohlraum, Bug = Prisma).
 func _ship() -> Node3D:

@@ -17,17 +17,18 @@ static func ball_material(skin: String, player_color: Color = Color(0.2, 0.6, 1.
 		"holo":
 			return Mat.shader("hologram", {})
 		"gold":
-			return Mat.shader("ball_standard", {"base_color": Color(1.0, 0.78, 0.25), "stripe_color": Color(1.0, 0.92, 0.55),
+			return Mat.shader("golfball_dimples", {"base_color": Color(1.0, 0.78, 0.25), "stripe_color": Color(1.0, 0.92, 0.55),
 				"surface_metallic": 1.0, "surface_roughness": 0.22})
 		"lightning":
 			return Mat.shader("ball_noise", {"mode": 1, "base_color": Color(0.04, 0.07, 0.2), "glow_color": Color(0.4, 0.75, 1.0), "glow": 3.0})
 		"soccer":
 			return Mat.shader("soccer_ball", {})
-	return Mat.shader("ball_standard", {"stripe_color": player_color})
+	return Mat.shader("golfball_dimples", {"stripe_color": player_color})
 
 ## Ball-Mesh (Kugel) mit Skin. Die Blitz-Kugel bekommt zusaetzlich ein kleines Licht.
 static func make_ball(skin: String, radius: float, player_color: Color = Color(0.2, 0.6, 1.0)) -> Node3D:
-	var mi := Mat.sphere(radius, ball_material(skin, player_color), Vector3.ZERO, 28)
+	# 64 Segmente / 32 Ringe: glatte Silhouette, auch in Nahaufnahmen (Shop, Replay)
+	var mi := Mat.sphere(radius, ball_material(skin, player_color), Vector3.ZERO, 64)
 	mi.name = "BallMesh"
 	if skin == "lightning" or skin == "magma":
 		var light := OmniLight3D.new()
@@ -124,6 +125,13 @@ static func splash(parent: Node3D, pos: Vector3, kind: String) -> void:
 	else:
 		_burst(parent, pos, {"amount": 30, "lifetime": 0.6, "spread": 180.0, "speed": Vector2(2.0, 6.0), "gravity": Vector3.ZERO,
 			"size": 0.25, "colors": [Color(1, 0.3, 0.4, 1), Color(1, 0.2, 0.8, 0.0)]}, 1.5)
+
+## Staubwolke beim harten Aufprall (Bande, Fels, Wurzel): Brocken in Richtung der Aufprall-Normale + weicher Staub.
+static func impact_dust(parent: Node3D, pos: Vector3, normal: Vector3, strength: float, tint: Color = Color(0.62, 0.55, 0.45)) -> void:
+	var k: float = clampf((strength - 4.0) / 14.0, 0.15, 1.0)
+	_burst(parent, pos, {"amount": int(10 + 22 * k), "lifetime": 0.7, "direction": normal, "spread": 55.0, "speed": Vector2(1.0, 3.5 * k + 1.0),
+		"gravity": Vector3(0, -6, 0), "size": 0.16 + 0.12 * k, "scale": Vector2(0.6, 1.4), "additive": false,
+		"colors": [Color(tint, 0.85), Color(tint.lightened(0.2), 0.45), Color(tint.lightened(0.3), 0.0)]}, 1.2)
 
 ## Loch-Explosion des Spielers. Liefert die empfohlene Kamerawackel-Staerke (0..1).
 static func hole_explosion(parent: Node3D, kind: String, pos: Vector3) -> float:

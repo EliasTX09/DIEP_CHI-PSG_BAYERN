@@ -199,7 +199,7 @@ class Creek extends Gadget:
 		half_d = depth * 0.5
 		bridge_half = bridge_width * 0.5
 		kind = out_kind
-		var water_mat: Material = Mat.shader("lava", {}) if kind == "lava" else Mat.shader("water", {"wave_height": 0.02, "wave_scale": 1.2, "speed": 2.0})
+		var water_mat: Material = Mat.shader("lava", {}) if kind == "lava" else Mat.shader("water_realistic", {"wave_height": 0.02, "wave_scale": 1.2, "speed": 2.0})
 		var bank := Mat.flat(Color(0.36, 0.3, 0.24), 0.95)
 		var side_w: float = half_w - bridge_half
 		for sgn: float in [-1.0, 1.0]:

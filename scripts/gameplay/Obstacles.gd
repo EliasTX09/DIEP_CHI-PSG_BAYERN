@@ -92,7 +92,7 @@ static func log_obstacle(length: float, radius: float = 0.32, dead: bool = false
 	return b
 
 ## Felsbrocken mit Kugel-Kollision (halb im Boden).
-static func boulder(radius: float, tint: Color = Color(0.55, 0.52, 0.48)) -> StaticBody3D:
+static func boulder(radius: float, tint: Color = Color(0.55, 0.52, 0.48), moss: float = 0.0) -> StaticBody3D:
 	var b := StaticBody3D.new()
 	b.collision_layer = 1
 	b.collision_mask = 0
@@ -108,10 +108,7 @@ static func boulder(radius: float, tint: Color = Color(0.55, 0.52, 0.48)) -> Sta
 	b.add_child(cs)
 	var mi := MeshInstance3D.new()
 	mi.mesh = Flora.boulder()
-	var m := StandardMaterial3D.new()
-	m.albedo_color = tint
-	m.roughness = 0.95
-	mi.material_override = m
+	mi.material_override = Flora.stone_material(tint, moss)
 	mi.scale = Vector3(radius * 1.08, radius * 1.15, radius * 1.08)
 	mi.position = Vector3(0.0, radius * 0.45, 0.0)
 	b.add_child(mi)

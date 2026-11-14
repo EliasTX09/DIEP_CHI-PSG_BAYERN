@@ -76,6 +76,16 @@ var _dots: MultiMeshInstance3D
 var _air_dots: MultiMeshInstance3D
 var _band_mat: StandardMaterial3D
 var _landing: MeshInstance3D
+## Zielkreis am vorhergesagten Ende des Schlags
+var _target_ring: MeshInstance3D
+## Gummiband als gedaempfte Feder: Knauf folgt dem Finger mit Nachschwingen, beim Loslassen schnellt er zurueck
+const BAND_K := 230.0
+const BAND_DAMP := 17.0
+var _band_knob: Vector3 = Vector3.INF
+var _band_knob_v: Vector3 = Vector3.ZERO
+var _band_release: float = 0.0
+var _preview_spin: Vector2 = Vector2.ZERO
+var _preview_chip: bool = false
 var _slowmo: bool = false
 var _slowmo_used: bool = false
 var _slowmo_timer: float = 0.0
@@ -214,6 +224,7 @@ func _start_hole(index: int) -> void:
 			rec.ball.fell_out.connect(_on_ball_out.bind(rec))
 			rec.ball.respawned.connect(_on_ball_respawned.bind(rec))
 			rec.ball.style_event.connect(_on_ball_style.bind(rec))
+			rec.ball.impacted.connect(_on_ball_impact.bind(rec))
 			if rec.kind == "bot":
 				rec.brain = BotBrain.new(rec.ball, course, float(rec.entry.get("skill", 0.5)), _rng.randi())
 		rec.tag = BallTag.new(rec.name, rec.color, rec == local)
@@ -306,7 +317,11 @@ func _update_play(delta: float, real_dt: float) -> void:
 	if thinkers.size() > 0:
 		_bot_turn = (_bot_turn + 1) % thinkers.size()
 		thinkers[_bot_turn].think(get_world_3d().direct_space_state)
-	# Zielen: Vorschau aktualisieren
+	# Zielen: Vorschau aktualisieren (auch wenn Spin oder Schlagart waehrend des Zielens geaendert werden)
+	if _aiming and (hud.spin != _preview_spin or hud.chip_mode != _preview_chip):
+		_preview_dirty = true
+	if _aiming or _band_release > 0.0:
+		_update_band(real_dt)
 	if _aiming:
 		_preview_cool -= real_dt
 		if _preview_dirty and _preview_cool <= 0.0:
@@ -421,6 +436,9 @@ func _touch_up(index: int) -> void:
 	if _aiming and index == _aim_index:
 		var power: float = _aim_power
 		var dir: Vector3 = _aim_dir
+		if power >= 0.05 and _can_aim():
+			# Band schnellt nach vorn zurueck (kurze Feder-Animation, dann aus)
+			_band_release = 0.18
 		_cancel_aim()
 		if power >= 0.05 and _can_aim():
 			local.ball.shoot(dir, power, hud.chip_mode, hud.spin)
@@ -432,10 +450,13 @@ func _cancel_aim() -> void:
 	BallTag.hide_names = false
 	_aim_power = 0.0
 	if _arrow != null:
-		_arrow.visible = false
+		if _band_release <= 0.0:
+			_arrow.visible = false
+			_band_knob = Vector3.INF
 		_dots.visible = false
 		_air_dots.visible = false
 		_landing.visible = false
+		_target_ring.visible = false
 	if hud != null:
 		hud.set_power(0.0, false)
 		if phase == Phase.PLAY and not auto_play:
@@ -466,7 +487,7 @@ func _build_aim_visuals() -> void:
 	_band_mat = Mat.unlit(Color(0.3, 1.0, 0.4, 0.95), false, true)
 	_band_mat.no_depth_test = true
 	_band_mat.render_priority = 4
-	for side in ["L", "R"]:
+	for side in ["L", "R", "L2", "R2"]:
 		var strand := MeshInstance3D.new()
 		strand.name = "Strand" + side
 		var bm := BoxMesh.new()
@@ -487,6 +508,12 @@ func _build_aim_visuals() -> void:
 	_landing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_landing.visible = false
 	add_child(_landing)
+	_target_ring = Mat.torus(0.2, 0.27, Mat.unlit(Color(1.0, 1.0, 1.0, 0.9), false, true))
+	_target_ring.name = "TargetRing"
+	(_target_ring.material_override as StandardMaterial3D).no_depth_test = true
+	_target_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_target_ring.visible = false
+	add_child(_target_ring)
 
 func _make_dot_layer(radius: float, color: Color, priority: int) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
@@ -513,39 +540,89 @@ func _make_dot_layer(radius: float, color: Color, priority: int) -> MultiMeshIns
 
 ## Gummiband + Punkt-Kette (echte Simulation inkl. Abprallern, Rampen und Gadgets).
 ## Laenge der Kette = Guide-Wert des Schlaegers, Groesse des Landerings = Streuung (Accuracy).
+## Gummiband hinter dem Ball, jedes Bild neu: Der Knauf haengt an einer gedaempften Feder (schwingt nach,
+## wenn der Finger die Richtung wechselt), die Straenge biegen sich, solange das Band nicht ganz gespannt ist.
+## Nach dem Loslassen schnellt der Knauf zum Ball zurueck.
+func _update_band(dt: float) -> void:
+	if local == null or local.ball == null or _arrow == null:
+		return
+	var origin: Vector3 = local.ball.global_position + Vector3(0.0, -Ball3D.RADIUS + 0.05, 0.0)
+	var back := Vector3(-_aim_dir.x, 0.0, -_aim_dir.z).normalized()
+	if back == Vector3.ZERO:
+		back = Vector3.BACK
+	var power: float = _aim_power
+	if _band_release > 0.0:
+		_band_release -= dt
+		power = 0.0
+		if _band_release <= 0.0:
+			_arrow.visible = false
+			_band_knob = Vector3.INF
+			return
+	elif power < 0.02:
+		_arrow.visible = false
+		return
+	var want_len: float = 0.0 if _band_release > 0.0 else 0.7 + 3.4 * power
+	var want: Vector3 = origin + back * want_len
+	if _band_knob == Vector3.INF:
+		_band_knob = origin + back * 0.3
+		_band_knob_v = Vector3.ZERO
+	var left: float = minf(dt, 0.1)
+	var k: float = BAND_K * (4.0 if _band_release > 0.0 else 1.0)
+	while left > 0.0:
+		var h: float = minf(left, 1.0 / 120.0)
+		_band_knob_v += ((want - _band_knob) * k - _band_knob_v * BAND_DAMP) * h
+		_band_knob += _band_knob_v * h
+		left -= h
+	_band_knob.y = origin.y
+	var col: Color = Color(0.3, 1.0, 0.4).lerp(Color(1.0, 0.85, 0.2), clampf(power * 2.0, 0.0, 1.0)).lerp(Color(1.0, 0.25, 0.2), clampf(power * 2.0 - 1.0, 0.0, 1.0))
+	if _band_release <= 0.0:
+		_arrow_mat.albedo_color = Color(col, 0.35)
+		_band_mat.albedo_color = Color(col, 0.95)
+	_arrow.visible = true
+	_arrow.global_position = origin
+	_arrow.global_basis = Basis.looking_at(-back, Vector3.UP)
+	# Knauf im Band-Rahmen (z = nach hinten)
+	var tip: Vector3 = _arrow.global_transform.affine_inverse() * _band_knob
+	var length: float = maxf(0.05, tip.length())
+	_arrow_mesh.scale = Vector3(1.0, 1.0, maxf(0.05, tip.z))
+	# Durchhang: wie weit ist das Band noch nicht gespannt? + seitliches Nachschwingen
+	var slack: float = clampf(1.0 - length / maxf(0.3, want_len), 0.0, 1.0) if want_len > 0.0 else 0.0
+	var swing: float = clampf(_band_knob_v.length() * 0.04, 0.0, 0.25)
+	for side: float in [-1.0, 1.0]:
+		var nm: String = "L" if side < 0.0 else "R"
+		var from := Vector3(0.34 * side, 0.0, 0.0)
+		var mid: Vector3 = (from + tip) * 0.5 + Vector3(side * (0.06 + 0.35 * slack + swing), 0.0, 0.0)
+		_place_strand(_arrow.get_node("Strand" + nm) as MeshInstance3D, from, mid)
+		_place_strand(_arrow.get_node("Strand" + nm + "2") as MeshInstance3D, mid, tip)
+	(_arrow.get_node("Knob") as Node3D).position = tip
+
+func _place_strand(strand: MeshInstance3D, a: Vector3, b: Vector3) -> void:
+	var d: Vector3 = b - a
+	if d.length() < 0.01:
+		strand.visible = false
+		return
+	strand.visible = true
+	strand.position = (a + b) * 0.5
+	strand.basis = Basis.looking_at(d, Vector3.UP)
+	strand.scale = Vector3(1.0, 1.0, d.length())
+
 func _update_preview() -> void:
 	if local == null or local.ball == null or not _aiming:
 		return
 	var ball: Ball3D = local.ball
 	if _aim_power < 0.02:
-		_arrow.visible = false
 		_dots.visible = false
 		_air_dots.visible = false
 		_landing.visible = false
+		_target_ring.visible = false
 		return
 	var origin: Vector3 = ball.global_position
-	var col: Color = Color(0.3, 1.0, 0.4).lerp(Color(1.0, 0.85, 0.2), clampf(_aim_power * 2.0, 0.0, 1.0)).lerp(Color(1.0, 0.25, 0.2), clampf(_aim_power * 2.0 - 1.0, 0.0, 1.0))
-	_arrow_mat.albedo_color = Color(col, 0.35)
-	_band_mat.albedo_color = Color(col, 0.95)
-	# Gummiband: zeigt vom Ball weg nach hinten (Richtung Finger), Laenge = Kraft
-	var back := Vector3(-_aim_dir.x, 0.0, -_aim_dir.z).normalized()
-	var length: float = 0.7 + 3.4 * _aim_power
-	_arrow.visible = true
-	_arrow.global_position = origin + Vector3(0.0, -Ball3D.RADIUS + 0.05, 0.0)
-	_arrow.global_basis = Basis.looking_at(-back, Vector3.UP)
-	_arrow_mesh.scale = Vector3(1.0, 1.0, length)
-	var tip := Vector3(0.0, 0.0, length)
-	for side in [-1.0, 1.0]:
-		var strand := _arrow.get_node("Strand" + ("L" if side < 0.0 else "R")) as MeshInstance3D
-		var from := Vector3(0.34 * side, 0.0, 0.0)
-		strand.position = (from + tip) * 0.5
-		strand.basis = Basis.looking_at(tip - from, Vector3.UP)
-		strand.scale = Vector3(1.0, 1.0, from.distance_to(tip))
-	(_arrow.get_node("Knob") as Node3D).position = tip
 	# Punkt-Kette
 	var prof: Dictionary = ball.profile
 	var guide: float = float(prof.get("guide", 1.0))
 	var space := get_world_3d().direct_space_state
+	_preview_spin = hud.spin
+	_preview_chip = hud.chip_mode
 	var res: Dictionary = ShotSim.predict_shot(course, space, origin, _aim_dir, _aim_power,
 		hud.chip_mode, hud.spin, prof, guide, ball.ground_normal, 2)
 	var pts: PackedVector3Array = res["points"]
@@ -589,6 +666,12 @@ func _update_preview() -> void:
 	_air_dots.visible = n_air > 0
 	var out: bool = bool(res.get("out", false))
 	(_dots.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35, 0.3, 0.95) if out else Color(1.0, 1.0, 1.0, 0.95)
+	# Zielkreis am Ende der Kette (dort, wo die Vorhersage den Ball liegen sieht)
+	_target_ring.visible = n_ground > 0 and not out
+	if _target_ring.visible:
+		var last: Transform3D = ground_mm.get_instance_transform(n_ground - 1)
+		_target_ring.global_transform = Transform3D(last.basis.orthonormalized().scaled(Vector3(1.0 + 0.6 * float(prof.get("scatter_deg", 1.0)) / 3.0, 1.0,
+			1.0 + 0.6 * float(prof.get("scatter_deg", 1.0)) / 3.0)), last.origin + Vector3(0.0, 0.01, 0.0))
 	# Landering: Aufsetzpunkt eines Chips; Groesse = moegliche Streuung des Schlaegers
 	var impact: Vector3 = res["first_impact"]
 	if impact != Vector3.INF:
@@ -648,6 +731,16 @@ func _on_ball_respawned(rec: PlayerRec) -> void:
 		rig.follow(rec.ball, true)
 	if course.one_shot or rec.strokes >= Ball3D.MAX_STROKES:
 		_finish_player(rec, false)
+
+## Harter Aufprall: Staubwolke an der Kontaktstelle, beim eigenen Ball zusaetzlich kurzes Kamerawackeln.
+func _on_ball_impact(strength: float, pos: Vector3, normal: Vector3, rec: PlayerRec) -> void:
+	if course == null or not is_instance_valid(course):
+		return
+	var tint: Color = {"volcano": Color(0.32, 0.27, 0.24), "neon": Color(0.45, 0.9, 1.0), "pirate": Color(0.78, 0.68, 0.5)}.get(
+		Catalog.world_of_course(course.course_id), Color(0.58, 0.52, 0.42))
+	BallFX.impact_dust(course, pos, normal, strength, tint)
+	if rec == local and not auto_play:
+		rig.shake(clampf((strength - Ball3D.IMPACT_FX_SPEED) * 0.018, 0.05, 0.22))
 
 func _on_ball_out(kind: String, rec: PlayerRec) -> void:
 	if rec.ball == null:

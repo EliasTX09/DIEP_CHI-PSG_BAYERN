@@ -838,8 +838,26 @@ func _stage_input() -> void:
 			tag_count += 1
 			tag_alpha = maxf(tag_alpha, rec.tag.name_alpha())
 	check(BallTag.hide_names and tag_count > 0 and tag_alpha < 0.2, "Namensschilder blenden beim Zielen aus (Deckkraft %.2f)" % tag_alpha)
-	_touch(0, screen + Vector2(0.0, 320.0), false)
+	# Spin live: Seiten-Effet waehrend des Zielens verschiebt die Punkt-Kette
 	await _process_frames(4)
+	var dmm: MultiMesh = m._dots.multimesh
+	var end_before: Vector3 = dmm.get_instance_transform(maxi(0, dmm.visible_instance_count - 1)).origin
+	m.hud._spin_pad.set_value(Vector2(1.0, 0.0))
+	await _process_frames(8)
+	var end_after: Vector3 = dmm.get_instance_transform(maxi(0, dmm.visible_instance_count - 1)).origin
+	check(end_before.distance_to(end_after) > 0.05, "Spin live: Seiten-Effet verschiebt die Punkt-Kette (%.2f m)" % end_before.distance_to(end_after))
+	check(m._target_ring.visible or (m._dots.material_override as StandardMaterial3D).albedo_color.g < 0.5, "Zielkreis am Ende der Punkt-Kette (oder rote Kette = Aus)")
+	var knob: Node3D = m._arrow.get_node("Knob")
+	check(knob.position.z > 0.5 and (m._arrow.get_node("StrandL2") as Node3D).visible, "Gummiband gespannt (Knauf %.2f m hinter dem Ball, Straenge mit Knick)" % knob.position.z)
+	m.hud._spin_pad.set_value(Vector2.ZERO)
+	await _process_frames(6)
+	_touch(0, screen + Vector2(0.0, 320.0), false)
+	await _process_frames(1)
+	var sq: float = ball.squash_factor()
+	var mesh_scale: Vector3 = ball._mesh.transform.basis.get_scale()
+	check(sq > 1.05 and maxf(mesh_scale.x, maxf(mesh_scale.y, mesh_scale.z)) > 1.04, "Squash & Stretch: Ball streckt sich beim Abschlag (%.2f)" % sq)
+	check(is_equal_approx(((ball.get_child(0) as CollisionShape3D).shape as SphereShape3D).radius, Ball3D.RADIUS), "Kollisionskugel bleibt unverformt")
+	await _process_frames(3)
 	check(ball.strokes == 1 and ball.state == Ball3D.State.MOVING, "Loslassen fuehrt den Schlag aus")
 	await _wait_ball(ball, 16.0)
 	var fwd: Vector3 = -m.course.tee.basis.z

@@ -11,6 +11,8 @@ signal holed
 signal fell_out(kind: String)
 signal respawned
 signal style_event(kind: String, points: int)
+## Harter Aufprall (Bande, Fels, Wurzel, Boden nach hohem Flug): Staerke = Annaeherungs-Tempo in m/s
+signal impacted(strength: float, pos: Vector3, normal: Vector3)
 
 enum State { FROZEN, IDLE, MOVING, HOLED, OUT }
 
@@ -78,6 +80,19 @@ var _out_timer: float = 0.0
 var out_pos: Vector3 = Vector3.ZERO
 var _mesh: Node3D
 var _trail: GPUParticles3D
+## Squash & Stretch (nur die Optik, nie Physik/Kollision): >0 = gestreckt entlang _squash_axis, <0 = gestaucht.
+## Gedaempfte Feder -> der Ball federt nach Abschlag und Aufprall ein, zweimal nach und ist wieder rund.
+const SQUASH_K := 420.0
+const SQUASH_DAMP := 18.0
+## Ab diesem Aufprall-Tempo gibt es Staub + (beim eigenen Ball) Kamerawackeln
+const IMPACT_FX_SPEED := 5.5
+var _squash: float = 0.0
+var _squash_vel: float = 0.0
+var _squash_axis: Vector3 = Vector3.UP
+## Rollen der Optik (Dellen drehen sich mit), in Welt-Ausrichtung
+var _roll: Basis = Basis.IDENTITY
+var _vis_pos: Vector3 = Vector3.INF
+var _last_fx_ms: int = 0
 var _ray := PhysicsRayQueryParameters3D.new()
 
 # ================================================================ Aufbau
@@ -130,8 +145,12 @@ func place_on_tee(tee: Transform3D) -> void:
 	_set_rest(tee.origin, null)
 	state = State.FROZEN
 	visible = true
+	_squash = 0.0
+	_squash_vel = 0.0
+	_roll = Basis.IDENTITY
+	_vis_pos = Vector3.INF
 	if _mesh != null:
-		_mesh.scale = Vector3.ONE
+		_mesh.transform = Transform3D.IDENTITY
 
 ## Gibt den Ball frei (Bahn gestartet).
 func unfreeze() -> void:
@@ -210,6 +229,10 @@ func shoot(dir: Vector3, power: float, chip: bool, spin: Vector2) -> bool:
 	_pin_body = null
 	_launch_vel = v
 	_launch = true
+	# Abschlag: Ball streckt sich in Flugrichtung und federt zurueck
+	_squash_axis = v.normalized()
+	_squash = 0.16 + 0.24 * power
+	_squash_vel = 0.0
 	state = State.MOVING
 	SoundManager.play("hit", power, randf_range(0.95, 1.05), sound_gain)
 	if is_local:
@@ -263,7 +286,7 @@ func _integrate_forces(body_state: PhysicsDirectBodyState3D) -> void:
 			ground_vel = body_state.get_contact_collider_velocity_at_position(i)
 			ground_obj = body_state.get_contact_collider_object(i)
 		if closing > 2.2:
-			_on_impact(closing, n.y < 0.5)
+			_on_impact(closing, n.y < 0.5, n, pos - n * RADIUS)
 	# Ohne gemeldeten Kontakt: knapp ueber dem Boden gilt der Ball trotzdem als rollend
 	# (beim Rollen ueber Dreieckskanten meldet die Physik nicht in jedem Tick einen Kontakt).
 	if not on_ground and vel.y < 1.5:
@@ -423,11 +446,19 @@ func _emit_events() -> void:
 			"land":
 				SoundManager.play("pop", 1.0, 0.9, sound_gain)
 
-func _on_impact(closing_speed: float, wall: bool) -> void:
+func _on_impact(closing_speed: float, wall: bool, normal: Vector3 = Vector3.UP, contact: Vector3 = Vector3.ZERO) -> void:
 	var now: int = Time.get_ticks_msec()
 	if now - _last_impact_ms > 70:
 		_last_impact_ms = now
 		SoundManager.play_bounce(course.surface_sound, clampf(closing_speed / 16.0, 0.05, 1.0) * sound_gain)
+	# Optik: gegen die Aufprall-Normale stauchen (staerker bei hartem Aufprall)
+	if closing_speed > 3.0:
+		_squash_axis = normal
+		_squash = -clampf(closing_speed * 0.028, 0.08, 0.38)
+		_squash_vel = 0.0
+	if closing_speed > IMPACT_FX_SPEED and now - _last_fx_ms > 160:
+		_last_fx_ms = now
+		call_deferred("emit_signal", &"impacted", closing_speed, contact, normal)
 	if wall and closing_speed > 3.0 and now - _last_bank_ms > 250:
 		_last_bank_ms = now
 		_bank_hits += 1
@@ -528,12 +559,50 @@ func _physics_process(delta: float) -> void:
 			state = State.IDLE
 			respawned.emit()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _trail != null:
 		_trail.global_position = global_position
 		_trail.emitting = state == State.MOVING and linear_velocity.length() > 1.5
-	if state == State.HOLED and _mesh != null and _mesh.scale.x > 0.02:
-		_mesh.scale = _mesh.scale * 0.9
+	if _mesh == null:
+		return
+	if state == State.HOLED:
+		if _mesh.scale.x > 0.02:
+			_mesh.scale = _mesh.scale * 0.9
+		return
+	_update_visual(delta)
+
+## Rollen + Squash & Stretch der sichtbaren Kugel. Die Kollisionsform bleibt immer eine exakte Kugel.
+func _update_visual(delta: float) -> void:
+	var p: Vector3 = global_position
+	if _vis_pos != Vector3.INF:
+		var moved: Vector3 = p - _vis_pos
+		var flat := Vector3(moved.x, 0.0, moved.z)
+		var d: float = flat.length()
+		if d > 0.0005 and d < 2.0:
+			_roll = (Basis(Vector3.UP.cross(flat / d), d / RADIUS) * _roll).orthonormalized()
+	_vis_pos = p
+	# gedaempfte Feder in kleinen Schritten (stabil auch bei Rucklern)
+	var left: float = minf(delta, 0.1)
+	while left > 0.0:
+		var h: float = minf(left, 1.0 / 120.0)
+		_squash_vel += (-SQUASH_K * _squash - SQUASH_DAMP * _squash_vel) * h
+		_squash += _squash_vel * h
+		left -= h
+	if absf(_squash) < 0.002 and absf(_squash_vel) < 0.02:
+		_squash = 0.0
+		_squash_vel = 0.0
+	var a: float = clampf(1.0 + _squash, 0.55, 1.6)
+	var b: float = 1.0 / sqrt(a)
+	var u: Vector3 = _squash_axis
+	var k: float = a - b
+	var stretch := Basis(Vector3(b + k * u.x * u.x, k * u.y * u.x, k * u.z * u.x),
+		Vector3(k * u.x * u.y, b + k * u.y * u.y, k * u.z * u.y),
+		Vector3(k * u.x * u.z, k * u.y * u.z, b + k * u.z * u.z))
+	_mesh.transform = Transform3D(global_transform.basis.orthonormalized().inverse() * (stretch * _roll), Vector3.ZERO)
+
+## Aktuelle Verformung (Tests): 1 = rund, > 1 gestreckt, < 1 gestaucht
+func squash_factor() -> float:
+	return 1.0 + _squash
 
 ## Erzwingt das Ende der Bahn fuer diesen Ball (Zeit abgelaufen / Schlaglimit).
 func give_up() -> void:

@@ -439,8 +439,6 @@ func toast(text: String) -> void:
 	p.add_child(UIKit.margin(l, 10, 3, 10, 3))
 	p.z_index = 40
 	_root.add_child(p)
-	p.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_toast = p
 	_place_toast()
 	_place_toast.call_deferred()
@@ -451,10 +449,14 @@ func toast(text: String) -> void:
 	tw.tween_property(p, "modulate:a", 0.0, 0.35)
 	tw.tween_callback(p.queue_free)
 
+## Mittig unter der oberen Leiste (explizit gerechnet, unabhaengig von Ankern und Layout-Reihenfolge).
 func _place_toast() -> void:
 	if _toast == null or not is_instance_valid(_toast):
 		return
-	_toast.position.y = _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 8.0
+	var w: float = _root.size.x if _root.size.x > 1.0 else get_viewport().get_visible_rect().size.x
+	var sz: Vector2 = _toast.get_combined_minimum_size().max(_toast.size)
+	_toast.size = sz
+	_toast.position = Vector2(maxf(0.0, (w - sz.x) * 0.5), _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 8.0)
 
 func _process(_delta: float) -> void:
 	# Die obere Leiste waechst, wenn Spieler dazukommen -> Meldung bleibt darunter
