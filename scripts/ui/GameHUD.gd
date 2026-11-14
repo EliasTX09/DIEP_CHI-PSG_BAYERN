@@ -44,6 +44,8 @@ var _emote_wheel: PanelContainer
 var _overlay: Control = null
 var _top_on: bool = false
 var _banner_tween: Tween = null
+## Aktuelle Meldung (immer nur eine, direkt unter der oberen Leiste - nie ueber Rangliste oder Kraftanzeige)
+var _toast: PanelContainer = null
 
 # ================================================================ Spin-Selector
 
@@ -422,8 +424,42 @@ func popup_style(text: String, color: Color = Color(0.4, 1.0, 0.9)) -> void:
 	tw.parallel().tween_property(l, "modulate:a", 0.0, 1.3).set_delay(0.4)
 	tw.tween_callback(l.queue_free)
 
+## Kurze Meldung in einer eigenen Zeile unter Rangliste/Status. Eine neue Meldung ersetzt die alte,
+## damit sich nichts stapelt oder ueberlappt.
 func toast(text: String) -> void:
-	UIKit.toast(_root, text)
+	if _toast != null and is_instance_valid(_toast):
+		_root.remove_child(_toast)
+		_toast.queue_free()
+	var p := UIKit.panel(Color(0.04, 0.06, 0.14, 0.86), 14, Color(1, 1, 1, 0.16), 1)
+	p.name = "Toast"
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var avail: float = _root.size.x if _root.size.x > 1.0 else get_viewport().get_visible_rect().size.x
+	var l := UIKit.wrap_label(text, 19, UIKit.TEXT, true)
+	l.custom_minimum_size.x = minf(avail - 48.0, maxf(220.0, float(text.length()) * 9.5))
+	p.add_child(UIKit.margin(l, 10, 3, 10, 3))
+	p.z_index = 40
+	_root.add_child(p)
+	p.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_toast = p
+	_place_toast()
+	_place_toast.call_deferred()
+	p.modulate.a = 0.0
+	var tw := p.create_tween()
+	tw.tween_property(p, "modulate:a", 1.0, 0.15)
+	tw.tween_interval(2.2)
+	tw.tween_property(p, "modulate:a", 0.0, 0.35)
+	tw.tween_callback(p.queue_free)
+
+func _place_toast() -> void:
+	if _toast == null or not is_instance_valid(_toast):
+		return
+	_toast.position.y = _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 8.0
+
+func _process(_delta: float) -> void:
+	# Die obere Leiste waechst, wenn Spieler dazukommen -> Meldung bleibt darunter
+	if _toast != null and is_instance_valid(_toast):
+		_place_toast()
 
 # ================================================================ Overlays
 

@@ -718,6 +718,15 @@ func _stage_match() -> void:
 	m.hud.set_chip_mode(true)
 	m.hud.show_banner("BIRDIE!", "2 Schlaege")
 	m.hud.hide_overlay()
+	m.hud.toast("Abkürzung: durchs Felsentor auf die Schanze – spart Schläge, daneben ist Aus!")
+	await _process_frames(3)
+	var toast_r: Rect2 = m.hud._toast.get_global_rect()
+	check(not toast_r.intersects(m.hud._board.get_global_rect()) and not toast_r.intersects(m.hud._power_panel.get_global_rect())
+		and toast_r.position.y >= m.hud._top_box.get_global_rect().end.y and hvp.grow(1.0).encloses(toast_r),
+		"Meldung liegt unter der Rangliste, nicht ueber Kraftanzeige (%s)" % toast_r)
+	m.hud.toast("Zweite Meldung")
+	await _process_frames(2)
+	check(m.hud._root.find_children("Toast*", "PanelContainer", true, false).size() == 1, "Neue Meldung ersetzt die alte (keine Stapel)")
 	m.hud.confirm_exit()
 	check(m.hud.has_overlay(), "Verlassen-Dialog oeffnet")
 	m.hud.hide_overlay()
@@ -822,6 +831,13 @@ func _stage_input() -> void:
 		await _process_frames(1)
 	check(m._aiming and m._aim_power > 0.3, "Ziehen am Ball spannt den Schlag (Kraft %.2f)" % m._aim_power)
 	check(m._dots.visible and m._arrow.visible, "Kraftpfeil und Flugbahn-Vorschau sichtbar")
+	var tag_alpha: float = 0.0
+	var tag_count := 0
+	for rec in m.players:
+		if rec.tag != null:
+			tag_count += 1
+			tag_alpha = maxf(tag_alpha, rec.tag.name_alpha())
+	check(BallTag.hide_names and tag_count > 0 and tag_alpha < 0.2, "Namensschilder blenden beim Zielen aus (Deckkraft %.2f)" % tag_alpha)
 	_touch(0, screen + Vector2(0.0, 320.0), false)
 	await _process_frames(4)
 	check(ball.strokes == 1 and ball.state == Ball3D.State.MOVING, "Loslassen fuehrt den Schlag aus")

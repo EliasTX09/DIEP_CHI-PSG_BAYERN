@@ -4,6 +4,10 @@ extends Node3D
 
 ## Alle aktiven Schilder (zum Stapeln, wenn mehrere Baelle dicht beieinander liegen).
 static var _all: Array[BallTag] = []
+## true, solange der lokale Spieler zielt: alle Namen blenden sich aus (Emotes bleiben sichtbar).
+static var hide_names: bool = false
+## Deckkraft der Namen (dezent, damit sie die Bahn nicht verdecken)
+const NAME_ALPHA := 0.82
 
 var target: Node3D = null
 var height: float = 0.85
@@ -13,6 +17,9 @@ var _emote_root: Node3D
 var _emote_sprite: Sprite3D
 var _emote_label: Label3D
 var _emote_time: float = 0.0
+var _shown: bool = true
+var _alpha: float = NAME_ALPHA
+var _base_color: Color = Color.WHITE
 
 func _init(display_name: String = "", color: Color = Color.WHITE, is_local: bool = false) -> void:
 	_name_label = Label3D.new()
@@ -21,10 +28,11 @@ func _init(display_name: String = "", color: Color = Color.WHITE, is_local: bool
 	_name_label.no_depth_test = true
 	_name_label.fixed_size = true
 	_name_label.pixel_size = 0.0011
-	_name_label.font_size = 40
-	_name_label.outline_size = 12
-	_name_label.modulate = color.lightened(0.35) if not is_local else Color(1.0, 0.95, 0.5)
-	_name_label.outline_modulate = Color(0.02, 0.03, 0.08, 0.9)
+	_name_label.font_size = 22
+	_name_label.outline_size = 7
+	_base_color = color.lightened(0.35) if not is_local else Color(1.0, 0.95, 0.5)
+	_name_label.modulate = Color(_base_color, NAME_ALPHA)
+	_name_label.outline_modulate = Color(0.02, 0.03, 0.08, 0.75)
 	_name_label.render_priority = 5
 	add_child(_name_label)
 	_emote_root = Node3D.new()
@@ -70,8 +78,13 @@ func _stack_level() -> int:
 			level += 1
 	return level
 
+## Name dauerhaft ein-/ausblenden (z.B. eigener Ball in der Vogelperspektive).
 func set_tag_visible(v: bool) -> void:
-	_name_label.visible = v
+	_shown = v
+
+## Aktuelle Deckkraft des Namens (Tests)
+func name_alpha() -> float:
+	return _alpha if _name_label.visible else 0.0
 
 ## Zeigt ein Emote (ID aus Catalog.EMOTES) fuer ~2,5 Sekunden.
 func show_emote(emote_id: String) -> void:
@@ -98,10 +111,16 @@ func _process(delta: float) -> void:
 		if cam != null:
 			dist = cam.global_position.distance_to(target.global_position)
 		# Feste Bildschirmgroesse -> Stapelabstand waechst mit der Kameradistanz.
-		var want: float = float(_stack_level()) * maxf(0.3, dist * 0.052)
+		var want: float = float(_stack_level()) * maxf(0.2, dist * 0.03)
 		_stack = lerpf(_stack, want, clampf(delta * 8.0, 0.0, 1.0))
 		global_position = target.global_position + Vector3.UP * (height + _stack)
 		visible = target.visible
+	# Beim Zielen sanft komplett ausblenden, danach wieder einblenden
+	var goal: float = NAME_ALPHA if _shown and not hide_names else 0.0
+	_alpha = move_toward(_alpha, goal, delta * 6.0)
+	_name_label.modulate.a = _alpha
+	_name_label.outline_modulate.a = _alpha * 0.9
+	_name_label.visible = _alpha > 0.01
 	if _emote_time > 0.0:
 		_emote_time -= delta
 		_emote_root.position.y = 0.75 + (2.5 - _emote_time) * 0.12

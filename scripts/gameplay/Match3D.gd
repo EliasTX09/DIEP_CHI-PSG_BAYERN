@@ -121,6 +121,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
+	BallTag.hide_names = false
 	SoundManager.set_wind(0.0)
 
 func _notification(what: int) -> void:
@@ -385,6 +386,7 @@ func _touch_down(index: int, pos: Vector2) -> void:
 			_aim_start = pos
 			_aim_drag = Vector2.ZERO
 			_aim_power = 0.0
+			BallTag.hide_names = true
 			hud.set_hint("Zurückziehen = Kraft · Loslassen = Schlag")
 	elif _touches.size() == 2:
 		_cancel_aim()
@@ -427,6 +429,7 @@ func _touch_up(index: int) -> void:
 func _cancel_aim() -> void:
 	_aiming = false
 	_aim_index = -1
+	BallTag.hide_names = false
 	_aim_power = 0.0
 	if _arrow != null:
 		_arrow.visible = false
