@@ -15,7 +15,7 @@ signal toast(message: String)
 
 const SAVE_PATH := "user://save.json"
 const SAVE_VERSION := 1
-const MENU_SCENE := "res://scenes/MainMenu3D.tscn"
+const MENU_SCENE := "res://scenes/MainMenuView.tscn"
 const GAME_SCENE := "res://scenes/Game.tscn"
 
 var data: Dictionary = {}

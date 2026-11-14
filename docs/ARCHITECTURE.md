@@ -5,7 +5,7 @@ die am Projekt weiterbauen.
 
 ## Eckdaten
 - **Engine:** Godot 4.5.x, Mobile-Renderer (Vulkan, fällt bei Bedarf auf OpenGL zurück), **Jolt-Physik**, 120 Physik-Ticks/s.
-- **Format:** Querformat (`display/window/handheld/orientation=4` = Sensor Landscape), Basisauflösung 1280×720, Stretch `canvas_items` + `expand`.
+- **Format:** Hochformat (`display/window/handheld/orientation=5` = Sensor Portrait), Basisauflösung 720×1280, Stretch `canvas_items` + `expand` (hohe Handys bekommen mehr Höhe, z.B. 720×1600).
 - **Alles prozedural:** Meshes, Shader, Partikel und Sounds entstehen per Code – es gibt keine importierten Modelle/Audiodateien.
 - **Einheiten:** Meter. Ball-Radius 0,30 m · Bahnbreite 5 m · Lochradius 0,75 m · Schwerkraft 20 m/s².
 - **Kollisions-Layer:** 1 = Welt (statisch), 2 = Bälle, 3 = bewegliche Hindernisse. Bälle kollidieren nicht miteinander.
@@ -25,7 +25,7 @@ Bälle, Trails, Loch-Explosionen, Avatar-Rahmen, Truhen, Ligen, Trophäen-Pfad, 
 
 ## Spielablauf
 ```
-MainMenu3D  --GameManager.start_match(config)-->  Game.tscn (Match3D)
+MainMenuView  --GameManager.start_match(config)-->  Game.tscn (Match3D)
 Match3D: pro Bahn  CourseBuilder3D.build(id) -> Course3D
          Ball3D je Spieler (lokal + Bots), RemoteBall3D für Online-Gegner
          CameraRig3D, GameHUD, ShotSim (Vorschau + Bot-KI)
@@ -57,11 +57,27 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 - `Course3D` – Tee-Transform, Loch-Position, Par, Mittellinie (`path_points`), Gadgets, Kill-Höhe, Kollisions-Körper.
 
 ## Hauptmenü
-- `MainMenu3D` – Hintergrund ist die echte Bahn „Tal der Mühlen“ plus schwebende Inseln, Windmühlen, Glitzer und
-  brennende Golfbälle. Kamera fliegt auf einer geschlossenen `Curve3D`; Ball und Schläger hängen als Kind der Kamera
-  im Vordergrund (Wischen dreht mit Schwung). UI: Profil, Coins/Gems, SPIELEN, Golden Shot, Lobby, 4 Truhen-Slots, Reiter.
-- `MenuPages` – alle Seiten als modale Fenster (`open(page_id)`, `refresh()`): play, lobby, clubs, cosmetics, friends,
-  leaderboard, shop, trophies, settings; dazu Truhen-Dialog, Belohnungsfenster und Rückfragen.
+- `MainMenuView` (`scenes/MainMenuView.tscn`, `scripts/ui/MainMenu.gd`) – Hochformat, einhändig bedienbar:
+  - Hintergrund ist die echte 3D-Bahn der gewählten Arena (je Welt eine, `BACKDROPS`), Kamera fliegt auf einer
+    geschlossenen `Curve3D`; dazu schwebende Inseln, Glitzer/Glut und brennende Golfbälle. Arena-Wechsel per Pfeil
+    oder Wischen baut den Hintergrund mit kurzer Abblende neu.
+  - Kopfleiste: Profilbild (Web-Account) / Name / Trophäen → Profil, Trophäen-Knopf, Coins, Gems, Einstellungen.
+  - Startseite (VBox): Arena-Banner, freier Platz für die Vitrine (Ball + Schläger als Kind der Kamera; Position und
+    Größe werden aus dem freien Platz berechnet – passt auf jedes Seitenverhältnis), Modus-Zeile, Golden Shot /
+    SPIELEN / Lobby, 4 Truhen-Slots. Alle Bedienelemente liegen in der unteren Hälfte.
+  - Tab-Leiste: Spielen · Tasche · Pass · Freunde · Shop, mit Abzeichen (Anfragen, abholbare Pass-Stufen, Geschenk).
+- `MenuPages` – Tab-Seiten im Inhaltsbereich (clubs/cosmetics, pass, friends/leaderboard, shop) und Overlays
+  (play, lobby, settings, trophies) über `open(page_id)`; dazu Schläger-Detail mit drehbarer 3D-Vorschau,
+  Truhen-Dialog, Belohnungsfenster und Rückfragen. `page`/`modal` zeigen immer die oberste Seite.
+- `Preview3D` – kleine 3D-Vorschau in einem eigenen `SubViewport` (eigene Welt): Bälle und Schläger als einmal
+  gerenderte Bilder, Trails und das Schläger-Detail live.
+
+## Battle Pass
+- Kostenlos, Saisons zu 28 Tagen ab 05.01.2026 (`Catalog.pass_season_at`), 30 Stufen à 150 XP (`Catalog.PASS_TIERS`).
+- XP: Match 40 + Platz (40/25/15/5) + Style/10 (max. 30) + 20 je Hole-in-One, Training 15, Golden Shot 30
+  (`GameManager.finish_match` / `finish_daily` → `grant({"pass_xp": …})`).
+- Speicherstand `pass = {season, xp, claimed}`. Saisonwechsel schreibt erreichte, nicht abgeholte Stufen gut
+  (Truhen als Coins), danach beginnt die Saison bei 0 XP. Doppelte Gegenstände werden zu 300 Coins.
 
 ## Anmeldung (AuthManager, ProfileManager, Web-Portal)
 - `AuthManager` ist der einzige Besitzer von `user_id`, Access-/Refresh-Token und E-Mail und führt alle

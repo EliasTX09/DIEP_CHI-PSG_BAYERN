@@ -792,14 +792,15 @@ func _stage_battle_pass() -> void:
 # ---------------------------------------------------------------- Hauptmenue
 
 func _stage_menu() -> void:
-	print("[SMOKE] Stage: 3D-Hauptmenue + alle Seiten")
+	print("[SMOKE] Stage: Hochformat-Hauptmenue + alle Seiten")
 	GameManager.reset_progress()
-	var ps: PackedScene = load("res://scenes/MainMenu3D.tscn")
-	check(ps != null, "MainMenu3D.tscn laedt")
+	var ps: PackedScene = load("res://scenes/MainMenuView.tscn")
+	check(ps != null, "MainMenuView.tscn laedt")
 	if ps == null:
 		return
-	var menu := ps.instantiate() as MainMenu3D
-	check(menu != null, "MainMenu3D hat das Menue-Skript")
+	check(ProjectSettings.get_setting("application/run/main_scene") == "res://scenes/MainMenuView.tscn", "Startszene ist MainMenuView")
+	var menu := ps.instantiate() as MainMenuView
+	check(menu != null, "MainMenuView hat das Menue-Skript")
 	if menu == null:
 		return
 	add_child(menu)
@@ -808,11 +809,29 @@ func _stage_menu() -> void:
 	var p0: Vector3 = menu.camera.global_position
 	await _process_frames(30)
 	check(menu.camera.global_position.distance_to(p0) > 0.05, "Kamera fliegt auf der Spline")
-	check(menu.course != null and menu.course.obstacles.size() > 0, "Hintergrund-Insel mit Windmuehle gebaut")
+	check(menu.course != null and menu.course.obstacles.size() > 0, "Arena-Hintergrund mit Hindernissen gebaut")
 	check(menu.showcase != null and menu.showcase.get_child_count() >= 3, "Vitrine mit Ball und Schlaeger")
+	# Layout: alles im Bild, Kopfleiste / Inhalt / Tab-Leiste ueberlappen nicht
+	var vp_rect := Rect2(Vector2.ZERO, menu.get_viewport().get_visible_rect().size)
+	var top := menu.ui.find_child("TopBar", true, false) as Control
+	var nav := menu.ui.find_child("NavBar", true, false) as Control
+	var play := menu.ui.find_child("PlayButton", true, false) as Control
+	var chests := menu.ui.find_child("ChestRow", true, false) as Control
+	var arena := menu.ui.find_child("ArenaBanner", true, false) as Control
+	check(top != null and nav != null and play != null and chests != null and arena != null, "Menue-Bausteine vorhanden")
+	if top != null and nav != null and play != null and chests != null and arena != null:
+		for c in [top, nav, play, chests, arena, menu._showcase_slot]:
+			var r: Rect2 = (c as Control).get_global_rect()
+			check(vp_rect.grow(1.0).encloses(r), "Im Bild: %s %s" % [str((c as Control).name), str(r)])
+		check(top.get_global_rect().end.y <= arena.get_global_rect().position.y, "Kopfleiste ueber Arena-Banner")
+		check(arena.get_global_rect().end.y <= menu._showcase_slot.get_global_rect().position.y + 0.5, "Arena-Banner ueber Vitrine")
+		check(play.get_global_rect().end.y <= chests.get_global_rect().position.y, "SPIELEN ueber den Truhen")
+		check(chests.get_global_rect().end.y <= nav.get_global_rect().position.y, "Truhen ueber der Tab-Leiste")
+		check(play.get_global_rect().position.y > vp_rect.size.y * 0.5, "SPIELEN in der unteren Haelfte (Daumen)")
+		check(nav.get_global_rect().end.y >= vp_rect.size.y - 60.0, "Tab-Leiste am unteren Rand")
+	check(menu.showcase.visible, "Vitrine auf der Startseite sichtbar")
 	# Wischen dreht die Vitrine
-	var vp: Vector2 = menu.get_viewport().get_visible_rect().size
-	var start := Vector2(vp.x * 0.25, vp.y * 0.6)
+	var start: Vector2 = menu._showcase_slot.get_global_rect().get_center()
 	var ang0: float = menu._spin_angle
 	var t := InputEventScreenTouch.new()
 	t.index = 0
@@ -828,17 +847,46 @@ func _stage_menu() -> void:
 	t.pressed = false
 	menu._unhandled_input(t)
 	check(absf(menu._spin_angle - ang0) > 0.5, "Wischen dreht Ball/Schlaeger")
-	# Alle Seiten oeffnen
+	# Arena wechseln baut den Hintergrund neu
+	var bd0: String = menu.course.course_id
+	menu._step_world(1)
+	await _process_frames(40)
+	check(MenuPages.sel_world == "volcano" and menu.course.course_id == "v4" and menu.course.course_id != bd0, "Arena-Wechsel baut Vulkan-Hintergrund")
+	menu.select_world("emerald")
+	await _process_frames(40)
+	check(menu.course.course_id == "e5", "Zurueck zur Emerald-Arena")
+	# Tab-Leiste
+	for tab in ["bag", "pass", "social", "shop"]:
+		menu._set_tab(tab)
+		await _process_frames(3)
+		check(menu.current_tab == tab and menu.pages.current_tab() == tab and not menu._home.visible, "Tab '%s' oeffnet" % tab)
+		check(not menu.showcase.visible, "Vitrine aus auf Tab '%s'" % tab)
+		var pr: Rect2 = (menu.pages.modal["root"] as Control).get_global_rect()
+		check(pr.position.y >= top.get_global_rect().end.y - 0.5 and pr.end.y <= nav.get_global_rect().position.y + 0.5, "Tab-Seite zwischen Kopf- und Tab-Leiste: %s" % tab)
+	menu._set_tab("home")
+	await _process_frames(3)
+	check(menu.current_tab == "home" and menu._home.visible and not menu.pages.is_open(), "Zurueck zur Startseite")
+	# Alle Seiten oeffnen (Tab-Seiten und Overlays), jede passt in die Bildschirmbreite
 	for page_id in MenuPages.PAGES.keys():
 		menu.pages.open(str(page_id))
-		await _process_frames(2)
-		var ok: bool = menu.pages.is_open() and (menu.pages.modal["body"] as Control).get_child_count() > 0
+		await _process_frames(3)
+		var ok: bool = menu.pages.is_open() and menu.pages.page == str(page_id) and (menu.pages.modal["body"] as Control).get_child_count() > 0
 		check(ok, "Menue-Seite '%s' baut sich auf" % str(page_id))
+		if ok:
+			# Mindestbreite aller Bausteine muss auf ein 720 px breites Handy passen (minus Raender)
+			var root := menu.pages.modal["root"] as Control
+			var widest := _min_width(root)
+			check(widest <= 700.0, "Seite '%s' passt auf 720 px (Mindestbreite %.0f px)" % [str(page_id), widest])
 		menu.pages.refresh()
 		await _process_frames(1)
-	menu.pages.close()
+	menu.pages.close_all()
 	await _process_frames(2)
-	check(not menu.pages.is_open(), "Seite schliesst")
+	check(not menu.pages.is_open() and menu.current_tab == "home", "Alle Seiten schliessen")
+	# Zurueck-Taste: Tab-Seite -> Startseite
+	menu._set_tab("shop")
+	await _process_frames(2)
+	check(menu.pages.close_top() and menu.current_tab == "home", "Zurueck-Taste fuehrt von Tab zur Startseite")
+	await _process_frames(2)
 	# Kaufen + Ausruesten aktualisiert Vitrine
 	GameManager.add_coins(5000)
 	menu.pages.open("cosmetics")
@@ -846,17 +894,51 @@ func _stage_menu() -> void:
 	check(GameManager.buy_item("ball", "magma") and GameManager.equip("ball", "magma"), "Ball kaufen + ausruesten")
 	await _process_frames(2)
 	check(menu._ball_node != null and is_instance_valid(menu._ball_node), "Vitrine zeigt neuen Ball")
-	# Schlaeger-Seite: Upgrade-Button
+	check(menu.pages.modal["root"].find_child("Item_ball_magma", true, false) != null, "Kosmetik-Karte mit Vorschau")
+	# Schlaeger: Karte -> Detail-Fenster mit 3D-Vorschau und Upgrade
 	GameManager.add_club_cards(Catalog.START_CLUB, 10)
 	menu.pages.open("clubs")
 	await _process_frames(2)
-	var up := menu.pages.modal["root"].find_child("UpgradeButton", true, false) as Button
+	var card := menu.pages.modal["root"].find_child("Club_" + Catalog.START_CLUB, true, false) as Button
+	check(card != null, "Schlaeger-Karte vorhanden")
+	if card != null:
+		card.pressed.emit()
+	await _process_frames(2)
+	var detail := menu.ui.find_child("ClubDetail", true, false) as Control
+	check(detail != null and detail.find_child("*", true, false) != null, "Schlaeger-Detail oeffnet")
+	var up: Button = null
+	if detail != null:
+		up = detail.find_child("UpgradeButton", true, false) as Button
+		check(_count_type(detail, "SubViewportContainer") >= 1, "Schlaeger-Detail mit 3D-Vorschau")
 	check(up != null and not up.disabled, "Upgrade-Button aktiv bei genug Karten/Coins")
 	if up != null:
 		up.pressed.emit()
+	await _process_frames(2)
 	check(GameManager.club_level(Catalog.START_CLUB) == 2, "Upgrade ueber das Menue")
-	menu.pages.close()
+	while menu.pages.any_modal_open():
+		menu.pages.close_top()
+		await _process_frames(1)
+	menu.pages.close_all()
+	# Battle Pass im Menue abholen
+	GameManager.add_pass_xp(2 * Catalog.PASS_XP_PER_TIER)
+	menu._refresh_badges()
+	check((menu._nav_badges["pass"] as Label).visible and (menu._nav_badges["pass"] as Label).text == "2", "Pass-Abzeichen zeigt 2")
+	menu._set_tab("pass")
+	await _process_frames(3)
+	var claim_all := menu.pages.modal["root"].find_child("PassClaimAll", true, false) as Button
+	check(claim_all != null, "Pass: Alle abholen")
+	var coins_before: int = GameManager.coins()
+	if claim_all != null:
+		claim_all.pressed.emit()
+	await _process_frames(3)
+	check(GameManager.pass_claimed(0) and GameManager.pass_claimed(1) and GameManager.coins() == coins_before + 100, "Pass-Stufen 1+2 abgeholt")
+	check(menu.ui.find_child("Rewards", true, false) != null, "Pass-Belohnungsfenster")
+	while menu.pages.any_modal_open():
+		menu.pages.close_top()
+		await _process_frames(1)
+	menu.pages.close_all()
 	# Truhen-Slots: Timer starten, mit Gems oeffnen, Belohnungsfenster
+	GameManager.data["chests"] = [null, null, null, null]
 	GameManager.add_chest("wood")
 	GameManager.add_gems(200)
 	await _process_frames(2)
@@ -874,28 +956,50 @@ func _stage_menu() -> void:
 	check(menu.pages.close_top() and true, "Zurueck-Taste schliesst oberstes Fenster")
 	await _process_frames(2)
 	# Tagesgeschenk
-	menu.pages.open("shop")
+	menu._set_tab("shop")
 	await _process_frames(1)
 	var gift: Dictionary = GameManager.claim_gift()
 	check(not gift.is_empty() and not GameManager.gift_available(), "Tagesgeschenk einmal pro Tag")
-	menu.pages.close()
+	menu._set_tab("home")
 	# Trophaeen-Pfad
 	GameManager.grant({"trophies": 120})
 	var road: Dictionary = GameManager.claim_road(0)
 	check(int(road.get("coins", 0)) == 150, "Trophaeen-Pfad: erste Belohnung")
-	menu.pages.open("trophies")
+	(menu.ui.find_child("TrophyButton", true, false) as Button).pressed.emit()
 	await _process_frames(2)
-	check(menu.pages.is_open(), "Trophaeen-Seite nach Anspruch")
-	menu.pages.close()
+	check(menu.pages.page == "trophies", "Trophaeen-Knopf oeffnet Trophaeen-Seite")
+	menu.pages.close_all()
+	# Profil-Knopf oeffnet Einstellungen mit Account-Bereich
+	(menu.ui.find_child("ProfileButton", true, false) as Button).pressed.emit()
+	await _process_frames(2)
+	check(menu.pages.page == "settings", "Profil oeffnet Einstellungen")
+	menu.pages.close_all()
 	# Lobby/Freunde offline zeigen Hinweis statt Absturz
 	menu.pages.open("lobby")
 	await _process_frames(1)
 	check(menu.pages.is_open(), "Lobby-Seite offline")
-	menu.pages.close()
+	menu.pages.close_all()
 	await _process_frames(30)
 	menu.queue_free()
 	await _process_frames(3)
 	GameManager.reset_progress()
+	MenuPages.sel_world = "emerald"
+
+## Groesste Mindestbreite unterhalb von root (so breit wird die Seite mindestens, egal wie gross der Bildschirm ist).
+func _min_width(root: Control) -> float:
+	var w: float = root.get_combined_minimum_size().x
+	if root is ScrollContainer:
+		return w
+	for c in root.get_children():
+		if c is Control and (c as Control).visible:
+			w = maxf(w, _min_width(c as Control))
+	return w
+
+func _count_type(root: Node, type_name: String) -> int:
+	var n: int = 1 if root.is_class(type_name) else 0
+	for c in root.get_children():
+		n += _count_type(c, type_name)
+	return n
 
 # ---------------------------------------------------------------- Anmeldung, Spielstand-Regel, Profilbild
 

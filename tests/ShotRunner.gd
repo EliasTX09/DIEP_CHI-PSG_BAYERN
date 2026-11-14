@@ -24,7 +24,7 @@ func _wanted(shot_name: String) -> bool:
 
 func _run() -> void:
 	if _wanted("menu"):
-		await _shot_scene("menu", "res://scenes/MainMenu3D.tscn", 30)
+		await _shot_menu()
 	if _wanted("pages"):
 		await _shot_pages()
 	if _wanted("sheet"):
@@ -117,28 +117,107 @@ func _course_sheet() -> void:
 	var file := ProjectSettings.globalize_path(OUT_DIR.path_join("sheet_courses.jpg"))
 	print("[SHOTS] sheet_courses -> ", file, " (", sheet.save_jpg(file, 0.85), ")")
 
-## Menue-Seiten nacheinander oeffnen und abfotografieren.
+## Hauptmenue im Hochformat: normales Handy (720 x 1280) und hohes Handy (720 x 1600), jeweils mit Layout-Pruefung.
+func _shot_menu() -> void:
+	var menu := (load("res://scenes/MainMenuView.tscn") as PackedScene).instantiate() as MainMenuView
+	add_child(menu)
+	for i in 40:
+		await get_tree().process_frame
+	_check_menu_layout(menu, "720x1280")
+	await _capture("menu")
+	var win := get_window()
+	var old: Vector2i = win.size
+	win.size = Vector2i(720, 1600)
+	for i in 20:
+		await get_tree().process_frame
+	print("[SHOTS] Hohes Handy: Viewport ", get_viewport().get_visible_rect().size)
+	_check_menu_layout(menu, "720x1600")
+	await _capture("menu_tall")
+	win.size = old
+	for i in 10:
+		await get_tree().process_frame
+	menu.select_world("volcano")
+	for i in 40:
+		await get_tree().process_frame
+	await _capture("menu_volcano")
+	menu.select_world("emerald")
+	menu.queue_free()
+	await get_tree().process_frame
+
+## Prueft, dass alle Bausteine im Bild liegen und sich nicht ueberlappen; Fehler -> [SHOTS][FAIL] (laesst die CI scheitern).
+func _check_menu_layout(menu: MainMenuView, tag: String) -> void:
+	var vp := Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var names: Array[String] = ["TopBar", "ArenaBanner", "ShowcaseSlot", "PlayButton", "ChestRow", "NavBar"]
+	var rects: Array[Rect2] = []
+	for n in names:
+		var c := menu.ui.find_child(n, true, false) as Control
+		if c == null:
+			print("[SHOTS][FAIL] ", tag, ": ", n, " fehlt")
+			return
+		var r: Rect2 = c.get_global_rect()
+		rects.append(r)
+		if not vp.grow(1.0).encloses(r):
+			print("[SHOTS][FAIL] ", tag, ": ", n, " ragt aus dem Bild ", r, " / ", vp)
+	for i in range(1, rects.size()):
+		if rects[i - 1].end.y > rects[i].position.y + 0.5:
+			print("[SHOTS][FAIL] ", tag, ": ", names[i - 1], " ueberlappt ", names[i])
+	if rects[0].position.y < 0.0 or rects[5].end.y > vp.size.y + 0.5:
+		print("[SHOTS][FAIL] ", tag, ": Leisten ausserhalb")
+	if rects[3].position.y < vp.size.y * 0.5:
+		print("[SHOTS][FAIL] ", tag, ": SPIELEN nicht in der unteren Haelfte")
+	if rects[2].size.y < 200.0:
+		print("[SHOTS][FAIL] ", tag, ": zu wenig Platz fuer die Vitrine (", rects[2].size.y, ")")
+	print("[SHOTS] Layout ", tag, " geprueft: Vitrine ", rects[2])
+
+## Menue-Seiten (Tabs und Fenster) nacheinander oeffnen, Breite pruefen und abfotografieren.
 func _shot_pages() -> void:
-	var ps: PackedScene = load("res://scenes/MainMenu3D.tscn")
-	var menu := ps.instantiate() as MainMenu3D
+	var menu := (load("res://scenes/MainMenuView.tscn") as PackedScene).instantiate() as MainMenuView
 	add_child(menu)
 	for i in 20:
 		await get_tree().process_frame
 	GameManager.add_chest("silver")
 	GameManager.add_chest("wood")
 	GameManager.start_unlock(0)
-	for page_id in ["play", "clubs", "cosmetics", "shop", "trophies", "settings", "friends", "leaderboard"]:
+	GameManager.add_pass_xp(4 * Catalog.PASS_XP_PER_TIER + 60)
+	GameManager.pass_claim(0)
+	var vw: float = get_viewport().get_visible_rect().size.x
+	for page_id in ["play", "clubs", "cosmetics", "pass", "shop", "trophies", "settings", "friends", "leaderboard", "lobby"]:
 		menu.pages.open(page_id)
-		for i in 12:
+		for i in 14:
 			await get_tree().process_frame
+		var root := menu.pages.modal["root"] as Control
+		for c in root.find_children("*", "Control", true, false):
+			var cc := c as Control
+			if cc.is_visible_in_tree() and cc.get_global_rect().end.x > vw + 1.0 and not _inside_scroll(cc):
+				print("[SHOTS][FAIL] Seite ", page_id, ": ", cc.name, " ragt rechts hinaus ", cc.get_global_rect())
+				break
 		await _capture("page_" + page_id)
-	menu.pages.close()
+	menu.pages.close_all()
+	menu.pages.open("clubs")
+	for i in 6:
+		await get_tree().process_frame
+	menu.pages.open_club_detail(Catalog.START_CLUB)
+	for i in 20:
+		await get_tree().process_frame
+	await _capture("page_club_detail")
+	menu.pages.close_all()
+	while menu.pages.any_modal_open():
+		menu.pages.close_top()
+		await get_tree().process_frame
 	menu.pages.show_rewards("Silbertruhe", GameManager.roll_chest("silver"))
 	for i in 50:
 		await get_tree().process_frame
 	await _capture("page_rewards")
 	menu.queue_free()
 	await get_tree().process_frame
+
+func _inside_scroll(c: Control) -> bool:
+	var p: Node = c.get_parent()
+	while p != null:
+		if p is ScrollContainer:
+			return false if (p as ScrollContainer).get_global_rect().end.x <= get_viewport().get_visible_rect().size.x + 1.0 else true
+		p = p.get_parent()
+	return false
 
 func _shot_scene(shot_name: String, path: String, frames: int) -> void:
 	var ps: PackedScene = load(path)

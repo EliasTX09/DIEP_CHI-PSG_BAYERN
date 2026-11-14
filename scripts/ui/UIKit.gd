@@ -210,6 +210,9 @@ static func bar(value: float, color: Color = GREEN, min_size: Vector2 = Vector2(
 ## Modaler Dialog: abgedunkelter Hintergrund + zentriertes Panel mit Titel und Schliessen-Button.
 ## Rueckgabe: {root: Control, body: VBoxContainer, close: Button, panel: PanelContainer}
 static func modal(host: Control, title: String, size: Vector2 = Vector2(820, 560), closable: bool = true) -> Dictionary:
+	# Nie groesser als der Bildschirm (Hochformat: 720 breit)
+	var avail: Vector2 = host.size if host.size.x > 1.0 else host.get_viewport_rect().size
+	size = Vector2(minf(size.x, avail.x - 24.0), minf(size.y, avail.y - 48.0))
 	var root := Control.new()
 	root.name = "Modal"
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -268,11 +271,15 @@ static func scroll_list(parent: Control, min_height: float = 360.0) -> VBoxConta
 static func toast(host: Control, text: String, color: Color = PANEL_LIGHT) -> void:
 	var p := panel(color, 18, Color(1, 1, 1, 0.3), 2)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(label(text, 22, TEXT, true))
+	var avail: Vector2 = host.size if host.size.x > 1.0 else host.get_viewport_rect().size
+	var l := wrap_label(text, 22, TEXT, true)
+	# Lange Meldungen umbrechen statt ueber den Rand zu laufen
+	l.custom_minimum_size.x = minf(avail.x - 60.0, maxf(240.0, float(text.length()) * 11.5))
+	p.add_child(margin(l, 10, 4, 10, 4))
 	p.z_index = 50
 	host.add_child(p)
 	p.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	p.position.y = 90.0
+	p.position.y = 120.0
 	p.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	p.modulate.a = 0.0
 	var tw := p.create_tween()

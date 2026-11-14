@@ -2,7 +2,7 @@ class_name UIIcon
 extends Control
 ## Vektor-Icons, die per Code gezeichnet werden (keine Bilddateien):
 ## coin, gem, trophy, chest, club, ball, friends, leader, shop, settings, eye, chip, putt, emote,
-## close, play, lock, check, timer, star, flag, cards, plus, back, gift, spin, bolt, exit.
+## close, play, lock, check, timer, star, flag, cards, plus, back, next, gift, spin, bolt, exit.
 
 var kind: String = "coin"
 var tint: Color = Color.WHITE
@@ -150,6 +150,8 @@ func _draw() -> void:
 			_rect(-0.7, -0.14, 0.7, 0.14, tint)
 		"back":
 			draw_polyline(PackedVector2Array([_p(0.35, -0.65), _p(-0.4, 0.0), _p(0.35, 0.65)]), tint, r * 0.26, true)
+		"next":
+			draw_polyline(PackedVector2Array([_p(-0.35, -0.65), _p(0.4, 0.0), _p(-0.35, 0.65)]), tint, r * 0.26, true)
 		"gift":
 			_rect(-0.75, -0.2, 0.75, 0.85, tint)
 			_rect(-0.85, -0.5, 0.85, -0.15, tint.lightened(0.15))

@@ -150,7 +150,7 @@ config/backend.cfg                Supabase-URL + anon-Key + Web-Portal-Adresse (
 .github/workflows/build_android.yml   Tests + APK + Schema-Test + Portal-Browsertest
 .github/workflows/pages.yml           Web-Portal auf GitHub Pages veröffentlichen (manuell)
 webapp/                           Web-Portal: index.html, app.js, style.css, config.js
-scenes/                           MainMenu3D.tscn, Game.tscn, GameHUD.tscn
+scenes/                           MainMenuView.tscn, Game.tscn, GameHUD.tscn
 shaders/                          15 eigene Shader (Wasser, Lava, Himmel, Neon, Portal, Ball-Skins …)
 scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen, Ligen),
                                   AuthManager (Login, Session, Web-Code), ProfileManager (Profilbild),
@@ -159,7 +159,7 @@ scripts/data/Catalog.gd           Alle Spieldaten (Schläger, Bälle, Truhen, Li
 scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D, TrackKit, WorldTheme, Gadgets,
                                   Obstacles, ShotSim (Vorhersage), BotBrain (KI), Match3D (Spielablauf)
 scripts/fx/                       Materialien, Partikel, Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons
-scripts/ui/                       MainMenu3D, MenuPages, GameHUD, UIKit, UIIcon, UIAvatar
+scripts/ui/                       MainMenu (MainMenuView), MenuPages, Preview3D, GameHUD, UIKit, UIIcon, UIAvatar
 tests/                            Smoke-Test, Schein-Supabase-Server, Screenshot-Runner, Physik-Fingerabdruck,
                                   SQL-Tests, web/portal_test.js (Browser-Test)
 docs/ARCHITECTURE.md              Architektur und Schnittstellen
@@ -197,5 +197,5 @@ Freunden okay, gegen Cheater nicht abgesichert. Es gibt keine Echtgeld-Käufe; G
   Play Store solltest du einen eigenen Namen wählen (`config/name` in `project.godot`, Paketname in `export_presets.cfg`).
 - **Release-Build:** Die CI baut eine Debug-APK mit Debug-Keystore. Für den Play Store brauchst du einen eigenen
   Release-Keystore (als GitHub Secret) und ein AAB.
-- **Lokal entwickeln:** Ordner in Godot 4.5 öffnen, `res://scenes/MainMenu3D.tscn` ist die Startszene.
+- **Lokal entwickeln:** Ordner in Godot 4.5 öffnen, `res://scenes/MainMenuView.tscn` ist die Startszene.
   Tests: `godot --headless --fixed-fps 60 res://tests/Smoke.tscn`.
