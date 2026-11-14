@@ -534,6 +534,18 @@ func _stage_match() -> void:
 		totals.append("%s=%d" % [str(row["name"]), int(row["total"])])
 	print("[SMOKE] Endstand: ", ", ".join(totals), " | Belohnung: ", m.result_rewards)
 	check(m.hud.has_overlay(), "Ergebnis-Screen wird angezeigt")
+	check(m.hud._root.find_child("ContinueButton", true, false) != null, "Ergebnis-Screen mit WEITER")
+	check(int(m.result_rewards.get("pass_xp", 0)) > 0, "Match gibt Pass-XP")
+	# HUD-Layout im Hochformat: oben Info + Rangliste, unten Bedienung, nichts ueberlappt
+	var hvp := Rect2(Vector2.ZERO, m.get_viewport().get_visible_rect().size)
+	var topr: Rect2 = m.hud._top_box.get_global_rect()
+	var botr: Rect2 = m.hud._bottom_box.get_global_rect()
+	check(hvp.grow(1.0).encloses(topr) and hvp.grow(1.0).encloses(botr), "HUD-Leisten im Bild")
+	check(topr.end.y < botr.position.y, "HUD oben und unten ueberlappen nicht")
+	check(m.hud._board.get_child_count() == 3 and m.hud._board.get_global_rect().position.y >= m.hud._info_title.get_global_rect().end.y,
+		"Rangliste unter der Bahn-Info (3 Chips)")
+	check(m.hud._mode_btn.get_global_rect().position.y > hvp.size.y * 0.5 and m.hud._spin_pad.get_global_rect().position.y > hvp.size.y * 0.5,
+		"Schlagart und Spin in der Daumenzone")
 	# HUD-Funktionen einmal durchlaufen
 	m.hud.popup_style("AIR TIME! +60")
 	m.hud.toast("Test")

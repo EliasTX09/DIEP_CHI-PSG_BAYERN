@@ -50,6 +50,13 @@ func _shot_game() -> void:
 		if m.phase == Match3D.Phase.PLAY and m.phase_time > 1.2:
 			break
 	await _capture("game_hud")
+	var hvp := Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var topr: Rect2 = m.hud._top_box.get_global_rect()
+	var botr: Rect2 = m.hud._bottom_box.get_global_rect()
+	if not hvp.grow(1.0).encloses(topr) or not hvp.grow(1.0).encloses(botr) or topr.end.y >= botr.position.y:
+		print("[SHOTS][FAIL] HUD-Layout: oben ", topr, " unten ", botr, " Bild ", hvp)
+	else:
+		print("[SHOTS] HUD-Layout geprueft: oben ", topr, " unten ", botr)
 	var screen: Vector2 = m.rig.target_screen_pos()
 	if screen != Vector2.INF:
 		m._touch_down(0, screen)

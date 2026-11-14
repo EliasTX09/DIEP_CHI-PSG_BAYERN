@@ -10,9 +10,9 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 > Hochformat (einhändig) · Web-Portal für Accounts in [`webapp/`](webapp) (GitHub Pages)
 > Die `index.html` im Repo-Root gehört nicht zum Spiel.
 
-> **Umbau-Stand:** Das Spiel läuft seit dieser Version im **Hochformat**. Spielszene, Physik und Bots sind fertig;
-> Hauptmenü und HUD sind noch für Querformat angeordnet und werden im nächsten Schritt neu gebaut
-> (neues Hochformat-Menü mit Tabs, Battle Pass, Bergkulissen mit Shortcuts, Bahn-Trophäen, Flyover).
+> **Umbau-Stand:** Hochformat-Hauptmenü (Arena-Auswahl mit 3D-Hintergrund, Tab-Leiste Spielen · Tasche · Pass ·
+> Freunde · Shop), Hochformat-HUD und ein kostenloser Battle Pass (28-Tage-Saisons, 30 Stufen) sind fertig.
+> Noch offen: Bergkulissen mit riskanten Shortcuts, Flyover-Vorschau, Trophäen pro Bahn, adaptive Bots, Clans.
 
 ---
 
@@ -174,14 +174,14 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Ball-Physik vs. Vorhersage, Out-of-Bounds, Einlochen auf allen Bahnen | in CI geprüft (Smoke-Test) |
 | Bots spielen alle 15 Bahnen | in CI geprüft |
 | Komplette Partie mit Bots inkl. Belohnungen, Golden Shot, Touch-Gesten | in CI geprüft |
-| 3D-Menü und alle Menü-Seiten | in CI geprüft (Aufbau + Kernaktionen) |
-| Darstellung aller Welten, HUD und Menü | per Software-Rendering in CI gerendert und angesehen |
+| Hochformat-Menü, alle Seiten, Battle Pass | in CI geprüft (Aufbau, Kernaktionen, Layout: alles im Bild, keine Überlappung, Mindestbreite ≤ 720 px) |
+| Darstellung aller Welten, HUD und Menü | per Software-Rendering in CI gerendert (720×1280 und 720×1600) und angesehen |
 | SQL-Schema + RLS-Regeln | in CI gegen PostgreSQL 16 getestet |
 | Login-Ablauf im Spiel (Gast, Web-Code, Profil-Abgleich, Profilbild) | in CI gegen einen **lokalen Schein-Server** getestet – prüft das Spiel, nicht den echten Supabase-Server |
 | Spiel-Codes, Profilbild-Pfade, Storage-Regeln | in CI gegen PostgreSQL 16 getestet (Supabase-Storage nachgebildet) |
 | Web-Portal (Registrieren, Profilbild, Freunde, Spiel-Code, XSS-Schutz, Handy-Breite) | in CI im Browser (Chromium) gegen simulierte Supabase-Antworten getestet |
 | Supabase-Login, Freunde, Lobbys, Realtime, Portal gegen ein **echtes** Supabase-Projekt | **nicht getestet** |
-| Hochformat-Menü und -HUD | **noch nicht umgebaut** (Querformat-Anordnung, nächster Schritt) |
+| Hochformat-HUD | in CI geprüft (Layout oben/unten, Daumenzone) |
 | Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen) |
 | APK-Export + Artifact `GolfBattle3D-apk` | in CI gebaut (Entwicklungs-Branch) |
 | GitHub-Release-Schritt | läuft nur auf `main` – **erst nach dem Merge geprüft** |
