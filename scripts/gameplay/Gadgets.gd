@@ -490,7 +490,11 @@ class Launcher extends Gadget:
 		if st.vel.dot(dir) < min_speed:
 			return
 		st.pos += Vector3.UP * 0.04
-		st.vel = Gadgets.ballistic_velocity(st.pos, target + Vector3.UP * BALL_R, elevation)
+		var v: Vector3 = Gadgets.ballistic_velocity(st.pos, target + Vector3.UP * BALL_R, elevation)
+		# Luftwiderstand ausgleichen (Ball3D/ShotSim daempfen im Flug um AIR_DAMP pro Sekunde)
+		var hs: float = Vector2(v.x, v.z).length()
+		var flight_t: float = Vector2(target.x - st.pos.x, target.z - st.pos.z).length() / maxf(1.0, hs)
+		st.vel = v * (1.0 + Ball3D.AIR_DAMP * flight_t * 0.5)
 		# ab jetzt Flug (wie bei der Kanone): Vorhersage und echter Ball rechnen in der Luft weiter
 		st.teleported = true
 		st.grounded = false

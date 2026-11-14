@@ -69,5 +69,5 @@ void fragment() {
 	float cracks = smoothstep(0.485, 0.5, cn) * (1.0 - smoothstep(0.5, 0.515, cn)) * (1.0 - rk * 0.7);
 	vec2 g = abs(fract(wpos.xz / 6.0) - 0.5);
 	float grid = 1.0 - smoothstep(0.0, 0.03, min(g.x, g.y));
-	EMISSION = crack_color * cracks * crack_strength * (0.15 + 0.85 * smoothstep(0.1, 0.6, wet) + 0.3 * (1.0 - smoothstep(0.05, 0.25, near))) + grid_color * grid * grid_strength * (1.0 - rk);
+	EMISSION = crack_color * cracks * crack_strength * (smoothstep(0.1, 0.6, wet) + 0.25 * (1.0 - smoothstep(0.05, 0.2, near))) + grid_color * grid * grid_strength * (1.0 - rk);
 }

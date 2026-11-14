@@ -134,6 +134,15 @@ static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
 	var best_score: float = -INF
 	var total: float = c.total_length()
 	plan_stats = {"straights": k.straights.size()}
+	# Landeziele: das Gruen (bevorzugt) oder ein spaeteres, beidseitig umbandetes Fairway-Stueck
+	var targets: Array[Dictionary] = [{"green": true, "xf": k.green_xf, "size": k.green_size, "d": total, "zone": 3.0}]
+	for t in k.straights:
+		var txf: Transform3D = t["xf"]
+		if float(t["dist"]) < 8.0 or float(t["length"]) < 6.0 or not bool(t["wall_l"]) or not bool(t["wall_r"]) or float(t["width"]) < 4.5 or txf.basis.y.y < 0.98:
+			continue
+		targets.append({"green": false, "xf": txf, "size": Vector2(float(t["width"]), float(t["length"])),
+			"d": float(t["dist"]) + float(t["length"]) * 0.5, "zone": minf(2.2, float(t["width"]) * 0.5 - 0.3),
+			"land": txf * Vector3(0.0, 0.0, -float(t["length"]) * 0.5)})
 	# Belag-Proben in ein 4-m-Raster sortieren (schnelle Nachbarschafts-Abfragen)
 	var grid: Dictionary = {}
 	for i in c.surface_pts.size():
@@ -156,7 +165,11 @@ static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
 			var u: float = OPENING_LEN * 0.5 + 0.2
 			while u <= length - OPENING_LEN * 0.5 - 0.2:
 				for lane_len: float in [7.0, 5.0, 9.5]:
-					var cand: Dictionary = _eval_gate(c, k, grid, xf0, half, u, side, total, lane_len)
+					var cand: Dictionary = {}
+					for tg in targets:
+						var cnd: Dictionary = _eval_gate(c, k, grid, xf0, half, u, side, total, lane_len, tg)
+						if not cnd.is_empty() and (cand.is_empty() or float(cnd["score"]) > float(cand["score"])):
+							cand = cnd
 					if not cand.is_empty() and float(cand["score"]) > best_score:
 						best_score = float(cand["score"])
 						cand["openings"] = [{"d0": float(st["dist"]) + u - OPENING_LEN * 0.5, "d1": float(st["dist"]) + u + OPENING_LEN * 0.5, "side": side}]
@@ -188,18 +201,21 @@ static func _landing_point(k: TrackKit, hole: Vector3, from: Vector3) -> Vector3
 	var dl := Vector2(gl.x - hl.x, gl.z - hl.z)
 	dl = dl.normalized() if dl.length() > 0.01 else Vector2(0.0, 1.0)
 	var ll := Vector2(hl.x, hl.z) + dl * 2.2
-	ll.x = clampf(ll.x, -k.green_size.x * 0.5 + 1.5, k.green_size.x * 0.5 - 1.5)
-	ll.y = clampf(ll.y, -k.green_size.y + 1.5, -1.5)
+	ll.x = clampf(ll.x, -k.green_size.x * 0.5 + 2.0, k.green_size.x * 0.5 - 2.0)
+	ll.y = clampf(ll.y, -k.green_size.y + 2.0, -2.0)
 	return k.green_xf * Vector3(ll.x, 0.0, ll.y)
 
 static func _reject(reason: String) -> Dictionary:
 	plan_stats[reason] = int(plan_stats.get(reason, 0)) + 1
 	return {}
 
-static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transform3D, half: float, u: float, side: int, total: float, lane_len: float) -> Dictionary:
+static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transform3D, half: float, u: float, side: int, total: float, lane_len: float, tg: Dictionary) -> Dictionary:
 	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -u)
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
-	var land: Vector3 = _landing_point(k, c.hole_pos, g)
+	var green: bool = bool(tg["green"])
+	var land: Vector3 = _landing_point(k, c.hole_pos, g) if green else tg["land"]
+	var rect_xf: Transform3D = tg["xf"]
+	var rect_size: Vector2 = tg["size"]
 	var flat := Vector3(land.x - g.x, 0.0, land.z - g.z)
 	var dist_h: float = flat.length()
 	if dist_h < 1.0:
@@ -217,8 +233,12 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 	for bl in c.blockers:
 		if Vector2(bl.x - g.x, bl.z - g.z).length() < 4.5:
 			return _reject("hindernis")
-	var remaining: float = total - c.path_dist[c.nearest_path_index(g)]
-	if remaining < dist_h + 6.0:
+	for bl in c.blockers:
+		if Vector2(bl.x - land.x, bl.z - land.z).length() < 4.0:
+			return _reject("ziel_hindernis")
+	var gate_d: float = c.path_dist[c.nearest_path_index(g)]
+	var remaining: float = float(tg["d"]) - gate_d
+	if remaining < dist_h + (6.0 if green else 10.0):
 		return _reject("ersparnis")
 	var g2 := Vector2(g.x, g.z)
 	var lip2 := Vector2(lip.x, lip.z)
@@ -232,7 +252,7 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 		if _seg_dist(q2, g2, lip2) < LANE_WIDTH * 0.5 + 1.2:
 			return _reject("steg")
 	# Flug: niedrigster Abschusswinkel, der ueber alles hinweg reicht
-	var inv: Transform3D = k.green_xf.affine_inverse()
+	var inv: Transform3D = rect_xf.affine_inverse()
 	var near_flight: PackedInt32Array = _near_samples(grid, lip2, land2, 3.6)
 	for elev: float in [38.0, 46.0, 54.0, 62.0, 70.0]:
 		var tn: float = tan(deg_to_rad(elev))
@@ -248,10 +268,10 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 				continue
 			var arc_y: float = lip.y + t * fly * tn - t * t * (fly * tn - dh)
 			var ql: Vector3 = inv * q
-			var on_green: bool = absf(ql.x) <= k.green_size.x * 0.5 + 0.1 and ql.z <= 0.1 and ql.z >= -k.green_size.y - 0.1
+			var on_green: bool = absf(ql.x) <= rect_size.x * 0.5 + 0.1 and ql.z <= 0.1 and ql.z >= -rect_size.y - 0.1
 			if on_green:
-				# Auf dem Gruen zaehlen nur die Banden am Rand
-				var edge: float = minf(k.green_size.x * 0.5 - absf(ql.x), minf(-ql.z, k.green_size.y + ql.z))
+				# Im Landefeld zaehlen nur die Banden am Rand
+				var edge: float = minf(rect_size.x * 0.5 - absf(ql.x), minf(-ql.z, rect_size.y + ql.z))
 				if edge > 0.6:
 					continue
 			var need: float = q.y + (1.0 if on_green else 4.8)
@@ -259,8 +279,9 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 				clear = false
 				break
 		if clear:
-			var score: float = remaining - dist_h + dir.dot(nrm) * 4.0 - (elev - 38.0) * 0.15 - absf(lane_len - 7.0) * 0.5
-			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": lane_len, "remaining": remaining, "direct": dist_h}
+			var score: float = remaining - dist_h + dir.dot(nrm) * 4.0 - (elev - 38.0) * 0.15 - absf(lane_len - 7.0) * 0.5 + (12.0 if green else 0.0)
+			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": lane_len, "remaining": remaining, "direct": dist_h,
+				"green": green, "zone": float(tg["zone"]), "target_d": float(tg["d"])}
 	return _reject("flugbahn")
 
 static func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
@@ -326,8 +347,11 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 		rock.scale = Vector3(0.62, 6.0, 0.62)
 		rock.position = p + Vector3(0.0, -1.5, 0.0)
 		body.add_child(rock)
-	var lintel := Mat.box(Vector3(LANE_WIDTH + 2.2, 0.7, 1.0), rock_mat, gate_pos + Vector3(0.0, 3.6, 0.0))
-	lintel.basis = Basis.looking_at(dir, Vector3.UP)
+	var lintel := MeshInstance3D.new()
+	lintel.mesh = Flora.boulder()
+	lintel.material_override = rock_mat
+	lintel.basis = Basis.looking_at(dir, Vector3.UP) * Basis.from_scale(Vector3((LANE_WIDTH + 2.6) * 0.5, 0.5, 0.6))
+	lintel.position = gate_pos + Vector3(0.0, 3.5, 0.0)
 	body.add_child(lintel)
 	var sign := Label3D.new()
 	sign.text = "ABKÜRZUNG"
@@ -342,9 +366,10 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	body.add_child(sign)
 	c.add_child(body)
 	# Sprungschanze am Steg-Ende und Landezone auf dem Gruen
-	var launcher := Gadgets.Launcher.new(Vector3(LANE_WIDTH + 0.2, 2.0, 1.8), land, float(plan["elev"]), 3.0, th.boost_color)
+	# Schanze wirkt nur mitten auf dem Steg (wer am Rand entlangrollt, faellt vorher herunter)
+	var launcher := Gadgets.Launcher.new(Vector3(LANE_WIDTH - 0.3, 2.0, 1.8), land, float(plan["elev"]), 3.0, th.boost_color)
 	launcher.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lip - dir * 0.9)
-	var zone := Gadgets.LandingZone.new(3.0, th.boost_color)
+	var zone := Gadgets.LandingZone.new(float(plan.get("zone", 3.0)), th.boost_color)
 	zone.transform = Transform3D(Basis.IDENTITY, land)
 	launcher.catcher = zone
 	c.add_gadget(launcher)
@@ -356,7 +381,8 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 		c.add_corridor(lip, lip + fly_dir / fly_len * (fly_len - 8.0), 2.5, 7.5)
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	c.shortcut = {"gate": g, "dir": dir, "normal": nrm, "lane_start": g + dir * 0.6, "lip": lip, "landing": land, "elev": float(plan["elev"]),
-		"remaining": float(plan["remaining"]), "direct": float(plan["direct"])}
+		"remaining": float(plan["remaining"]), "direct": float(plan["direct"]), "green": bool(plan.get("green", true)),
+		"target_d": float(plan.get("target_d", c.total_length()))}
 
 # ================================================================ Platzierungs-Helfer
 
@@ -375,22 +401,26 @@ static func _windmill(c: Course3D, k: TrackKit, ahead: float, speed: float = 1.4
 	var w := Obstacles.Windmill.new(speed, phase)
 	w.transform = k.frame(Vector3(0.0, 0.0, -ahead))
 	c.add_obstacle(w)
+	c.blockers.append(w.transform.origin)
 
 static func _hammer(c: Course3D, k: TrackKit, ahead: float, period: float = 2.6, phase: float = 0.0) -> void:
 	var h := Obstacles.Hammer.new(55.0, period, phase)
 	h.transform = k.frame(Vector3(0.0, 0.0, -ahead))
 	c.add_obstacle(h)
+	c.blockers.append(h.transform.origin)
 
 static func _block(c: Course3D, k: TrackKit, ahead: float, period: float = 3.0, phase: float = 0.0) -> void:
 	var b := Obstacles.SlidingBlock.new(Vector3(1.6, 1.4, 1.6), k.width * 0.5 - 0.9, period, phase)
 	b.transform = k.frame(Vector3(0.0, 0.0, -ahead))
 	c.add_obstacle(b)
+	c.blockers.append(b.transform.origin)
 
 static func _laser(c: Course3D, k: TrackKit, th: WorldTheme, ahead: float, period: float, duty: float, phase: float) -> void:
 	var l := Gadgets.LaserGate.new(k.width, period, duty, phase, Color(1.0, 0.15, 0.3) if th.id == "neon" else Color(1.0, 0.5, 0.1))
 	l.course = c
 	l.transform = k.frame(Vector3(0.0, 0.0, -ahead))
 	c.add_gadget(l)
+	c.blockers.append(l.transform.origin)
 
 ## Tiefes Gras (Rough) am Rand: local = Mittelpunkt relativ zur Turtle, size = (quer, laengs).
 static func _rough(c: Course3D, k: TrackKit, th: WorldTheme, local: Vector3, size: Vector2) -> void:
@@ -642,7 +672,7 @@ static func _v3(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 
 static func _v4(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.tee_box(5.0)
-	k.straight(5.0)
+	k.straight(6.0)
 	_boost_here(c, k, th, 17.0, 3.0)
 	k.set_wall_height(1.0)
 	k.spiral(180.0, 9.0, -3.0, 16.0)

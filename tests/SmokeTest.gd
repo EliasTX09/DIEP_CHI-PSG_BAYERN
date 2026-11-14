@@ -367,7 +367,9 @@ func _stage_shortcuts() -> void:
 		var prof := _test_profile()
 		var res: Dictionary = ShotSim.run(c, space, start, dir * 9.0, {"max_time": 12.0, "profile": prof})
 		var end: Vector3 = res["end_pos"]
-		var on_green: bool = bool(res["holed"]) or (not bool(res["out"]) and end.distance_to(c.hole_pos) < 8.5 and absf(end.y - c.hole_pos.y) < 0.6)
+		var to_green: bool = bool(sc.get("green", true))
+		var target_d: float = float(sc.get("target_d", c.total_length()))
+		var on_green: bool = bool(res["holed"]) or (not bool(res["out"]) and ((to_green and end.distance_to(c.hole_pos) < 8.5 and absf(end.y - c.hole_pos.y) < 0.6) or (not to_green and c.progress_at(end) >= target_d - 5.0)))
 		var perp: Vector3 = dir.cross(Vector3.UP).normalized()
 		if perp.dot(sc["normal"]) < 0.0:
 			perp = -perp
@@ -375,11 +377,11 @@ func _stage_shortcuts() -> void:
 		var weak: Dictionary = ShotSim.run(c, space, start + dir * 3.0, dir * 3.6, {"max_time": 8.0, "profile": prof})
 		var main_len: float = float(sc["remaining"])
 		var direct: float = float(sc["direct"])
-		print("[SMOKE] %s Abkuerzung: Hauptweg ab Tor %.0f m, Steg+Flug %.0f m (spart %.0f m), Abschuss %.0f Grad -> Vorhersage %s (%.1f m vom Loch), Fehlschuss %s, zu langsam %s" % [
-			id, main_len, direct, main_len - direct, float(sc["elev"]),
+		print("[SMOKE] %s Abkuerzung (Ziel: %s): Hauptweg ab Tor %.0f m, Steg+Flug %.0f m (spart %.0f m), Abschuss %.0f Grad -> Vorhersage %s (%.1f m vom Loch), Fehlschuss %s, zu langsam %s" % [
+			id, "Gruen" if to_green else "Fairway bei %.0f m" % target_d, main_len, direct, main_len - direct, float(sc["elev"]),
 			"Loch" if bool(res["holed"]) else ("AUS/" + str(res["out_kind"]) if bool(res["out"]) else "liegt"), end.distance_to(c.hole_pos),
 			"aus" if bool(miss["out"]) else "NICHT aus", "aus" if bool(weak["out"]) else ("bleibt auf dem Steg" if not bool(weak["out"]) else "")])
-		check(on_green, "%s: Abkuerzung landet auf dem Gruen (Vorhersage)" % id)
+		check(on_green, "%s: Abkuerzung landet im Ziel (Vorhersage)" % id)
 		check(bool(miss["out"]), "%s: seitlich vom Steg = aus" % id)
 		if id in ["e2", "v3", "p1"]:
 			var ball := _new_ball(c)
@@ -390,9 +392,9 @@ func _stage_shortcuts() -> void:
 			ball.shoot(dir, power, false, Vector2.ZERO)
 			await _wait_ball(ball, 16.0)
 			var bp: Vector3 = ball.global_position
-			var real_ok: bool = ball.state == Ball3D.State.HOLED or (ball.state == Ball3D.State.IDLE and bp.distance_to(c.hole_pos) < 8.5 and absf(bp.y - c.hole_pos.y) < 0.6)
+			var real_ok: bool = ball.state == Ball3D.State.HOLED or (ball.state == Ball3D.State.IDLE and ((to_green and bp.distance_to(c.hole_pos) < 8.5 and absf(bp.y - c.hole_pos.y) < 0.6) or (not to_green and c.progress_at(bp) >= target_d - 5.0)))
 			print("[SMOKE] %s Abkuerzung echter Ball: State %d, %.1f m vom Loch (Vorhersage %.1f m)" % [id, ball.state, bp.distance_to(c.hole_pos), end.distance_to(c.hole_pos)])
-			check(real_ok, "%s: echter Ball landet ueber die Abkuerzung auf dem Gruen" % id)
+			check(real_ok, "%s: echter Ball landet ueber die Abkuerzung im Ziel" % id)
 			ball.queue_free()
 		c.queue_free()
 		await _frames(2)

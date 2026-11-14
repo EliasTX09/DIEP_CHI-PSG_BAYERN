@@ -40,9 +40,9 @@ static func create(world_id: String) -> WorldTheme:
 			]
 			t.pillar_material = Mat.flat(Color(0.16, 0.12, 0.11), 0.95)
 			t.land = {"height": 34.0, "terrace": 6.0, "snow": 9999.0, "far": 62.0, "forest": "dead",
-				"shader": {"rough_color": Color(0.2, 0.15, 0.13), "grass_a": Color(0.25, 0.18, 0.15), "grass_b": Color(0.33, 0.23, 0.18),
-					"rock_color": Color(0.32, 0.23, 0.2), "rock_dark": Color(0.13, 0.09, 0.08), "wet_color": Color(0.22, 0.1, 0.05),
-					"crack_strength": 1.4, "rock_slope": 0.45}}
+				"shader": {"rough_color": Color(0.15, 0.14, 0.14), "grass_a": Color(0.2, 0.18, 0.18), "grass_b": Color(0.27, 0.23, 0.21),
+					"rock_color": Color(0.26, 0.23, 0.22), "rock_dark": Color(0.1, 0.09, 0.09), "wet_color": Color(0.16, 0.08, 0.05),
+					"crack_strength": 1.1, "rock_slope": 0.45}}
 		"neon":
 			t.sound = "metal"
 			t.hazard = "void"
@@ -131,7 +131,7 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			sun_rot = Vector3(-40.0, -40.0, 0.0)
 			ambient = Color(0.6, 0.35, 0.28)
 			ambient_energy = 0.8
-			fog_color = Color(0.3, 0.16, 0.12)
+			fog_color = Color(0.26, 0.17, 0.15)
 			fog_density = 0.0034
 			glow_intensity = 0.95
 			valley_mist = 0.08
