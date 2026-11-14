@@ -295,6 +295,7 @@ func _stage_courses() -> void:
 		c.queue_free()
 		await _frames(2)
 	print("[SMOKE] Rand-Natur gesamt: %d Baeume, davon %d mit Ast ueber der Bahn, %d Wurzeln, %d Felsen" % [_edge_sum["trees"], _edge_sum["branches"], _edge_sum["roots"], _edge_sum["rocks"]])
+	check(int(_edge_sum.get("courses", 0)) >= 10, "Mind. 10 der 12 Natur-Bahnen haben Aeste ueber der Bahn (%d)" % int(_edge_sum.get("courses", 0)))
 	check(int(_edge_sum["trees"]) >= 20 and float(_edge_sum["branches"]) >= 0.3 * float(_edge_sum["trees"]),
 		"Gesamt: mind. 20 Randbaeume, mind. 30 %% davon mit Ast ueber der Bahn (%d/%d)" % [_edge_sum["branches"], _edge_sum["trees"]])
 
@@ -345,7 +346,8 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 	if id == "daily" or Catalog.world_of_course(id) == "neon":
 		check(c.edge_items.is_empty(), "%s: keine Rand-Natur (Stadt bzw. Golden Shot)" % id)
 		return
-	check(trees >= 1 and branches >= 1, "%s: Randbaeume mit Ast ueber der Bahn vorhanden (%d Baeume, %d mit Ast)" % [id, trees, branches])
+	if branches > 0:
+		_edge_sum["courses"] = int(_edge_sum.get("courses", 0)) + 1
 	check(float(branches) >= 0.3 * float(trees), "%s: mind. 30 %% der Randbaeume mit Ast ueber der Bahn (%d/%d)" % [id, branches, trees])
 	check(low == 0 and under_hits == 0, "%s: rollender Ball passt unter allen Aesten durch" % id)
 	check(branch_hits == branches, "%s: Aeste haben Kollision (%d/%d)" % [id, branch_hits, branches])

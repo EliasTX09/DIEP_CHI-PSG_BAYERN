@@ -584,13 +584,18 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 			# Ast-Ende: Unterkante der Kollisions-Kapsel (Radius 0.17) genau BRANCH_CLEAR ueber dem Belag
 			var end_h: float = floor_l + BRANCH_CLEAR + 0.17
 			if want_branch:
-				reach = TrackKit.WALL_T + 1.55 + half * (1.25 if not easy else 0.7)
-				var tip: Vector3 = base + inward * reach
 				var near_all: Array[Vector3] = avoid.duplicate()
 				near_all.append_array(movers)
-				if not _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, near_all):
+				# erst ein Ast ueber die ganze Bahn, sonst ein kuerzerer bis knapp vor die Mitte
+				reach = 0.0
+				for frac: float in ([1.25, 0.75] if not easy else [0.7]):
+					var try_reach: float = TrackKit.WALL_T + 1.55 + half * frac
+					var tip: Vector3 = base + inward * try_reach
+					if _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, near_all):
+						reach = try_reach
+						break
+				if reach <= 0.0:
 					_edge_stat("ast_frei")
-					reach = 0.0
 			# Quote halten: ein Baum ohne Ast nur, wenn danach noch >= BRANCH_SHARE der Randbaeume einen Ast haben
 			if reach <= 0.0 and float(branches) < BRANCH_SHARE * float(trees + 1):
 				_edge_stat("quote")
