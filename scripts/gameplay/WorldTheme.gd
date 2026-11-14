@@ -126,11 +126,11 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 		"volcano":
 			sky_params = {"top_color": Color(0.1, 0.03, 0.05), "horizon_color": Color(0.75, 0.25, 0.08), "bottom_color": Color(0.3, 0.06, 0.02),
 				"sun_color": Color(1.0, 0.6, 0.3), "cloud_color": Color(0.25, 0.1, 0.08), "cloud_amount": 0.6, "star_amount": 0.3}
-			sun_color = Color(1.0, 0.62, 0.4)
-			sun_energy = 1.1
+			sun_color = Color(1.0, 0.7, 0.5)
+			sun_energy = 1.35
 			sun_rot = Vector3(-40.0, -40.0, 0.0)
-			ambient = Color(0.6, 0.35, 0.28)
-			ambient_energy = 0.8
+			ambient = Color(0.62, 0.45, 0.4)
+			ambient_energy = 1.0
 			fog_color = Color(0.26, 0.17, 0.15)
 			fog_density = 0.0034
 			glow_intensity = 0.95

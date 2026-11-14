@@ -456,14 +456,20 @@ class KillBox extends Gadget:
 
 # ================================================================ Abkuerzung: Sprungschanze + Landezone
 
-## Sprungschanze am Ende eines Abkuerzungs-Stegs: Ein Ball, der mit Schwung (>= min_speed in Steg-Richtung)
-## ankommt, fliegt auf einer festen Parabel zur Landezone auf dem Gruen. Zu langsam: er rollt ueber die Kante (Aus).
+## Sprungpad am Ende eines Abkuerzungs-Stegs: Ein Ball, der mit Schwung (>= min_speed in Steg-Richtung)
+## ankommt, fliegt auf einer Parabel Richtung Landezone. Zu langsam: er rollt ueber die Kante (Aus).
+## Das Risiko: Wer seitlich versetzt auf dem Steg rollt, fliegt seitlich versetzt; zu schnell = zu weit,
+## zu langsam = zu kurz. Daneben heisst: Bande, Schlucht oder Aus. (Deterministisch - die Vorschau zeigt es.)
 class Launcher extends Gadget:
 	var half: Vector3
 	var target: Vector3
 	var elevation: float
 	var min_speed: float
 	var catcher: Gadget = null
+	## Seitliche Ablage am Ziel je Meter Versatz auf dem Steg
+	const SPREAD := 3.0
+	## Ideal-Tempo am Pad (m/s); Abweichung verlaengert/verkuerzt den Flug
+	const IDEAL_SPEED := 6.5
 
 	func _init(zone: Vector3 = Vector3(2.2, 2.0, 1.8), target_pos: Vector3 = Vector3.ZERO, elevation_deg: float = 42.0, need_speed: float = 3.0, color: Color = Color(1.0, 0.8, 0.2)) -> void:
 		half = zone * 0.5
@@ -492,13 +498,18 @@ class Launcher extends Gadget:
 		if absf(l.x) > half.x or absf(l.z) > half.z or l.y < -0.2 or l.y > half.y:
 			return
 		var dir: Vector3 = -global_transform.basis.z
-		if st.vel.dot(dir) < min_speed:
+		var along: float = st.vel.dot(dir)
+		if along < min_speed:
 			return
 		st.pos += Vector3.UP * 0.04
-		var v: Vector3 = Gadgets.ballistic_velocity(st.pos, target + Vector3.UP * BALL_R, elevation)
+		var flight := Vector3(target.x - st.pos.x, 0.0, target.z - st.pos.z)
+		var fdir: Vector3 = flight.normalized() if flight.length() > 0.01 else dir
+		var fright: Vector3 = fdir.cross(Vector3.UP)
+		var aim: Vector3 = target + fright * (l.x * SPREAD) + fdir * clampf((along - IDEAL_SPEED) * 0.35, -3.5, 3.5)
+		var v: Vector3 = Gadgets.ballistic_velocity(st.pos, aim + Vector3.UP * BALL_R, elevation)
 		# Luftwiderstand ausgleichen (Ball3D/ShotSim daempfen im Flug um AIR_DAMP pro Sekunde)
 		var hs: float = Vector2(v.x, v.z).length()
-		var flight_t: float = Vector2(target.x - st.pos.x, target.z - st.pos.z).length() / maxf(1.0, hs)
+		var flight_t: float = Vector2(aim.x - st.pos.x, aim.z - st.pos.z).length() / maxf(1.0, hs)
 		st.vel = v * (1.0 + Ball3D.AIR_DAMP * flight_t * 0.5)
 		# ab jetzt Flug (wie bei der Kanone): Vorhersage und echter Ball rechnen in der Luft weiter
 		st.teleported = true

@@ -377,6 +377,10 @@ func _stage_shortcuts() -> void:
 			perp = -perp
 		var miss: Dictionary = ShotSim.run(c, space, start + dir * 3.0, dir * 1.5 + perp * 6.0, {"max_time": 8.0, "profile": prof})
 		var weak: Dictionary = ShotSim.run(c, space, start + dir * 3.0, dir * 3.6, {"max_time": 8.0, "profile": prof})
+		# Risiko: seitlich versetzt und zu schnell ueber den Steg -> Flug weicht ab
+		var off: Dictionary = ShotSim.run(c, space, start + perp * 0.7, dir * (push + 6.0), {"max_time": 12.0, "profile": prof})
+		var off_end: Vector3 = off["end_pos"]
+		print("[SMOKE] %s Abkuerzung versetzt+zu schnell: %s" % [id, "Loch" if bool(off["holed"]) else ("AUS/" + str(off["out_kind"]) if bool(off["out"]) else "liegt %.1f m vom Loch" % off_end.distance_to(c.hole_pos))])
 		var main_len: float = float(sc["remaining"])
 		var direct: float = float(sc["direct"])
 		print("[SMOKE] %s Abkuerzung (Ziel: %s): Hauptweg ab Tor %.0f m, Steg+Flug %.0f m (spart %.0f m), Abschuss %.0f Grad -> Vorhersage %s (%.1f m vom Loch), Fehlschuss %s, zu langsam %s" % [
