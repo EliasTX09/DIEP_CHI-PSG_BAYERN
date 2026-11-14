@@ -34,9 +34,42 @@ static func course_par(course_id: String) -> int:
 		return int(INFO[course_id]["par"])
 	return 3
 
+## Bahnen ohne Abkuerzung: e1 (gerade Einsteiger-Bahn, Par 2) und der Golden Shot (nur ein Schlag).
+const NO_SHORTCUT: Array[String] = ["e1", "daily"]
+const LANE_LEN := 7.0
+const LANE_WIDTH := 2.0
+const OPENING_LEN := 4.4
+
 ## Baut eine Bahn. Fuer "daily" bestimmt `rng_seed` den Tages-Parcours.
+## Abkuerzung: erst wird die Bahn probeweise gebaut und die beste Stelle fuer eine Bande-Oeffnung gesucht,
+## dann wird sie mit Oeffnung, schmalem Steg, Felsentor, Sprungschanze und Landezone auf dem Gruen gebaut.
 static func build(course_id: String, rng_seed: int = 0, with_environment: bool = true) -> Course3D:
 	var id: String = course_id if INFO.has(course_id) else "e1"
+	var plan: Dictionary = {}
+	if not NO_SHORTCUT.has(id):
+		var probe: Array = _assemble(id, rng_seed, [])
+		plan = _plan_shortcut(probe[0], probe[1])
+		(probe[0] as Course3D).free()
+	var built: Array = _assemble(id, rng_seed, plan.get("openings", []))
+	var c: Course3D = built[0]
+	var k: TrackKit = built[1]
+	var th: WorldTheme = built[2]
+	if not plan.is_empty() and not k.built_openings.is_empty():
+		_build_shortcut(c, k, th, plan)
+	k.commit(th.materials)
+	# Feine Putt-Ringe rund ums Loch
+	var gm := th.materials[TrackKit.S_GREEN] as ShaderMaterial
+	if gm != null:
+		gm.set_shader_parameter("ring_center", Vector2(c.hole_pos.x, c.hole_pos.z))
+		gm.set_shader_parameter("ring_strength", 0.5)
+	_flag(c, th)
+	th.dress_course(c, k.supports, with_environment)
+	if with_environment:
+		th.build_environment(c)
+	return c
+
+## Fuehrt das Bahn-Rezept aus (ohne Commit). Rueckgabe [Course3D, TrackKit, WorldTheme].
+static func _assemble(id: String, rng_seed: int, openings: Array) -> Array:
 	var c := Course3D.new()
 	c.name = "Course_" + id
 	c.course_id = id
@@ -51,6 +84,8 @@ static func build(course_id: String, rng_seed: int = 0, with_environment: bool =
 		c.world = Catalog.world_of_course(id)
 	var th := WorldTheme.create(c.world)
 	var k := TrackKit.new(c)
+	for o in openings:
+		k.openings.append((o as Dictionary).duplicate())
 	k.start(Transform3D.IDENTITY)
 	match id:
 		"e1":
@@ -85,17 +120,224 @@ static func build(course_id: String, rng_seed: int = 0, with_environment: bool =
 			_p3(c, k, th)
 		"daily":
 			_daily(c, k, th, rng)
-	k.commit(th.materials)
-	# Feine Putt-Ringe rund ums Loch
-	var gm := th.materials[TrackKit.S_GREEN] as ShaderMaterial
-	if gm != null:
-		gm.set_shader_parameter("ring_center", Vector2(c.hole_pos.x, c.hole_pos.z))
-		gm.set_shader_parameter("ring_strength", 0.5)
-	_flag(c, th)
-	th.dress_course(c, k.supports, with_environment)
-	if with_environment:
-		th.build_environment(c)
-	return c
+	return [c, k, th]
+
+# ================================================================ Abkuerzung
+
+## Sucht die Stelle fuer die Abkuerzung: ein gerades Stueck mit Bande, von dem aus ein Steg (7 m) und ein Sprung
+## direkt zur Landezone auf dem Gruen fuehren. Bedingungen: der Hauptweg ist mindestens 12 m laenger,
+## Steg und Flugbahn kreuzen keine anderen Bahnteile (Flug hoch genug ueber Banden/Hindernissen).
+static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
+	var best: Dictionary = {}
+	var best_score: float = -INF
+	var total: float = c.total_length()
+	# Belag-Proben in ein 4-m-Raster sortieren (schnelle Nachbarschafts-Abfragen)
+	var grid: Dictionary = {}
+	for i in c.surface_pts.size():
+		var q: Vector3 = c.surface_pts[i]
+		var key := Vector2i(int(floor(q.x / GRID_CELL)), int(floor(q.z / GRID_CELL)))
+		if not grid.has(key):
+			grid[key] = PackedInt32Array()
+		var arr: PackedInt32Array = grid[key]
+		arr.append(i)
+		grid[key] = arr
+	for st in k.straights:
+		var length: float = float(st["length"])
+		var xf0: Transform3D = st["xf"]
+		if float(st["dist"]) < 5.5 or length < OPENING_LEN + 0.6 or xf0.basis.y.y < 0.98:
+			continue
+		var half: float = float(st["width"]) * 0.5
+		for side: int in [-1, 1]:
+			if (side < 0 and not bool(st["wall_l"])) or (side > 0 and not bool(st["wall_r"])):
+				continue
+			var u: float = OPENING_LEN * 0.5 + 0.2
+			while u <= length - OPENING_LEN * 0.5 - 0.2:
+				var cand: Dictionary = _eval_gate(c, k, grid, xf0, half, u, side, total)
+				if not cand.is_empty() and float(cand["score"]) > best_score:
+					best_score = float(cand["score"])
+					cand["openings"] = [{"d0": float(st["dist"]) + u - OPENING_LEN * 0.5, "d1": float(st["dist"]) + u + OPENING_LEN * 0.5, "side": side}]
+					best = cand
+				u += 1.1
+	return best
+
+const GRID_CELL := 4.0
+
+## Indizes der Belag-Proben in Rasterzellen, die die Strecke a-b (+ Rand) beruehren.
+static func _near_samples(grid: Dictionary, a: Vector2, b: Vector2, margin: float) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	var x0: int = int(floor((minf(a.x, b.x) - margin) / GRID_CELL))
+	var x1: int = int(floor((maxf(a.x, b.x) + margin) / GRID_CELL))
+	var z0: int = int(floor((minf(a.y, b.y) - margin) / GRID_CELL))
+	var z1: int = int(floor((maxf(a.y, b.y) + margin) / GRID_CELL))
+	for zi in range(z0, z1 + 1):
+		for xi in range(x0, x1 + 1):
+			var key := Vector2i(xi, zi)
+			if grid.has(key):
+				out.append_array(grid[key])
+	return out
+
+## Landepunkt auf dem Gruen: 2.2 m vor dem Loch, von der Abkuerzung aus gesehen; mit Abstand zu den Banden.
+static func _landing_point(k: TrackKit, hole: Vector3, from: Vector3) -> Vector3:
+	var inv: Transform3D = k.green_xf.affine_inverse()
+	var gl: Vector3 = inv * from
+	var hl: Vector3 = inv * hole
+	var dl := Vector2(gl.x - hl.x, gl.z - hl.z)
+	dl = dl.normalized() if dl.length() > 0.01 else Vector2(0.0, 1.0)
+	var ll := Vector2(hl.x, hl.z) + dl * 2.2
+	ll.x = clampf(ll.x, -k.green_size.x * 0.5 + 1.5, k.green_size.x * 0.5 - 1.5)
+	ll.y = clampf(ll.y, -k.green_size.y + 1.5, -1.5)
+	return k.green_xf * Vector3(ll.x, 0.0, ll.y)
+
+static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transform3D, half: float, u: float, side: int, total: float) -> Dictionary:
+	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -u)
+	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
+	var land: Vector3 = _landing_point(k, c.hole_pos, g)
+	var flat := Vector3(land.x - g.x, 0.0, land.z - g.z)
+	var dist_h: float = flat.length()
+	if dist_h < 1.0:
+		return {}
+	var dir: Vector3 = flat / dist_h
+	if dir.dot(nrm) < 0.6:
+		return {}
+	var lip: Vector3 = g + dir * LANE_LEN
+	var fly: float = dist_h - LANE_LEN
+	var dh: float = land.y - lip.y
+	if fly < 8.0 or fly > 34.0 or dh < -14.0 or dh > 5.0:
+		return {}
+	var remaining: float = total - c.path_dist[c.nearest_path_index(g)]
+	if remaining < dist_h + 12.0:
+		return {}
+	var g2 := Vector2(g.x, g.z)
+	var lip2 := Vector2(lip.x, lip.z)
+	var land2 := Vector2(land.x, land.z)
+	# Steg: kein anderer Bahnteil daneben
+	for i in _near_samples(grid, g2, lip2, LANE_WIDTH * 0.5 + 1.4):
+		var q: Vector3 = c.surface_pts[i]
+		var q2 := Vector2(q.x, q.z)
+		if q2.distance_to(g2) < 3.8:
+			continue
+		if _seg_dist(q2, g2, lip2) < LANE_WIDTH * 0.5 + 1.3:
+			return {}
+	# Flug: niedrigster Abschusswinkel, der ueber alles hinweg reicht
+	var inv: Transform3D = k.green_xf.affine_inverse()
+	var near_flight: PackedInt32Array = _near_samples(grid, lip2, land2, 3.6)
+	for elev: float in [38.0, 46.0, 54.0, 62.0]:
+		var tn: float = tan(deg_to_rad(elev))
+		if fly * tn < dh + 1.0:
+			continue
+		var clear := true
+		for i in near_flight:
+			var q: Vector3 = c.surface_pts[i]
+			var q2 := Vector2(q.x, q.z)
+			var ab: Vector2 = land2 - lip2
+			var t: float = clampf((q2 - lip2).dot(ab) / maxf(0.0001, ab.length_squared()), 0.0, 1.0)
+			if q2.distance_to(lip2 + ab * t) > 3.5:
+				continue
+			var arc_y: float = lip.y + t * fly * tn - t * t * (fly * tn - dh)
+			var ql: Vector3 = inv * q
+			var on_green: bool = absf(ql.x) <= k.green_size.x * 0.5 + 0.1 and ql.z <= 0.1 and ql.z >= -k.green_size.y - 0.1
+			if on_green:
+				# Auf dem Gruen zaehlen nur die Banden am Rand
+				var edge: float = minf(k.green_size.x * 0.5 - absf(ql.x), minf(-ql.z, k.green_size.y + ql.z))
+				if edge > 0.6:
+					continue
+			var need: float = q.y + (1.0 if on_green else 5.5)
+			if arc_y < need:
+				clear = false
+				break
+		if clear:
+			var score: float = remaining - dist_h + dir.dot(nrm) * 4.0 - (elev - 38.0) * 0.15
+			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": LANE_LEN, "remaining": remaining, "direct": dist_h}
+	return {}
+
+static func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab: Vector2 = b - a
+	var t: float = clampf((p - a).dot(ab) / maxf(0.0001, ab.length_squared()), 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+## Baut Steg, Felsentor, Schanze, Landezone und Schlucht-Korridor fuer die geplante Abkuerzung.
+static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dictionary) -> void:
+	var o: Dictionary = k.built_openings[0]
+	var xf0: Transform3D = o["xf"]
+	var side: int = int(o["side"])
+	var half: float = float(o["width"]) * 0.5
+	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -OPENING_LEN * 0.5)
+	var land: Vector3 = plan["landing"]
+	var dir := Vector3(land.x - g.x, 0.0, land.z - g.z).normalized()
+	var perp: Vector3 = dir.cross(Vector3.UP).normalized()
+	var back_off: float = 2.2
+	var start: Vector3 = g - dir * back_off + Vector3(0.0, -0.012, 0.0)
+	# Steg (schmal, ohne Banden) - zaehlt nicht zur Mittellinie
+	var saved: Dictionary = k.push_state()
+	k.branch = true
+	k.start(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
+	k.set_width(LANE_WIDTH)
+	k.set_walls(false, false)
+	k.set_surface(TrackKit.S_ALT)
+	k.straight(back_off + LANE_LEN)
+	k.end_run()
+	k.branch = false
+	k.pop_state(saved)
+	var lip: Vector3 = g + dir * LANE_LEN
+	for i in 3:
+		k.supports.append(g + dir * (2.0 + 2.5 * float(i)))
+	# Felsentor: zwei Felssaeulen (mit Kollision) + Querbalken, knapp breiter als der Steg
+	var gate_pos: Vector3 = g + dir * 2.6
+	var rock_mat := Mat.flat(Color(0.46, 0.43, 0.4) if th.id != "volcano" else Color(0.22, 0.16, 0.14), 0.95)
+	var body := StaticBody3D.new()
+	body.name = "ShortcutGate"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var pm := PhysicsMaterial.new()
+	pm.bounce = 0.3
+	pm.friction = 0.0
+	body.physics_material_override = pm
+	for sgn: float in [-1.0, 1.0]:
+		var p: Vector3 = gate_pos + perp * (sgn * (LANE_WIDTH * 0.5 + 0.48))
+		var cs := CollisionShape3D.new()
+		var shape := CylinderShape3D.new()
+		shape.radius = 0.45
+		shape.height = 4.0
+		cs.shape = shape
+		cs.position = p + Vector3(0.0, 1.4, 0.0)
+		body.add_child(cs)
+		var rock := MeshInstance3D.new()
+		rock.mesh = Flora.boulder()
+		rock.material_override = Flora.material()
+		rock.scale = Vector3(0.62, 6.0, 0.62)
+		rock.position = p + Vector3(0.0, -1.5, 0.0)
+		body.add_child(rock)
+	var lintel := Mat.box(Vector3(LANE_WIDTH + 2.2, 0.7, 1.0), rock_mat, gate_pos + Vector3(0.0, 3.6, 0.0))
+	lintel.basis = Basis.looking_at(dir, Vector3.UP)
+	body.add_child(lintel)
+	var sign := Label3D.new()
+	sign.text = "ABKÜRZUNG"
+	sign.font_size = 72
+	sign.outline_size = 18
+	sign.modulate = Color(1.0, 0.86, 0.25)
+	sign.outline_modulate = Color(0.1, 0.06, 0.02)
+	sign.pixel_size = 0.009
+	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sign.no_depth_test = false
+	sign.position = gate_pos + Vector3(0.0, 4.6, 0.0)
+	body.add_child(sign)
+	c.add_child(body)
+	# Sprungschanze am Steg-Ende und Landezone auf dem Gruen
+	var launcher := Gadgets.Launcher.new(Vector3(LANE_WIDTH + 0.2, 2.0, 1.8), land, float(plan["elev"]), 3.0, th.boost_color)
+	launcher.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lip - dir * 0.9)
+	var zone := Gadgets.LandingZone.new(3.0, th.boost_color)
+	zone.transform = Transform3D(Basis.IDENTITY, land)
+	launcher.catcher = zone
+	c.add_gadget(launcher)
+	c.add_gadget(zone)
+	# Schlucht unter Steg und Flug (endet vor dem Gruen)
+	var fly_dir := Vector3(land.x - lip.x, 0.0, land.z - lip.z)
+	var fly_len: float = fly_dir.length()
+	if fly_len > 10.0:
+		c.add_corridor(lip, lip + fly_dir / fly_len * (fly_len - 8.0), 2.5, 7.5)
+	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
+	c.shortcut = {"gate": g, "dir": dir, "normal": nrm, "lane_start": g + dir * 0.6, "lip": lip, "landing": land, "elev": float(plan["elev"]),
+		"remaining": float(plan["remaining"]), "direct": float(plan["direct"])}
 
 # ================================================================ Platzierungs-Helfer
 

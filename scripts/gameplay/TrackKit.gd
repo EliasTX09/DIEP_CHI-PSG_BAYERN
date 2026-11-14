@@ -39,6 +39,16 @@ var supports: PackedVector3Array = PackedVector3Array()
 var _support_acc: float = 6.0
 ## Nebenstrang (z.B. Abkuerzung): erweitert weder Mittellinie noch Stuetzen/Bounds der Bahn.
 var branch: bool = false
+## Gerade Stuecke der Hauptbahn (Kandidaten fuer eine Abkuerzungs-Oeffnung):
+## {xf, length, dist, width, wall_l, wall_r}
+var straights: Array[Dictionary] = []
+## Bande-Oeffnungen fuer Abkuerzungen: {d0, d1, side (-1 links / +1 rechts)}; werden in straight() ausgespart.
+var openings: Array[Dictionary] = []
+## Tatsaechlich gebaute Oeffnungen: {xf (Turtle am Oeffnungs-Anfang), length, side, width}
+var built_openings: Array[Dictionary] = []
+## Gruen: Rahmen am Gruen-Anfang + Groesse (fuer Landezonen)
+var green_xf: Transform3D = Transform3D.IDENTITY
+var green_size: Vector2 = Vector2.ZERO
 
 func _init(target: Course3D) -> void:
 	course = target
@@ -304,6 +314,34 @@ func tee_box(length: float = 5.0) -> TrackKit:
 func straight(length: float) -> TrackKit:
 	if length <= 0.0:
 		return self
+	# Abkuerzungs-Oeffnung in diesem Stueck? Dann in drei Teile zerlegen, der mittlere ohne Bande auf der Seite.
+	for o in openings:
+		var d0: float = float(o["d0"])
+		var d1: float = float(o["d1"])
+		if d0 >= dist - 0.001 and d1 <= dist + length + 0.001 and not bool(o.get("done", false)):
+			o["done"] = true
+			var before: float = d0 - dist
+			var after: float = dist + length - d1
+			_straight_piece(before)
+			var was_l: bool = wall_l
+			var was_r: bool = wall_r
+			if int(o["side"]) < 0:
+				set_walls(false, was_r)
+			else:
+				set_walls(was_l, false)
+			built_openings.append({"xf": xf, "length": d1 - d0, "side": int(o["side"]), "width": width})
+			_straight_piece(d1 - d0)
+			set_walls(was_l, was_r)
+			_straight_piece(after)
+			return self
+	if not branch:
+		straights.append({"xf": xf, "length": length, "dist": dist, "width": width, "wall_l": wall_l, "wall_r": wall_r})
+	_straight_piece(length)
+	return self
+
+func _straight_piece(length: float) -> void:
+	if length <= 0.001:
+		return
 	_begin_run()
 	var frames: Array[Transform3D] = [xf]
 	var dists := PackedFloat32Array([dist])
@@ -316,7 +354,6 @@ func straight(length: float) -> TrackKit:
 	xf = frames[n]
 	dist += length
 	_add_path(frames)
-	return self
 
 ## Weiche Rampe (S-Kurve): `rise` Meter hoch (negativ = bergab) auf `length` Metern.
 func slope(length: float, rise: float) -> TrackKit:
@@ -589,6 +626,8 @@ func green(length: float = 12.0, gwidth: float = 9.0, hole_dist: float = -1.0, h
 	for ix in gnx + 1:
 		for iz in gnz + 1:
 			course.add_surface_sample(xf * Vector3(-hw + gwidth * float(ix) / float(gnx), 0.0, -length * float(iz) / float(gnz)), false)
+	green_xf = xf
+	green_size = Vector2(gwidth, length)
 	course.hole_pos = xf * c
 	course.hole_radius = r
 	course.add_path_point(xf * Vector3(0.0, BALL_R, 0.0))

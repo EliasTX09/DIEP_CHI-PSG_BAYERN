@@ -42,7 +42,7 @@ static func create(world_id: String) -> WorldTheme:
 			t.land = {"height": 34.0, "terrace": 6.0, "snow": 9999.0, "far": 62.0, "forest": "dead",
 				"shader": {"rough_color": Color(0.2, 0.15, 0.13), "grass_a": Color(0.25, 0.18, 0.15), "grass_b": Color(0.33, 0.23, 0.18),
 					"rock_color": Color(0.32, 0.23, 0.2), "rock_dark": Color(0.13, 0.09, 0.08), "wet_color": Color(0.22, 0.1, 0.05),
-					"crack_strength": 2.6, "rock_slope": 0.45}}
+					"crack_strength": 1.4, "rock_slope": 0.45}}
 		"neon":
 			t.sound = "metal"
 			t.hazard = "void"
@@ -67,7 +67,7 @@ static func create(world_id: String) -> WorldTheme:
 			t.land = {"height": 9.0, "terrace": 3.0, "snow": 9999.0, "far": 0.0, "forest": "towers",
 				"shader": {"rough_color": Color(0.05, 0.06, 0.12), "grass_a": Color(0.06, 0.07, 0.15), "grass_b": Color(0.09, 0.08, 0.2),
 					"rock_color": Color(0.12, 0.12, 0.2), "rock_dark": Color(0.04, 0.04, 0.09), "wet_color": Color(0.05, 0.03, 0.1),
-					"grid_strength": 1.8, "grid_color": Color(0.2, 0.85, 1.0), "rock_slope": 0.4}}
+					"grid_strength": 1.0, "grid_color": Color(0.2, 0.85, 1.0), "rock_slope": 0.4}}
 		"pirate":
 			t.sound = "wood"
 			t.hazard = "water"
@@ -119,7 +119,7 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 	var ambient := Color(0.55, 0.62, 0.7)
 	var ambient_energy := 0.7
 	var fog_color := Color(0.66, 0.78, 0.9)
-	var fog_density := 0.0042
+	var fog_density := 0.0027
 	var glow_intensity := 0.6
 	var valley_mist := 0.05
 	match id:
@@ -132,7 +132,7 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			ambient = Color(0.6, 0.35, 0.28)
 			ambient_energy = 0.8
 			fog_color = Color(0.45, 0.17, 0.08)
-			fog_density = 0.0065
+			fog_density = 0.0045
 			glow_intensity = 0.95
 			valley_mist = 0.08
 		"neon":
@@ -144,7 +144,7 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			ambient = Color(0.35, 0.3, 0.55)
 			ambient_energy = 1.0
 			fog_color = Color(0.14, 0.04, 0.24)
-			fog_density = 0.0055
+			fog_density = 0.004
 			glow_intensity = 1.2
 			valley_mist = 0.06
 		"pirate":
@@ -155,7 +155,7 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			sun_rot = Vector3(-34.0, 60.0, 0.0)
 			ambient = Color(0.62, 0.58, 0.6)
 			fog_color = Color(0.86, 0.76, 0.68)
-			fog_density = 0.0036
+			fog_density = 0.0024
 		_:
 			sky_params = {"top_color": Color(0.14, 0.42, 0.88), "horizon_color": Color(0.7, 0.85, 0.97), "bottom_color": Color(0.3, 0.5, 0.6),
 				"cloud_amount": 0.45}
@@ -174,8 +174,8 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 	env.fog_enabled = true
 	env.fog_light_color = fog_color
 	env.fog_density = fog_density
-	env.fog_aerial_perspective = 0.35
-	env.fog_sky_affect = 0.5
+	env.fog_aerial_perspective = 0.25
+	env.fog_sky_affect = 0.45
 	var course := root as Course3D
 	if course != null and course.terrain != null:
 		env.fog_height = course.terrain.base_y - 3.0
@@ -619,7 +619,7 @@ func _volcano_extras(decor: Node3D, course: Course3D, terr: Terrain3D, hazard_y:
 	decor.add_child(embers)
 	var lava_light := OmniLight3D.new()
 	lava_light.light_color = Color(1.0, 0.4, 0.1)
-	lava_light.light_energy = 1.6
+	lava_light.light_energy = 0.9
 	lava_light.omni_range = terr.half_extent()
 	lava_light.position = Vector3(c.x, hazard_y + 3.0, c.z)
 	decor.add_child(lava_light)

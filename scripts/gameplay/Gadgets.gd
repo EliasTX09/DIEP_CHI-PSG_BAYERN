@@ -362,6 +362,70 @@ class KillBox extends Gadget:
 		if in_local_box(st.pos, half):
 			st.out_kind = kind
 
+# ================================================================ Abkuerzung: Sprungschanze + Landezone
+
+## Sprungschanze am Ende eines Abkuerzungs-Stegs: Ein Ball, der mit Schwung (>= min_speed in Steg-Richtung)
+## ankommt, fliegt auf einer festen Parabel zur Landezone auf dem Gruen. Zu langsam: er rollt ueber die Kante (Aus).
+class Launcher extends Gadget:
+	var half: Vector3
+	var target: Vector3
+	var elevation: float
+	var min_speed: float
+	var catcher: Gadget = null
+
+	func _init(zone: Vector3 = Vector3(2.2, 2.0, 1.8), target_pos: Vector3 = Vector3.ZERO, elevation_deg: float = 42.0, need_speed: float = 3.0, color: Color = Color(1.0, 0.8, 0.2)) -> void:
+		half = zone * 0.5
+		target = target_pos
+		elevation = elevation_deg
+		min_speed = need_speed
+		# Optik: Schanzen-Keil + leuchtende Pfeile
+		var lift: float = 0.5
+		var ramp := Mat.box(Vector3(zone.x, 0.12, zone.z * 1.02), Mat.flat(Color(0.42, 0.3, 0.18), 0.85), Vector3(0.0, lift * 0.5 - 0.04, 0.0))
+		ramp.rotation.x = atan2(lift, zone.z)
+		add_child(ramp)
+		var pad := Mat.plane(Vector2(zone.x * 0.8, zone.z * 0.9), Mat.shader("booster", {"arrow": color, "base": color.darkened(0.85)}), Vector3(0.0, lift * 0.5 + 0.03, 0.0))
+		pad.rotation = Vector3(-atan2(lift, zone.z), PI, 0.0)
+		pad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(pad)
+
+	func affect(st: SimState, _dt: float) -> void:
+		if st.on_cooldown(self):
+			return
+		var l := to_local_point(st.pos)
+		if absf(l.x) > half.x or absf(l.z) > half.z or l.y < -0.2 or l.y > half.y:
+			return
+		var dir: Vector3 = -global_transform.basis.z
+		if st.vel.dot(dir) < min_speed:
+			return
+		st.vel = Gadgets.ballistic_velocity(st.pos, target + Vector3.UP * BALL_R, elevation)
+		st.set_cooldown(self, 1.0)
+		if catcher != null:
+			st.set_cooldown(catcher, 6.0)
+		st.events.append("launch")
+
+## Landezone auf dem Gruen: faengt einen von der Schanze kommenden Ball weich ab (wie starker Backspin),
+## damit er auf dem Gruen bleibt. Wirkt nur, wenn die Schanze sie "scharf" geschaltet hat.
+class LandingZone extends Gadget:
+	var radius: float
+
+	func _init(zone_radius: float = 4.0, color: Color = Color(1.0, 0.85, 0.2)) -> void:
+		radius = zone_radius
+		for i in 2:
+			var ring := Mat.torus(radius * (0.55 + 0.4 * float(i)), radius * (0.55 + 0.4 * float(i)) + 0.09, Mat.glow(color, 1.2))
+			ring.position = Vector3(0.0, 0.03, 0.0)
+			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(ring)
+
+	func affect(st: SimState, _dt: float) -> void:
+		if not st.on_cooldown(self):
+			return
+		var l := to_local_point(st.pos)
+		if l.x * l.x + l.z * l.z > radius * radius or l.y > 0.75 or l.y < -0.6 or st.vel.y > 0.0:
+			return
+		st.vel = Vector3(st.vel.x * 0.28, minf(st.vel.y, 0.0) * 0.2, st.vel.z * 0.28)
+		st.cooldowns.erase(get_instance_id())
+		st.events.append("land")
+
 # ================================================================ Gelaende-Grenze (Aus)
 
 ## Beruehrt der Ball das Gelaende neben der Bahn (Randstreifen, Hang, Schlucht), ist er "aus".

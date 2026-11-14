@@ -17,6 +17,7 @@ func _ready() -> void:
 	_stage_sound()
 	await _stage_jolt_probe()
 	await _stage_courses()
+	await _stage_shortcuts()
 	await _stage_physics()
 	await _stage_shadow_space()
 	await _stage_bots()
@@ -336,6 +337,66 @@ func _check_terrain(c: Course3D, id: String, build_usec: int) -> void:
 		for ix in range(0, t.nx, 4):
 			ridge = maxf(ridge, t.heights[iz * t.nx + ix] - t.base_y)
 	print("[SMOKE] %s Gelaende: %dx%d Punkte, Berge bis %.0f m ueber der Bahn, %d Schluchten, Bau %.0f ms" % [id, t.nx, t.nz, ridge, c.corridors.size(), float(build_usec) / 1000.0])
+
+# ---------------------------------------------------------------- Abkuerzungen
+
+## Jede Bahn ausser e1 (gerade Einsteiger-Bahn) und dem Golden Shot hat eine Abkuerzung:
+## ein Ball mit Schwung auf dem Steg landet per Schanze auf dem Gruen (Vorhersage und echter Ball),
+## ein Ball, der seitlich vom Steg rollt, ist aus. Die Ersparnis wird gemessen, nicht angenommen.
+func _stage_shortcuts() -> void:
+	print("[SMOKE] Stage: Abkuerzungen")
+	var missing := PackedStringArray()
+	var found := 0
+	for id in Catalog.all_course_ids():
+		var c: Course3D = CourseBuilder3D.build(id, 4242, false)
+		add_child(c)
+		await _frames(3)
+		if c.shortcut.is_empty():
+			print("[SMOKE] %s: keine Abkuerzung" % id)
+			if id != "e1":
+				missing.append(id)
+			c.queue_free()
+			await _frames(2)
+			continue
+		found += 1
+		var sc: Dictionary = c.shortcut
+		var dir: Vector3 = sc["dir"]
+		var start: Vector3 = (sc["gate"] as Vector3) + dir * 1.2 + Vector3.UP * (Ball3D.RADIUS + 0.01)
+		var space := c.get_world_3d().direct_space_state
+		var prof := _test_profile()
+		var res: Dictionary = ShotSim.run(c, space, start, dir * 9.0, {"max_time": 12.0, "profile": prof})
+		var end: Vector3 = res["end_pos"]
+		var on_green: bool = bool(res["holed"]) or (not bool(res["out"]) and end.distance_to(c.hole_pos) < 8.5 and absf(end.y - c.hole_pos.y) < 0.6)
+		var perp: Vector3 = dir.cross(Vector3.UP).normalized()
+		if perp.dot(sc["normal"]) < 0.0:
+			perp = -perp
+		var miss: Dictionary = ShotSim.run(c, space, start + dir * 3.0, dir * 1.5 + perp * 6.0, {"max_time": 8.0, "profile": prof})
+		var weak: Dictionary = ShotSim.run(c, space, start + dir * 3.0, dir * 3.6, {"max_time": 8.0, "profile": prof})
+		var main_len: float = float(sc["remaining"])
+		var direct: float = float(sc["direct"])
+		print("[SMOKE] %s Abkuerzung: Hauptweg ab Tor %.0f m, Steg+Flug %.0f m (spart %.0f m), Abschuss %.0f Grad -> Vorhersage %s (%.1f m vom Loch), Fehlschuss %s, zu langsam %s" % [
+			id, main_len, direct, main_len - direct, float(sc["elev"]),
+			"Loch" if bool(res["holed"]) else ("AUS/" + str(res["out_kind"]) if bool(res["out"]) else "liegt"), end.distance_to(c.hole_pos),
+			"aus" if bool(miss["out"]) else "NICHT aus", "aus" if bool(weak["out"]) else ("bleibt auf dem Steg" if not bool(weak["out"]) else "")])
+		check(on_green, "%s: Abkuerzung landet auf dem Gruen (Vorhersage)" % id)
+		check(bool(miss["out"]), "%s: seitlich vom Steg = aus" % id)
+		if id in ["e2", "v3", "p1"]:
+			var ball := _new_ball(c)
+			ball.place_on_tee(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
+			await _frames(3)
+			ball.unfreeze()
+			var power: float = 9.0 / (Ball3D.MAX_SPEED * float(prof.get("power", 1.0)))
+			ball.shoot(dir, power, false, Vector2.ZERO)
+			await _wait_ball(ball, 16.0)
+			var bp: Vector3 = ball.global_position
+			var real_ok: bool = ball.state == Ball3D.State.HOLED or (ball.state == Ball3D.State.IDLE and bp.distance_to(c.hole_pos) < 8.5 and absf(bp.y - c.hole_pos.y) < 0.6)
+			print("[SMOKE] %s Abkuerzung echter Ball: State %d, %.1f m vom Loch (Vorhersage %.1f m)" % [id, ball.state, bp.distance_to(c.hole_pos), end.distance_to(c.hole_pos)])
+			check(real_ok, "%s: echter Ball landet ueber die Abkuerzung auf dem Gruen" % id)
+			ball.queue_free()
+		c.queue_free()
+		await _frames(2)
+	print("[SMOKE] Abkuerzungen: %d von 15 Bahnen; ohne: e1 (gerade Einsteiger-Bahn)%s" % [found, (", " + ", ".join(missing)) if not missing.is_empty() else ""])
+	check(missing.is_empty(), "Jede Bahn ausser e1 hat eine Abkuerzung (fehlt: %s)" % ", ".join(missing))
 
 # ---------------------------------------------------------------- Physik: Vorhersage gegen echten Ball
 

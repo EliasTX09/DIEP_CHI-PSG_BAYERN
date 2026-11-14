@@ -73,6 +73,8 @@ var _arrow: Node3D
 var _arrow_mesh: MeshInstance3D
 var _arrow_mat: StandardMaterial3D
 var _dots: MultiMeshInstance3D
+var _air_dots: MultiMeshInstance3D
+var _band_mat: StandardMaterial3D
 var _landing: MeshInstance3D
 var _slowmo: bool = false
 var _slowmo_used: bool = false
@@ -251,6 +253,8 @@ func _begin_play() -> void:
 	hud.show_banner("LOS!", "", 0.7, UIKit.GREEN)
 	hud.set_hint("Ziehe am Ball, um zu zielen" if not auto_play else "")
 	SoundManager.play("go")
+	if not course.shortcut.is_empty() and not auto_play and not course.one_shot:
+		hud.toast("Abkürzung: durchs Felsentor auf die Schanze – spart Schläge, daneben ist Aus!")
 
 # ================================================================ Frame-Logik
 
@@ -427,57 +431,85 @@ func _cancel_aim() -> void:
 	if _arrow != null:
 		_arrow.visible = false
 		_dots.visible = false
+		_air_dots.visible = false
 		_landing.visible = false
 	if hud != null:
 		hud.set_power(0.0, false)
 		if phase == Phase.PLAY and not auto_play:
 			hud.set_hint("Ziehe am Ball, um zu zielen" if _can_aim() else "")
 
+## Ziel-Optik: Gummiband HINTER dem Ball (spannt sich Richtung Finger) und eine Punkt-Kette VOR dem Ball auf dem Boden.
 func _build_aim_visuals() -> void:
+	# --- Gummiband: Keil vom Ball nach hinten + zwei Straenge + Griff-Knopf am Fingerende ---
 	_arrow = Node3D.new()
-	_arrow.name = "AimArrow"
+	_arrow.name = "AimBand"
 	_arrow.visible = false
 	add_child(_arrow)
-	_arrow_mat = Mat.unlit(Color(0.3, 1.0, 0.4, 0.9), false, true)
+	_arrow_mat = Mat.unlit(Color(0.3, 1.0, 0.4, 0.35), false, true)
 	_arrow_mat.no_depth_test = true
 	_arrow_mat.render_priority = 3
-	var shaft := BoxMesh.new()
-	shaft.size = Vector3(0.22, 0.04, 1.0)
+	var wedge := ArrayMesh.new()
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(-0.34, 0.0, 0.0), Vector3(0.0, 0.0, 1.0), Vector3(0.34, 0.0, 0.0)])
+	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP])
+	wedge.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	_arrow_mesh = MeshInstance3D.new()
-	_arrow_mesh.mesh = shaft
+	_arrow_mesh.name = "Wedge"
+	_arrow_mesh.mesh = wedge
 	_arrow_mesh.material_override = _arrow_mat
 	_arrow_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_arrow.add_child(_arrow_mesh)
-	var tip := Mat.prism(Vector3(0.7, 0.7, 0.04), _arrow_mat)
-	tip.name = "Tip"
-	tip.rotation.x = -PI * 0.5
-	tip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_arrow.add_child(tip)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	var sm := SphereMesh.new()
-	sm.radius = 0.09
-	sm.height = 0.18
-	sm.radial_segments = 8
-	sm.rings = 4
-	mm.mesh = sm
-	mm.instance_count = PREVIEW_DOTS
-	mm.visible_instance_count = 0
-	_dots = MultiMeshInstance3D.new()
-	_dots.multimesh = mm
-	var dot_mat := Mat.unlit(Color(1, 1, 1, 0.95), false, false)
-	dot_mat.no_depth_test = true
-	dot_mat.render_priority = 2
-	_dots.material_override = dot_mat
-	_dots.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_dots.visible = false
-	add_child(_dots)
+	_band_mat = Mat.unlit(Color(0.3, 1.0, 0.4, 0.95), false, true)
+	_band_mat.no_depth_test = true
+	_band_mat.render_priority = 4
+	for side in ["L", "R"]:
+		var strand := MeshInstance3D.new()
+		strand.name = "Strand" + side
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.07, 0.03, 1.0)
+		strand.mesh = bm
+		strand.material_override = _band_mat
+		strand.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_arrow.add_child(strand)
+	var knob := Mat.torus(0.13, 0.24, _band_mat)
+	knob.name = "Knob"
+	knob.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_arrow.add_child(knob)
+	# --- Punkt-Kette auf dem Boden: Rollen/Aufsetzen hell, Flugabschnitt als Schatten-Punkte ---
+	_dots = _make_dot_layer(0.11, Color(1.0, 1.0, 1.0, 0.95), 2)
+	_air_dots = _make_dot_layer(0.075, Color(1.0, 1.0, 1.0, 0.5), 1)
 	_landing = Mat.torus(0.38, 0.5, Mat.unlit(Color(1.0, 0.85, 0.2, 0.95), false, true))
+	(_landing.material_override as StandardMaterial3D).no_depth_test = true
 	_landing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_landing.visible = false
 	add_child(_landing)
 
-## 3D-Kraftpfeil + Flugbahn-Punkte (echte Simulation inkl. Abprallern, Rampen und Gadgets).
+func _make_dot_layer(radius: float, color: Color, priority: int) -> MultiMeshInstance3D:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var disc := CylinderMesh.new()
+	disc.top_radius = radius
+	disc.bottom_radius = radius
+	disc.height = 0.02
+	disc.radial_segments = 12
+	disc.rings = 1
+	mm.mesh = disc
+	mm.instance_count = PREVIEW_DOTS
+	mm.visible_instance_count = 0
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	var mat := Mat.unlit(color, false, false)
+	mat.no_depth_test = true
+	mat.render_priority = priority
+	mmi.material_override = mat
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.visible = false
+	add_child(mmi)
+	return mmi
+
+## Gummiband + Punkt-Kette (echte Simulation inkl. Abprallern, Rampen und Gadgets).
+## Laenge der Kette = Guide-Wert des Schlaegers, Groesse des Landerings = Streuung (Accuracy).
 func _update_preview() -> void:
 	if local == null or local.ball == null or not _aiming:
 		return
@@ -485,35 +517,93 @@ func _update_preview() -> void:
 	if _aim_power < 0.02:
 		_arrow.visible = false
 		_dots.visible = false
+		_air_dots.visible = false
 		_landing.visible = false
 		return
 	var origin: Vector3 = ball.global_position
-	var length: float = 1.2 + 4.5 * _aim_power
 	var col: Color = Color(0.3, 1.0, 0.4).lerp(Color(1.0, 0.85, 0.2), clampf(_aim_power * 2.0, 0.0, 1.0)).lerp(Color(1.0, 0.25, 0.2), clampf(_aim_power * 2.0 - 1.0, 0.0, 1.0))
-	_arrow_mat.albedo_color = Color(col, 0.9)
+	_arrow_mat.albedo_color = Color(col, 0.35)
+	_band_mat.albedo_color = Color(col, 0.95)
+	# Gummiband: zeigt vom Ball weg nach hinten (Richtung Finger), Laenge = Kraft
+	var back := Vector3(-_aim_dir.x, 0.0, -_aim_dir.z).normalized()
+	var length: float = 0.7 + 3.4 * _aim_power
 	_arrow.visible = true
-	_arrow.global_position = origin + Vector3(0.0, -Ball3D.RADIUS + 0.06, 0.0)
-	_arrow.look_at(_arrow.global_position + _aim_dir, Vector3.UP)
+	_arrow.global_position = origin + Vector3(0.0, -Ball3D.RADIUS + 0.05, 0.0)
+	_arrow.global_basis = Basis.looking_at(-back, Vector3.UP)
 	_arrow_mesh.scale = Vector3(1.0, 1.0, length)
-	_arrow_mesh.position = Vector3(0.0, 0.0, -0.5 - length * 0.5)
-	(_arrow.get_node("Tip") as Node3D).position = Vector3(0.0, 0.0, -0.5 - length - 0.3)
+	var tip := Vector3(0.0, 0.0, length)
+	for side in [-1.0, 1.0]:
+		var strand := _arrow.get_node("Strand" + ("L" if side < 0.0 else "R")) as MeshInstance3D
+		var from := Vector3(0.34 * side, 0.0, 0.0)
+		strand.position = (from + tip) * 0.5
+		strand.basis = Basis.looking_at(tip - from, Vector3.UP)
+		strand.scale = Vector3(1.0, 1.0, from.distance_to(tip))
+	(_arrow.get_node("Knob") as Node3D).position = tip
+	# Punkt-Kette
 	var prof: Dictionary = ball.profile
-	var res: Dictionary = ShotSim.predict_shot(course, get_world_3d().direct_space_state, origin, _aim_dir, _aim_power,
-		hud.chip_mode, hud.spin, prof, float(prof.get("guide", 1.0)), ball.ground_normal, 2)
+	var guide: float = float(prof.get("guide", 1.0))
+	var space := get_world_3d().direct_space_state
+	var res: Dictionary = ShotSim.predict_shot(course, space, origin, _aim_dir, _aim_power,
+		hud.chip_mode, hud.spin, prof, guide, ball.ground_normal, 2)
 	var pts: PackedVector3Array = res["points"]
-	var mm: MultiMesh = _dots.multimesh
-	var count: int = mini(PREVIEW_DOTS, maxi(0, pts.size() - 1))
-	for i in count:
-		var s: float = 1.0 - 0.55 * float(i) / float(maxi(1, count))
-		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3(s, s, s)), pts[i + 1]))
-	mm.visible_instance_count = count
-	_dots.visible = count > 0
+	var max_dots: int = clampi(int(guide * 18.0), 8, PREVIEW_DOTS)
+	var ground_mm: MultiMesh = _dots.multimesh
+	var air_mm: MultiMesh = _air_dots.multimesh
+	var n_ground := 0
+	var n_air := 0
+	var spacing: float = 0.6
+	var acc: float = spacing * 0.6
+	var ray := PhysicsRayQueryParameters3D.new()
+	ray.collision_mask = 1 | 4 | 8
+	for i in range(1, pts.size()):
+		var a: Vector3 = pts[i - 1]
+		var b: Vector3 = pts[i]
+		var seg: float = a.distance_to(b)
+		while acc <= seg and n_ground + n_air < max_dots:
+			var p: Vector3 = a.lerp(b, acc / maxf(seg, 0.0001))
+			acc += spacing
+			ray.from = p + Vector3.UP * 0.05
+			ray.to = p + Vector3.DOWN * 40.0
+			var hit: Dictionary = space.intersect_ray(ray)
+			if hit.is_empty():
+				continue
+			var gp: Vector3 = hit["position"]
+			var gn: Vector3 = hit["normal"]
+			var b2: Basis = _basis_from_up(gn)
+			if p.y - gp.y > Ball3D.RADIUS + 0.25:
+				air_mm.set_instance_transform(n_air, Transform3D(b2, gp + gn * 0.03))
+				n_air += 1
+			else:
+				var s: float = 1.0 - 0.45 * float(n_ground + n_air) / float(max_dots)
+				ground_mm.set_instance_transform(n_ground, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.035))
+				n_ground += 1
+		acc -= seg
+		if n_ground + n_air >= max_dots:
+			break
+	ground_mm.visible_instance_count = n_ground
+	air_mm.visible_instance_count = n_air
+	_dots.visible = n_ground > 0 or n_air > 0
+	_air_dots.visible = n_air > 0
+	var out: bool = bool(res.get("out", false))
+	(_dots.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35, 0.3, 0.95) if out else Color(1.0, 1.0, 1.0, 0.95)
+	# Landering: Aufsetzpunkt eines Chips; Groesse = moegliche Streuung des Schlaegers
 	var impact: Vector3 = res["first_impact"]
 	if impact != Vector3.INF:
 		_landing.visible = true
 		_landing.global_position = impact + Vector3(0.0, -Ball3D.RADIUS + 0.05, 0.0)
+		var flat: float = Vector2(impact.x - origin.x, impact.z - origin.z).length()
+		var scatter: float = deg_to_rad(float(prof.get("scatter_deg", 1.0))) * (0.35 + 0.65 * _aim_power)
+		var r: float = clampf(flat * tan(scatter) * 1.6, 0.45, 3.2)
+		_landing.scale = Vector3(r / 0.44, 1.0, r / 0.44)
 	else:
 		_landing.visible = false
+
+static func _basis_from_up(up: Vector3) -> Basis:
+	var u: Vector3 = up.normalized()
+	var ref: Vector3 = Vector3.FORWARD if absf(u.dot(Vector3.FORWARD)) < 0.95 else Vector3.RIGHT
+	var x: Vector3 = ref.cross(u).normalized()
+	var z: Vector3 = x.cross(u).normalized()
+	return Basis(x, u, z)
 
 # ================================================================ Ball-Ereignisse
 
@@ -589,6 +679,8 @@ func _on_ball_style(kind: String, points: int, rec: PlayerRec) -> void:
 			text = "HOLE IN ONE!"
 		"long":
 			text = "LONG PUTT!"
+		"shortcut":
+			text = "ABKÜRZUNG!"
 	hud.popup_style("%s +%d" % [text, points])
 	SoundManager.play("style")
 

@@ -65,8 +65,9 @@ void fragment() {
 	ALBEDO = col;
 	ROUGHNESS = mix(0.95, 0.75, rk);
 	// Gluehende Risse (Vulkan) bzw. Leucht-Raster (Neon)
-	float cracks = smoothstep(0.47, 0.5, noise(wpos.xz * 0.25 + vec2(big * 3.0))) * (1.0 - smoothstep(0.5, 0.53, noise(wpos.xz * 0.25 + vec2(big * 3.0))));
+	float cn = noise(wpos.xz * 0.2 + vec2(big * 3.0));
+	float cracks = smoothstep(0.485, 0.5, cn) * (1.0 - smoothstep(0.5, 0.515, cn)) * (1.0 - rk * 0.7);
 	vec2 g = abs(fract(wpos.xz / 6.0) - 0.5);
 	float grid = 1.0 - smoothstep(0.0, 0.03, min(g.x, g.y));
-	EMISSION = crack_color * cracks * crack_strength * (0.6 + 0.4 * wet) + grid_color * grid * grid_strength * (1.0 - rk);
+	EMISSION = crack_color * cracks * crack_strength * (0.15 + 0.85 * smoothstep(0.1, 0.6, wet) + 0.3 * (1.0 - smoothstep(0.05, 0.25, near))) + grid_color * grid * grid_strength * (1.0 - rk);
 }

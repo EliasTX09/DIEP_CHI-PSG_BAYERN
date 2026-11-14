@@ -470,6 +470,7 @@ const STYLE_BANK_SHOT := 40      # pro Bande (max. 3 pro Schlag)
 const STYLE_CLOSE_CALL := 80
 const STYLE_HOLE_IN_ONE := 300
 const STYLE_LONG_PUTT := 100     # eingelocht aus > 20 m
+const STYLE_SHORTCUT := 120      # Abkuerzung gesprungen und auf dem Gruen gelandet
 const STYLE_TO_COINS := 0.1      # 10 Style-Punkte = 1 Coin
 
 # ---------------------------------------------------------------- Daily Challenge

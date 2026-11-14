@@ -59,6 +59,8 @@ var _max_air: float = 0.0
 var _bank_hits: int = 0
 var _last_bank_ms: int = 0
 var _close_call: bool = false
+## Ball hat in diesem Schlag die Abkuerzungs-Schanze genommen
+var _shortcut: bool = false
 var _close_tick: float = 0.0
 var _shot_time: float = 0.0
 var _stop_timer: float = 0.0
@@ -199,6 +201,7 @@ func shoot(dir: Vector3, power: float, chip: bool, spin: Vector2) -> bool:
 	air_time = 0.0
 	_bank_hits = 0
 	_close_call = false
+	_shortcut = false
 	_shot_time = 0.0
 	_stop_timer = 0.0
 	shot_start = global_position
@@ -412,6 +415,13 @@ func _emit_events() -> void:
 				SoundManager.play("pop", 1.0, 0.7, sound_gain)
 			"rail_in":
 				SoundManager.play("whoosh", 1.0, 1.2, sound_gain)
+			"launch":
+				# Abkuerzungs-Schanze: fester Flug, kein Spin-Einfluss mehr
+				_spin = Vector2.ZERO
+				_shortcut = true
+				SoundManager.play("boost", 1.0, 0.8, sound_gain)
+			"land":
+				SoundManager.play("pop", 1.0, 0.9, sound_gain)
 
 func _on_impact(closing_speed: float, wall: bool) -> void:
 	var now: int = Time.get_ticks_msec()
@@ -466,6 +476,9 @@ func _award_style(in_hole: bool) -> void:
 		_notify(&"style_event", "bank", Catalog.STYLE_BANK_SHOT * mini(_bank_hits, 3))
 	if _close_call:
 		_notify(&"style_event", "close", Catalog.STYLE_CLOSE_CALL)
+	if _shortcut:
+		_shortcut = false
+		_notify(&"style_event", "shortcut", Catalog.STYLE_SHORTCUT)
 	if in_hole:
 		if strokes == 1:
 			_notify(&"style_event", "hio", Catalog.STYLE_HOLE_IN_ONE)

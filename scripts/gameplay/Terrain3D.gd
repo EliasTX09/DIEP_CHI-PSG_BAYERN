@@ -213,7 +213,7 @@ func _carve(cor: Dictionary) -> void:
 	var half: float = float(cor.get("half", 3.0))
 	var a := Vector2(a3.x, a3.z)
 	var b := Vector2(b3.x, b3.z)
-	var reach: float = half + 9.0
+	var reach: float = float(cor.get("reach", half + 9.0))
 	var lo := Vector2(minf(a.x, b.x), minf(a.y, b.y)) - Vector2(reach, reach)
 	var hi := Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) + Vector2(reach, reach)
 	var ix0: int = clampi(int(floor((lo.x - origin.x) / CELL)), 0, nx - 1)

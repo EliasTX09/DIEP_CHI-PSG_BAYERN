@@ -45,6 +45,8 @@ var surface_open: PackedByteArray = PackedByteArray()
 var corridors: Array[Dictionary] = []
 ## Gelaende-Hoehenfeld (Aus-Grenze, Kamera-Boden) oder null.
 var terrain: Terrain3D = null
+## Abkuerzung (leer = keine): gate, dir, lane_start, lip, landing, elev, remaining (Hauptweg ab Tor), direct (Steg + Flug)
+var shortcut: Dictionary = {}
 
 # Schatten-Physikraum fuer Vorhersagen mit beweglichen Teilen (statische Kopien aller Bahn-Kollisionen)
 var _shadow_space: RID = RID()
@@ -80,8 +82,8 @@ func add_surface_sample(p: Vector3, open_edge: bool) -> void:
 	surface_open.append(1 if open_edge else 0)
 
 ## Flug-Korridor von a nach b (halbe Breite in m): das Gelaende darunter wird zur Schlucht.
-func add_corridor(a: Vector3, b: Vector3, half_width: float) -> void:
-	corridors.append({"a": a, "b": b, "half": half_width})
+func add_corridor(a: Vector3, b: Vector3, half_width: float, reach: float = -1.0) -> void:
+	corridors.append({"a": a, "b": b, "half": half_width, "reach": reach if reach > 0.0 else half_width + 9.0})
 
 ## Gelaendehoehe (oder -INF ohne Gelaende).
 func ground_height(x: float, z: float) -> float:

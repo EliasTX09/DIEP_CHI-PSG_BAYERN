@@ -93,6 +93,26 @@ func _shot_course(id: String) -> void:
 	for i in 14:
 		await get_tree().process_frame
 	await _capture("course_" + id)
+	# Spielersicht vom Abschlag: Tal, Berge, Wald
+	var tee: Transform3D = c.tee
+	var back: Vector3 = tee.basis.z
+	var eye: Vector3 = tee.origin + back * 9.0 + Vector3.UP * 4.5
+	eye.y = maxf(eye.y, c.ground_height(eye.x, eye.z) + 2.5)
+	cam.global_position = eye
+	cam.look_at(tee.origin - back * 14.0 + Vector3.UP * 1.0, Vector3.UP)
+	cam.fov = 62.0
+	for i in 6:
+		await get_tree().process_frame
+	await _capture("tee_" + id)
+	# Abkuerzung: vom Tor ueber den Steg Richtung Gruen
+	if not c.shortcut.is_empty():
+		var g: Vector3 = c.shortcut["gate"]
+		var d: Vector3 = c.shortcut["dir"]
+		cam.global_position = g - d * 5.0 + Vector3.UP * 4.0
+		cam.look_at((c.shortcut["landing"] as Vector3).lerp(g, 0.35), Vector3.UP)
+		for i in 6:
+			await get_tree().process_frame
+		await _capture("shortcut_" + id)
 	cam.queue_free()
 	c.queue_free()
 	await get_tree().process_frame
