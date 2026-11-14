@@ -4,6 +4,22 @@ extends RefCounted
 
 static var _shader_cache: Dictionary = {}
 static var _flat_cache: Dictionary = {}
+static var _soft_dot: GradientTexture2D = null
+
+## Weicher, runder Punkt (Mitte voll, Rand durchsichtig) fuer Partikel - statt harter Quadrate.
+static func soft_dot() -> GradientTexture2D:
+	if _soft_dot == null:
+		var g := Gradient.new()
+		g.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+		g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.7), Color(1, 1, 1, 0)])
+		_soft_dot = GradientTexture2D.new()
+		_soft_dot.gradient = g
+		_soft_dot.fill = GradientTexture2D.FILL_RADIAL
+		_soft_dot.fill_from = Vector2(0.5, 0.5)
+		_soft_dot.fill_to = Vector2(1.0, 0.5)
+		_soft_dot.width = 64
+		_soft_dot.height = 64
+	return _soft_dot
 
 static func flat(color: Color, roughness: float = 0.8, metallic: float = 0.0) -> StandardMaterial3D:
 	var key := "%s|%.2f|%.2f" % [color.to_html(), roughness, metallic]
@@ -47,6 +63,7 @@ static func particle(additive: bool = true) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = soft_dot()
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	if additive:
 		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD

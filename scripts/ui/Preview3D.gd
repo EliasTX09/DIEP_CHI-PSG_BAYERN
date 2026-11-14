@@ -83,7 +83,7 @@ func _build_scene() -> void:
 			_mover.add_child(BallFX.make_ball("standard", 0.16, GameManager.avatar_color()))
 			var trail := BallFX.make_trail(item_id)
 			if trail != null:
-				trail.scale = Vector3.ONE * 0.45
+				_shrink_particles(trail, 0.35)
 				_mover.add_child(trail)
 			_mover.position = Vector3(0.42, 0.0, 0.0)
 			cam.position = Vector3(0.0, 0.75, 1.7)
@@ -104,6 +104,20 @@ func _build_scene() -> void:
 			_pivot.add_child(ball)
 			_pivot.rotation = Vector3(0.35, 0.5, 0.0)
 			cam.position = Vector3(0.0, 0.0, 2.1)
+
+## Partikel fuer die kleine Vorschau verkleinern (Knoten-Skalierung wirkt nicht auf Partikel in Weltkoordinaten).
+static func _shrink_particles(p: GPUParticles3D, f: float) -> void:
+	var pm := p.process_material as ParticleProcessMaterial
+	if pm == null:
+		return
+	pm = pm.duplicate() as ParticleProcessMaterial
+	pm.scale_min *= f
+	pm.scale_max *= f
+	pm.initial_velocity_min *= f
+	pm.initial_velocity_max *= f
+	pm.gravity *= f
+	pm.emission_sphere_radius *= f
+	p.process_material = pm
 
 ## Neu rendern (z.B. nachdem sich die Spielerfarbe geaendert hat).
 func render_again() -> void:
