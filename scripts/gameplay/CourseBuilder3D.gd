@@ -38,7 +38,9 @@ static func course_par(course_id: String) -> int:
 const NO_SHORTCUT: Array[String] = ["e1", "daily"]
 const LANE_LEN := 7.0
 const LANE_WIDTH := 2.0
-const OPENING_LEN := 4.4
+const OPENING_LEN := 4.8
+## Diagnose der letzten Abkuerzungs-Suche: Anzahl verworfener Kandidaten je Grund (fuer den Smoke-Test).
+static var plan_stats: Dictionary = {}
 
 ## Baut eine Bahn. Fuer "daily" bestimmt `rng_seed` den Tages-Parcours.
 ## Abkuerzung: erst wird die Bahn probeweise gebaut und die beste Stelle fuer eine Bande-Oeffnung gesucht,
@@ -131,6 +133,7 @@ static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
 	var best: Dictionary = {}
 	var best_score: float = -INF
 	var total: float = c.total_length()
+	plan_stats = {"straights": k.straights.size()}
 	# Belag-Proben in ein 4-m-Raster sortieren (schnelle Nachbarschafts-Abfragen)
 	var grid: Dictionary = {}
 	for i in c.surface_pts.size():
@@ -152,11 +155,12 @@ static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
 				continue
 			var u: float = OPENING_LEN * 0.5 + 0.2
 			while u <= length - OPENING_LEN * 0.5 - 0.2:
-				var cand: Dictionary = _eval_gate(c, k, grid, xf0, half, u, side, total)
-				if not cand.is_empty() and float(cand["score"]) > best_score:
-					best_score = float(cand["score"])
-					cand["openings"] = [{"d0": float(st["dist"]) + u - OPENING_LEN * 0.5, "d1": float(st["dist"]) + u + OPENING_LEN * 0.5, "side": side}]
-					best = cand
+				for lane_len: float in [7.0, 5.0, 9.5]:
+					var cand: Dictionary = _eval_gate(c, k, grid, xf0, half, u, side, total, lane_len)
+					if not cand.is_empty() and float(cand["score"]) > best_score:
+						best_score = float(cand["score"])
+						cand["openings"] = [{"d0": float(st["dist"]) + u - OPENING_LEN * 0.5, "d1": float(st["dist"]) + u + OPENING_LEN * 0.5, "side": side}]
+						best = cand
 				u += 1.1
 	return best
 
@@ -188,7 +192,11 @@ static func _landing_point(k: TrackKit, hole: Vector3, from: Vector3) -> Vector3
 	ll.y = clampf(ll.y, -k.green_size.y + 1.5, -1.5)
 	return k.green_xf * Vector3(ll.x, 0.0, ll.y)
 
-static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transform3D, half: float, u: float, side: int, total: float) -> Dictionary:
+static func _reject(reason: String) -> Dictionary:
+	plan_stats[reason] = int(plan_stats.get(reason, 0)) + 1
+	return {}
+
+static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transform3D, half: float, u: float, side: int, total: float, lane_len: float) -> Dictionary:
 	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -u)
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var land: Vector3 = _landing_point(k, c.hole_pos, g)
@@ -197,16 +205,21 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 	if dist_h < 1.0:
 		return {}
 	var dir: Vector3 = flat / dist_h
-	if dir.dot(nrm) < 0.6:
-		return {}
-	var lip: Vector3 = g + dir * LANE_LEN
-	var fly: float = dist_h - LANE_LEN
+	if dir.dot(nrm) < 0.45:
+		return _reject("winkel")
+	var lip: Vector3 = g + dir * lane_len
+	var fly: float = dist_h - lane_len
 	var dh: float = land.y - lip.y
-	if fly < 8.0 or fly > 34.0 or dh < -14.0 or dh > 5.0:
-		return {}
+	if fly < 6.0 or fly > 38.0:
+		return _reject("flugweite")
+	if dh < -16.0 or dh > 6.0:
+		return _reject("hoehe")
+	for bl in c.blockers:
+		if Vector2(bl.x - g.x, bl.z - g.z).length() < 4.5:
+			return _reject("hindernis")
 	var remaining: float = total - c.path_dist[c.nearest_path_index(g)]
-	if remaining < dist_h + 12.0:
-		return {}
+	if remaining < dist_h + 6.0:
+		return _reject("ersparnis")
 	var g2 := Vector2(g.x, g.z)
 	var lip2 := Vector2(lip.x, lip.z)
 	var land2 := Vector2(land.x, land.z)
@@ -216,12 +229,12 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 		var q2 := Vector2(q.x, q.z)
 		if q2.distance_to(g2) < 3.8:
 			continue
-		if _seg_dist(q2, g2, lip2) < LANE_WIDTH * 0.5 + 1.3:
-			return {}
+		if _seg_dist(q2, g2, lip2) < LANE_WIDTH * 0.5 + 1.2:
+			return _reject("steg")
 	# Flug: niedrigster Abschusswinkel, der ueber alles hinweg reicht
 	var inv: Transform3D = k.green_xf.affine_inverse()
 	var near_flight: PackedInt32Array = _near_samples(grid, lip2, land2, 3.6)
-	for elev: float in [38.0, 46.0, 54.0, 62.0]:
+	for elev: float in [38.0, 46.0, 54.0, 62.0, 70.0]:
 		var tn: float = tan(deg_to_rad(elev))
 		if fly * tn < dh + 1.0:
 			continue
@@ -241,14 +254,14 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 				var edge: float = minf(k.green_size.x * 0.5 - absf(ql.x), minf(-ql.z, k.green_size.y + ql.z))
 				if edge > 0.6:
 					continue
-			var need: float = q.y + (1.0 if on_green else 5.5)
+			var need: float = q.y + (1.0 if on_green else 4.8)
 			if arc_y < need:
 				clear = false
 				break
 		if clear:
-			var score: float = remaining - dist_h + dir.dot(nrm) * 4.0 - (elev - 38.0) * 0.15
-			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": LANE_LEN, "remaining": remaining, "direct": dist_h}
-	return {}
+			var score: float = remaining - dist_h + dir.dot(nrm) * 4.0 - (elev - 38.0) * 0.15 - absf(lane_len - 7.0) * 0.5
+			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": lane_len, "remaining": remaining, "direct": dist_h}
+	return _reject("flugbahn")
 
 static func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab: Vector2 = b - a
@@ -265,7 +278,7 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	var land: Vector3 = plan["landing"]
 	var dir := Vector3(land.x - g.x, 0.0, land.z - g.z).normalized()
 	var perp: Vector3 = dir.cross(Vector3.UP).normalized()
-	var back_off: float = 2.2
+	var back_off: float = 2.6
 	var start: Vector3 = g - dir * back_off + Vector3(0.0, -0.012, 0.0)
 	# Steg (schmal, ohne Banden) - zaehlt nicht zur Mittellinie
 	var saved: Dictionary = k.push_state()
@@ -274,16 +287,22 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	k.set_width(LANE_WIDTH)
 	k.set_walls(false, false)
 	k.set_surface(TrackKit.S_ALT)
-	k.straight(back_off + LANE_LEN)
+	var lane_len: float = float(plan.get("lane", LANE_LEN))
+	k.straight(back_off + lane_len)
 	k.end_run()
 	k.branch = false
 	k.pop_state(saved)
-	var lip: Vector3 = g + dir * LANE_LEN
-	for i in 3:
+	var lip: Vector3 = g + dir * lane_len
+	var n_sup: int = int(lane_len / 2.5)
+	for i in n_sup:
 		k.supports.append(g + dir * (2.0 + 2.5 * float(i)))
 	# Felsentor: zwei Felssaeulen (mit Kollision) + Querbalken, knapp breiter als der Steg
-	var gate_pos: Vector3 = g + dir * 2.6
-	var rock_mat := Mat.flat(Color(0.46, 0.43, 0.4) if th.id != "volcano" else Color(0.22, 0.16, 0.14), 0.95)
+	# Tor so weit draussen, dass keine Saeule auf der Hauptbahn steht (schraeger Steg -> weiter hinaus)
+	var nrm0: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
+	var dn: float = clampf(dir.dot(nrm0), 0.3, 1.0)
+	var gate_along: float = clampf((1.48 * sqrt(1.0 - dn * dn) + 0.7) / dn, 2.6, lane_len - 0.4)
+	var gate_pos: Vector3 = g + dir * gate_along
+	var rock_mat := Mat.flat({"volcano": Color(0.2, 0.15, 0.13), "pirate": Color(0.62, 0.55, 0.45), "neon": Color(0.16, 0.16, 0.24)}.get(th.id, Color(0.42, 0.4, 0.37)), 0.95)
 	var body := StaticBody3D.new()
 	body.name = "ShortcutGate"
 	body.collision_layer = 1
@@ -303,7 +322,7 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 		body.add_child(cs)
 		var rock := MeshInstance3D.new()
 		rock.mesh = Flora.boulder()
-		rock.material_override = Flora.material()
+		rock.material_override = rock_mat
 		rock.scale = Vector3(0.62, 6.0, 0.62)
 		rock.position = p + Vector3(0.0, -1.5, 0.0)
 		body.add_child(rock)
@@ -373,6 +392,71 @@ static func _laser(c: Course3D, k: TrackKit, th: WorldTheme, ahead: float, perio
 	l.transform = k.frame(Vector3(0.0, 0.0, -ahead))
 	c.add_gadget(l)
 
+## Tiefes Gras (Rough) am Rand: local = Mittelpunkt relativ zur Turtle, size = (quer, laengs).
+static func _rough(c: Course3D, k: TrackKit, th: WorldTheme, local: Vector3, size: Vector2) -> void:
+	var col: Color = Color(0.16, 0.4, 0.14)
+	if th.id == "pirate":
+		col = Color(0.2, 0.45, 0.16)
+	var r := Gadgets.RoughZone.new(size, 2.3, col)
+	r.transform = k.frame(local)
+	c.add_gadget(r)
+
+## Bach quer ueber die Bahn `ahead` Meter vor der Turtle, mit Holzsteg in der Mitte.
+static func _creek(c: Course3D, k: TrackKit, ahead: float, bridge_width: float = 2.2) -> void:
+	var cr := Gadgets.Creek.new(k.width, 1.4, bridge_width)
+	cr.transform = k.frame(Vector3(0.0, 0.0, -ahead))
+	c.add_gadget(cr)
+	for sgn: float in [-1.0, 1.0]:
+		c.blockers.append(k.at(Vector3(sgn * k.width * 0.5, 0.0, -ahead)))
+
+## Baumstamm von der Bande (side -1 links / +1 rechts) quer bis kurz vor die Bahnmitte.
+static func _log(c: Course3D, k: TrackKit, ahead: float, side: float, dead: bool = false) -> void:
+	var length: float = k.width * 0.5 - 0.5
+	var lg := Obstacles.log_obstacle(length, 0.32, dead)
+	lg.transform = k.frame(Vector3(side * (k.width * 0.5 - length * 0.5 + 0.1), 0.0, -ahead), side * 8.0)
+	c.add_child(lg)
+	c.blockers.append(k.at(Vector3(side * k.width * 0.5, 0.0, -ahead)))
+
+## Felsbrocken an der Bande.
+static func _rock(c: Course3D, k: TrackKit, th: WorldTheme, local: Vector3, radius: float) -> void:
+	var tint := Color(0.55, 0.52, 0.48)
+	if th.id == "volcano":
+		tint = Color(0.24, 0.18, 0.16)
+	elif th.id == "pirate":
+		tint = Color(0.68, 0.6, 0.48)
+	var b := Obstacles.boulder(radius, tint)
+	b.transform = k.frame(local)
+	c.add_child(b)
+	c.blockers.append(k.at(local))
+
+## Lianen-Bogen ueber der Bahn (rein optisch).
+static func _vines(c: Course3D, k: TrackKit, ahead: float) -> void:
+	var root := Node3D.new()
+	root.name = "Vines"
+	root.transform = k.frame(Vector3(0.0, 0.0, -ahead))
+	var wood := Mat.flat(Color(0.36, 0.24, 0.13), 0.9)
+	var leaf := Mat.flat(Color(0.2, 0.52, 0.2), 0.9)
+	var hw: float = k.width * 0.5 + TrackKit.WALL_T + 0.35
+	for sgn: float in [-1.0, 1.0]:
+		root.add_child(Mat.cylinder(0.17, 0.24, 4.4, wood, Vector3(sgn * hw, 1.6, 0.0), 8))
+	var beam := Mat.cylinder(0.14, 0.14, hw * 2.0 + 0.6, wood, Vector3(0.0, 3.7, 0.0), 8)
+	beam.rotation.z = PI * 0.5
+	root.add_child(beam)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(absf(k.dist) * 100.0)
+	for i in 9:
+		var x: float = lerpf(-hw + 0.4, hw - 0.4, float(i) / 8.0) + rng.randf_range(-0.15, 0.15)
+		var vlen: float = rng.randf_range(0.9, 1.9)
+		var vine := Mat.cylinder(0.025, 0.035, vlen, leaf, Vector3(x, 3.7 - vlen * 0.5, rng.randf_range(-0.1, 0.1)), 5)
+		vine.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(vine)
+		for j in 3:
+			var lf := Mat.sphere(0.11, leaf, Vector3(x + rng.randf_range(-0.06, 0.06), 3.7 - vlen * (0.25 + 0.3 * float(j)), 0.0), 6)
+			lf.scale = Vector3(1.0, 0.5, 1.4)
+			lf.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(lf)
+	c.add_child(root)
+
 static func _post(c: Course3D, k: TrackKit, local: Vector3, radius: float, height: float, material: Material) -> void:
 	var p := Obstacles.static_post(radius, height, material)
 	p.transform = k.frame(local)
@@ -428,19 +512,23 @@ static func _e1(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
 	k.straight(3.0)
 	k.green(12.0, 9.0)
 
-static func _e2(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
+static func _e2(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.tee_box(5.0)
 	k.straight(10.0)
 	_windmill(c, k, 4.0, 1.3)
+	_log(c, k, 8.5, -1.0)
 	k.straight(12.0)
 	k.turn(90.0, 7.0)
 	k.straight(5.0)
 	_sand(c, k, Vector3(1.3, 0.0, -3.0), Vector2(2.0, 3.0))
-	k.straight(8.0)
+	k.straight(5.0)
+	_rough(c, k, th, Vector3(-1.75, 0.0, -2.2), Vector2(1.4, 4.0))
+	k.straight(3.0)
 	k.green(12.0, 9.0)
 
 static func _e3(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
 	k.tee_box(5.0)
+	_creek(c, k, 5.0)
 	k.straight(8.0)
 	k.set_surface(TrackKit.S_ALT)
 	k.hill(16.0, 2.4)
@@ -449,6 +537,7 @@ static func _e3(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
 	k.turn(-90.0, 7.0)
 	k.slope(10.0, -1.6)
 	k.turn(-60.0, 8.0)
+	_vines(c, k, 3.0)
 	k.straight(6.0)
 	k.green(12.0, 9.0, 8.0, 1.5)
 
@@ -460,6 +549,7 @@ static func _e4(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.gap(9.5, 0.6)
 	k.set_width(7.0)
 	k.set_wall_height(0.9)
+	_rock(c, k, th, Vector3(2.7, 0.0, -7.0), 0.75)
 	k.straight(12.0)
 	k.taper(5.0, 5.0)
 	k.turn(70.0, 9.0, 12.0)
@@ -467,8 +557,9 @@ static func _e4(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.straight(6.0)
 	k.green(12.0, 9.0)
 
-static func _e5(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
+static func _e5(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.tee_box(5.0)
+	_rough(c, k, th, Vector3(1.75, 0.0, -3.5), Vector2(1.4, 4.5))
 	k.straight(7.0)
 	k.turn(-90.0, 7.0)
 	k.slope(9.0, 1.5)
@@ -498,6 +589,8 @@ static func _v1(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.gap(12.0, 1.0)
 	k.set_width(7.0)
 	k.set_wall_height(0.9)
+	_rock(c, k, th, Vector3(-2.7, 0.0, -5.0), 0.8)
+	_rock(c, k, th, Vector3(2.75, 0.0, -10.5), 0.7)
 	k.straight(14.0)
 	k.taper(4.0, 5.0)
 	k.set_wall_height(TrackKit.WALL_H)
@@ -522,6 +615,7 @@ static func _v2(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 
 static func _v3(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.tee_box(5.0)
+	_log(c, k, 5.5, 1.0, true)
 	k.straight(9.0)
 	_hammer(c, k, 4.5, 2.6, 0.0)
 	k.straight(9.0)
@@ -635,7 +729,7 @@ static func _n3(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 
 # ================================================================ Welt 4: Pirate Cove
 
-static func _p1(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
+static func _p1(c: Course3D, k: TrackKit, th: WorldTheme) -> void:
 	k.tee_box(5.0)
 	k.straight(4.0)
 	k.set_walls(false, false)
@@ -645,17 +739,20 @@ static func _p1(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
 	k.straight(6.0)
 	k.taper(3.0, 5.0)
 	k.set_walls(true, true)
+	_rough(c, k, th, Vector3(1.75, 0.0, -2.0), Vector2(1.4, 3.6))
 	k.straight(4.0)
 	var barrel := Mat.flat(Color(0.5, 0.3, 0.14), 0.9)
 	_post(c, k, Vector3(-1.2, 0.0, -2.0), 0.55, 1.2, barrel)
 	_post(c, k, Vector3(1.3, 0.0, -4.5), 0.55, 1.2, barrel)
 	_post(c, k, Vector3(-0.6, 0.0, -6.6), 0.55, 1.2, barrel)
 	k.straight(8.0)
+	_vines(c, k, 1.5)
 	k.slope(8.0, 1.5)
 	k.green(12.0, 9.0)
 
 static func _p2(c: Course3D, k: TrackKit, _th: WorldTheme) -> void:
 	k.tee_box(5.0)
+	_creek(c, k, 6.5)
 	k.straight(12.0)
 	k.turn(-30.0, 10.0)
 	k.straight(6.0)

@@ -138,6 +138,98 @@ class SandTrap extends Gadget:
 		if st.vel.y > 0.6:
 			st.vel = Vector3(st.vel.x * 0.5, 0.0, st.vel.z * 0.5)
 
+# ================================================================ Rough (tiefes Gras)
+
+## Tiefes Gras am Bahnrand: bremst rollende Baelle deutlich (schwaecher als Sand).
+class RoughZone extends Gadget:
+	var half: Vector2
+	var drag: float
+
+	func _init(size: Vector2 = Vector2(1.6, 4.0), decel_factor: float = 2.3, color: Color = Color(0.16, 0.4, 0.14)) -> void:
+		half = size * 0.5
+		drag = decel_factor
+		var base := Mat.plane(size, Mat.flat(color.darkened(0.1), 1.0), Vector3(0.0, 0.015, 0.0))
+		base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(base)
+		# Grashalme (eine MultiMesh-Instanz)
+		var blade := PrismMesh.new()
+		blade.size = Vector3(0.07, 0.26, 0.02)
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = blade
+		var n: int = int(size.x * size.y * 22.0)
+		mm.instance_count = n
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(size.x * 1000.0 + size.y * 37.0)
+		for i in n:
+			var p := Vector3(rng.randf_range(-half.x, half.x), 0.12, rng.randf_range(-half.y, half.y))
+			var sc: float = rng.randf_range(0.7, 1.4)
+			var b := Basis(Vector3.UP, rng.randf() * TAU) * Basis(Vector3.RIGHT, rng.randf_range(-0.25, 0.25))
+			mm.set_instance_transform(i, Transform3D(b.scaled(Vector3(1.0, sc, 1.0)), p + Vector3(0.0, 0.13 * (sc - 1.0), 0.0)))
+			mm.set_instance_color(i, color.lightened(rng.randf_range(0.0, 0.35)))
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		var bm := StandardMaterial3D.new()
+		bm.vertex_color_use_as_albedo = true
+		bm.roughness = 1.0
+		bm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mmi.material_override = bm
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mmi)
+
+	func affect(st: SimState, _dt: float) -> void:
+		var l := to_local_point(st.pos)
+		if l.y < -0.2 or l.y > 0.5 or absf(l.x) > half.x or absf(l.z) > half.y:
+			return
+		st.decel_mul = maxf(st.decel_mul, drag)
+
+# ================================================================ Bach quer ueber die Bahn
+
+## Wasserlauf quer ueber die Bahn mit schmalem Holzsteg in der Mitte: wer seitlich hineinrollt, ist im Wasser.
+## Darueber hinweg chippen geht immer (nur rollende/flache Baelle fallen hinein).
+class Creek extends Gadget:
+	var half_w: float
+	var half_d: float
+	var bridge_half: float
+	var kind: String
+
+	func _init(track_width: float = 5.0, depth: float = 1.4, bridge_width: float = 2.2, out_kind: String = "water") -> void:
+		half_w = track_width * 0.5
+		half_d = depth * 0.5
+		bridge_half = bridge_width * 0.5
+		kind = out_kind
+		var water_mat: Material = Mat.shader("lava", {}) if kind == "lava" else Mat.shader("water", {"wave_height": 0.02, "wave_scale": 1.2, "speed": 2.0})
+		var bank := Mat.flat(Color(0.36, 0.3, 0.24), 0.95)
+		var side_w: float = half_w - bridge_half
+		for sgn: float in [-1.0, 1.0]:
+			var cx: float = sgn * (bridge_half + side_w * 0.5)
+			var w := Mat.plane(Vector2(side_w, depth), water_mat, Vector3(cx, 0.03, 0.0))
+			w.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(w)
+			for ez: float in [-1.0, 1.0]:
+				var edge := Mat.box(Vector3(side_w, 0.05, 0.12), bank, Vector3(cx, 0.025, ez * (half_d + 0.03)))
+				edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				add_child(edge)
+			# ein paar Kiesel am Ufer
+			for k in 3:
+				var st := Mat.sphere(0.09 + 0.04 * float(k), Mat.flat(Color(0.6, 0.58, 0.55), 0.9), Vector3(cx + (float(k) - 1.0) * side_w * 0.3, 0.05, (half_d + 0.12) * (1.0 if k % 2 == 0 else -1.0)), 6)
+				st.scale = Vector3(1.0, 0.55, 1.0)
+				add_child(st)
+		# Holzsteg (flach, rein optisch - der Bahnboden traegt)
+		var plank := Mat.flat(Color(0.55, 0.38, 0.2), 0.85)
+		for i in 5:
+			var z: float = -half_d - 0.15 + (depth + 0.3) * float(i) / 4.0
+			add_child(Mat.box(Vector3(bridge_half * 2.0, 0.05, 0.3), plank, Vector3(0.0, 0.03, z)))
+		for sgn: float in [-1.0, 1.0]:
+			add_child(Mat.box(Vector3(0.08, 0.06, depth + 0.5), plank.duplicate(), Vector3(sgn * (bridge_half - 0.04), 0.06, 0.0)))
+
+	func affect(st: SimState, _dt: float) -> void:
+		var l := to_local_point(st.pos)
+		if l.y > 0.42 or l.y < -0.4 or absf(l.z) > half_d or absf(l.x) > half_w or absf(l.x) < bridge_half:
+			return
+		st.out_kind = kind
+
 # ================================================================ Teleporter
 
 ## Portal: Ball, der den Eingang beruehrt, erscheint am Ausgang und fliegt in dessen -Z-Richtung weiter.
@@ -397,7 +489,11 @@ class Launcher extends Gadget:
 		var dir: Vector3 = -global_transform.basis.z
 		if st.vel.dot(dir) < min_speed:
 			return
+		st.pos += Vector3.UP * 0.04
 		st.vel = Gadgets.ballistic_velocity(st.pos, target + Vector3.UP * BALL_R, elevation)
+		# ab jetzt Flug (wie bei der Kanone): Vorhersage und echter Ball rechnen in der Luft weiter
+		st.teleported = true
+		st.grounded = false
 		st.set_cooldown(self, 1.0)
 		if catcher != null:
 			st.set_cooldown(catcher, 6.0)

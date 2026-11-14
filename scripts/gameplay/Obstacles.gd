@@ -57,6 +57,66 @@ static func static_post(radius: float, height: float, material: Material, bounce
 	b.add_child(Mat.cylinder(radius, radius, height, material, Vector3(0.0, height * 0.5, 0.0), 16))
 	return b
 
+## Baumstamm, der quer ueber einen Teil der Bahn liegt (Kollision: liegender Zylinder). length = Laenge in m.
+static func log_obstacle(length: float, radius: float = 0.32, dead: bool = false) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.collision_layer = 1
+	b.collision_mask = 0
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.0
+	pm.bounce = 0.35
+	b.physics_material_override = pm
+	var cs := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = radius
+	shape.height = length
+	cs.shape = shape
+	cs.position = Vector3(0.0, radius, 0.0)
+	cs.rotation.z = PI * 0.5
+	b.add_child(cs)
+	var bark := Mat.flat(Color(0.16, 0.12, 0.1) if dead else Color(0.38, 0.25, 0.14), 0.95)
+	var trunk := Mat.cylinder(radius, radius * 1.05, length, bark, Vector3(0.0, radius, 0.0), 12)
+	trunk.rotation.z = PI * 0.5
+	b.add_child(trunk)
+	var cut := Mat.flat(Color(0.3, 0.2, 0.12) if dead else Color(0.82, 0.66, 0.42), 0.9)
+	for sgn: float in [-1.0, 1.0]:
+		var ring := Mat.cylinder(radius * 0.92, radius * 0.92, 0.02, cut, Vector3(sgn * length * 0.5, radius, 0.0), 12)
+		ring.rotation.z = PI * 0.5
+		b.add_child(ring)
+	# Moos-Flecken und ein abgebrochener Ast
+	if not dead:
+		b.add_child(Mat.sphere(radius * 0.55, Mat.flat(Color(0.25, 0.5, 0.2), 0.95), Vector3(length * 0.2, radius * 1.75, 0.0), 8))
+	var branch := Mat.cylinder(0.04, 0.08, 0.7, bark, Vector3(-length * 0.15, radius * 1.6, 0.1), 6)
+	branch.rotation = Vector3(0.4, 0.0, -0.6)
+	b.add_child(branch)
+	return b
+
+## Felsbrocken mit Kugel-Kollision (halb im Boden).
+static func boulder(radius: float, tint: Color = Color(0.55, 0.52, 0.48)) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.collision_layer = 1
+	b.collision_mask = 0
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.0
+	pm.bounce = 0.4
+	b.physics_material_override = pm
+	var cs := CollisionShape3D.new()
+	var shape := SphereShape3D.new()
+	shape.radius = radius
+	cs.shape = shape
+	cs.position = Vector3(0.0, radius * 0.45, 0.0)
+	b.add_child(cs)
+	var mi := MeshInstance3D.new()
+	mi.mesh = Flora.boulder()
+	var m := StandardMaterial3D.new()
+	m.albedo_color = tint
+	m.roughness = 0.95
+	mi.material_override = m
+	mi.scale = Vector3(radius * 1.08, radius * 1.15, radius * 1.08)
+	mi.position = Vector3(0.0, radius * 0.45, 0.0)
+	b.add_child(mi)
+	return b
+
 # ================================================================ Windmuehle
 
 ## Windmuehle ueber der Bahn: Turm mit Durchfahrt, vier Fluegel drehen sich quer durch die Durchfahrt.

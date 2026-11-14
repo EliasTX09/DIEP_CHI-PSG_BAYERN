@@ -131,8 +131,8 @@ func build_environment(root: Node3D) -> WorldEnvironment:
 			sun_rot = Vector3(-40.0, -40.0, 0.0)
 			ambient = Color(0.6, 0.35, 0.28)
 			ambient_energy = 0.8
-			fog_color = Color(0.45, 0.17, 0.08)
-			fog_density = 0.0045
+			fog_color = Color(0.3, 0.16, 0.12)
+			fog_density = 0.0034
 			glow_intensity = 0.95
 			valley_mist = 0.08
 		"neon":
@@ -242,7 +242,7 @@ func dress_course(course: Course3D, supports: PackedVector3Array, full: bool = t
 	match str(land.get("forest", "pine")):
 		"dead":
 			_forest(decor, terr, [Flora.dead_tree()], [1.0], 0.12, Vector2(0.8, 1.5))
-			_rock_field(decor, terr, 160, Color(0.2, 0.15, 0.14), true)
+			_rock_field(decor, terr, 120, Color(0.13, 0.1, 0.09), true)
 			_volcano_extras(decor, course, terr, hazard_y)
 		"towers":
 			_neon_extras(decor, course, terr, hazard_y)
@@ -432,7 +432,9 @@ func _rock_field(decor: Node3D, terr: Terrain3D, count: int, color: Color, spire
 	mm.instance_count = xfs.size()
 	for i in xfs.size():
 		mm.set_instance_transform(i, xfs[i])
-		mm.set_instance_color(i, color.lightened(rng.randf_range(-0.1, 0.25)) * Color(2.0, 2.0, 2.0))
+		var tint: Color = color.lightened(rng.randf_range(-0.05, 0.2)) * 2.0
+		tint.a = 1.0
+		mm.set_instance_color(i, tint)
 	var mmi := MultiMeshInstance3D.new()
 	mmi.multimesh = mm
 	mmi.material_override = Flora.material()
@@ -617,12 +619,6 @@ func _volcano_extras(decor: Node3D, course: Course3D, terr: Terrain3D, hazard_y:
 		"colors": [Color(1.0, 0.9, 0.3, 0.0), Color(1.0, 0.5, 0.1, 1.0), Color(1.0, 0.2, 0.0, 0.0)]})
 	embers.position = Vector3(course.bounds.get_center().x, hazard_y + 0.4, course.bounds.get_center().z)
 	decor.add_child(embers)
-	var lava_light := OmniLight3D.new()
-	lava_light.light_color = Color(1.0, 0.4, 0.1)
-	lava_light.light_energy = 0.9
-	lava_light.omni_range = terr.half_extent()
-	lava_light.position = Vector3(c.x, hazard_y + 3.0, c.z)
-	decor.add_child(lava_light)
 
 # ---------------------------------------------------------------- Neon-Stadt
 

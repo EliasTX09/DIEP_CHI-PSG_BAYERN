@@ -45,6 +45,8 @@ var surface_open: PackedByteArray = PackedByteArray()
 var corridors: Array[Dictionary] = []
 ## Gelaende-Hoehenfeld (Aus-Grenze, Kamera-Boden) oder null.
 var terrain: Terrain3D = null
+## Feste Hindernisse am Bahnrand (Stamm, Fels, Bach) - die Abkuerzungs-Oeffnung haelt Abstand davon.
+var blockers: PackedVector3Array = PackedVector3Array()
 ## Abkuerzung (leer = keine): gate, dir, lane_start, lip, landing, elev, remaining (Hauptweg ab Tor), direct (Steg + Flug)
 var shortcut: Dictionary = {}
 

@@ -18,6 +18,7 @@ func _ready() -> void:
 	await _stage_jolt_probe()
 	await _stage_courses()
 	await _stage_shortcuts()
+	await _stage_hazards()
 	await _stage_physics()
 	await _stage_shadow_space()
 	await _stage_bots()
@@ -352,7 +353,7 @@ func _stage_shortcuts() -> void:
 		add_child(c)
 		await _frames(3)
 		if c.shortcut.is_empty():
-			print("[SMOKE] %s: keine Abkuerzung" % id)
+			print("[SMOKE] %s: keine Abkuerzung (verworfen: %s)" % [id, str(CourseBuilder3D.plan_stats)])
 			if id != "e1":
 				missing.append(id)
 			c.queue_free()
@@ -397,6 +398,50 @@ func _stage_shortcuts() -> void:
 		await _frames(2)
 	print("[SMOKE] Abkuerzungen: %d von 15 Bahnen; ohne: e1 (gerade Einsteiger-Bahn)%s" % [found, (", " + ", ".join(missing)) if not missing.is_empty() else ""])
 	check(missing.is_empty(), "Jede Bahn ausser e1 hat eine Abkuerzung (fehlt: %s)" % ", ".join(missing))
+
+## Hindernisse auf der Bahn: Bach (seitlich = Wasser, Steg = frei, darueber = frei), Rough bremst,
+## Baumstamm/Felsen haben Kollision.
+func _stage_hazards() -> void:
+	print("[SMOKE] Stage: Hindernisse auf der Bahn")
+	var c: Course3D = CourseBuilder3D.build("e3", 4242, false)
+	add_child(c)
+	await _frames(3)
+	var creek: Gadget = null
+	for g in c.gadgets:
+		if g is Gadgets.Creek:
+			creek = g
+	check(creek != null, "e3: Bach quer ueber die Bahn")
+	if creek != null:
+		var st := SimState.new()
+		var results := PackedStringArray()
+		for lp: Vector3 in [Vector3(1.8, 0.3, 0.0), Vector3(0.0, 0.3, 0.0), Vector3(1.8, 1.2, 0.0)]:
+			st.begin_tick(creek.global_transform * lp, Vector3.ZERO, true, 0.0, 1.0 / 60.0)
+			creek.affect(st, 1.0 / 60.0)
+			results.append(st.out_kind)
+		check(results[0] == "water" and results[1] == "" and results[2] == "", "Bach: seitlich rollend = Wasser, ueber den Steg = frei, darueber geflogen = frei (%s)" % ", ".join(results))
+	c.queue_free()
+	await _frames(2)
+	c = CourseBuilder3D.build("e2", 4242, false)
+	add_child(c)
+	await _frames(3)
+	var rough: Gadget = null
+	for g in c.gadgets:
+		if g is Gadgets.RoughZone:
+			rough = g
+	check(rough != null, "e2: Rough am Rand")
+	if rough != null:
+		var st2 := SimState.new()
+		st2.begin_tick(rough.global_transform * Vector3(0.0, 0.3, 0.0), Vector3.ZERO, true, 0.0, 1.0 / 60.0)
+		rough.affect(st2, 1.0 / 60.0)
+		check(st2.decel_mul > 1.5, "Rough bremst rollende Baelle (Faktor %.1f)" % st2.decel_mul)
+	var solid := 0
+	for n in c.find_children("*", "StaticBody3D", true, false):
+		if n != c.floor_body and n != c.wall_body:
+			solid += 1
+	check(solid >= 1, "e2: Baumstamm mit Kollision (%d feste Hindernisse)" % solid)
+	print("[SMOKE] Hindernisse: e2 %d feste Koerper, %d Blocker fuer die Abkuerzung" % [solid, c.blockers.size()])
+	c.queue_free()
+	await _frames(2)
 
 # ---------------------------------------------------------------- Physik: Vorhersage gegen echten Ball
 
