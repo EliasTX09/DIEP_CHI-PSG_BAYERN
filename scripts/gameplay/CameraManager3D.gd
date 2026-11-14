@@ -1,7 +1,12 @@
-class_name CameraRig3D
+class_name CameraManager3D
 extends Node3D
-## 3D-Kamera fuer das Spiel:
-##  - FOLLOW: Orbit um den Ball (ein Finger dreht 360 Grad + neigt, Pinch zoomt)
+## 3D-Kamera fuer das Spiel (Hochformat):
+##  - FOLLOW: Orbit um den Ball (ein Finger dreht 360 Grad + neigt, Pinch zoomt). Die Kamera haengt an einer
+##    kritisch gedaempften Feder (Spring-Arm): Beim Schuss beschleunigt sie weich, gleitet dem Ball mit sauberem
+##    Abstand hinterher und bremst ohne Nachschwingen.
+##  - Zielen (set_aiming): Kamera faehrt naeher an den Ball und verengt den Blickwinkel, damit Ball, Gummiband und
+##    Punkt-Kette das Bild beherrschen. Dazu echte Tiefenunschaerfe (Depth of Field): alles bis zum Ende der
+##    Punkt-Kette bleibt scharf, der Hintergrund verschwimmt weich. Ausserhalb des Zielens ist die Unschaerfe aus.
 ##  - TOP: Vogelperspektive ueber der ganzen Bahn (verschieben + zoomen)
 ##  - HOLE_CAM: dramatischer Zeitlupen-Winkel am Loch (Best-Shot-Kamera)
 ##  - REPLAY: umkreist einen frei gesetzten Punkt
@@ -13,6 +18,22 @@ const PITCH_MIN := 0.1
 const PITCH_MAX := 1.4
 const DIST_MIN := 3.5
 const DIST_MAX := 60.0
+## Beim Zielen: Abstand x AIM_DIST, Blickwinkel AIM_FOV Grad
+const AIM_DIST := 0.74
+const AIM_FOV := 50.0
+## Wie schnell der Ziel-Zoom ein- und ausfaehrt (1/s)
+const AIM_EASE := 7.0
+## Staerke der Hintergrund-Unschaerfe beim Zielen und die Zone hinter dem scharfen Bereich, in der sie einsetzt (m)
+const DOF_AMOUNT := 0.11
+const DOF_MARGIN := 3.5
+const DOF_TRANSITION := 9.0
+## Federn (Eigenfrequenz in 1/s, kritisch gedaempft): Blickpunkt folgt dem Ball, Kamera folgt dem Blickpunkt.
+## Ruhender Ball -> straff (Drehen mit dem Finger reagiert sofort), fliegender Ball -> weicher Nachlauf.
+const FOCUS_W_IDLE := 18.0
+const FOCUS_W_MOVING := 10.0
+const ARM_W_IDLE := 16.0
+const ARM_W_MOVING := 7.5
+const LOOK_W := 14.0
 
 var camera: Camera3D
 var mode: int = Mode.FOLLOW
@@ -23,8 +44,15 @@ var distance: float = 11.0
 var sensitivity: float = 1.0
 ## Sekunden seit der letzten manuellen Drehung (fuer automatisches Ausrichten).
 var idle_time: float = 99.0
+## Tiefenunschaerfe (eigene Kamera-Attribute; ueberschreiben die der Welt-Umgebung nur fuer diese Kamera)
+var attributes: CameraAttributesPractical
 
 var _focus: Vector3 = Vector3.ZERO
+var _focus_v: Vector3 = Vector3.ZERO
+var _cam_v: Vector3 = Vector3.ZERO
+var _look_v: Vector3 = Vector3.ZERO
+var _target_prev: Vector3 = Vector3.INF
+var _target_speed: float = 0.0
 var _look: Vector3 = Vector3.ZERO
 var _trauma: float = 0.0
 var _shake_t: float = 0.0
@@ -41,6 +69,11 @@ var _snap: bool = true
 var course: Course3D = null
 var _base_fov: float = 62.0
 var _want_fov: float = 62.0
+var _aiming: bool = false
+## 0 = normal, 1 = voll im Ziel-Zoom (weich ueberblendet)
+var _aim_t: float = 0.0
+## Weitester Punkt, der beim Zielen scharf bleiben soll (Ende der Punkt-Kette); INF = nur der Ball
+var _aim_focus: Vector3 = Vector3.INF
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -49,6 +82,11 @@ func _ready() -> void:
 	camera.fov = _base_fov
 	camera.near = 0.15
 	camera.far = 900.0
+	attributes = CameraAttributesPractical.new()
+	attributes.dof_blur_far_enabled = false
+	attributes.dof_blur_near_enabled = false
+	attributes.dof_blur_amount = 0.0
+	camera.attributes = attributes
 	add_child(camera)
 	camera.current = true
 	sensitivity = float(GameManager.setting("camera_sens", 1.0))
@@ -59,6 +97,7 @@ func follow(node: Node3D, snap: bool = false) -> void:
 	target = node
 	mode = Mode.FOLLOW
 	_want_fov = _base_fov
+	_target_prev = Vector3.INF
 	if snap and node != null:
 		_focus = node.global_position
 		_snap = true
@@ -72,6 +111,28 @@ func aim_at(dir: Vector3, instant: bool = false) -> void:
 	yaw = atan2(-flat.x, -flat.z)
 	if instant:
 		_snap = true
+
+## Zielen an/aus: Kamera faehrt naeher heran, Blickwinkel enger, Hintergrund verschwimmt.
+## Dreht die Kamera dabei nie (aim_direction() liest die Kamera-Ausrichtung).
+func set_aiming(on: bool) -> void:
+	_aiming = on
+	if not on:
+		_aim_focus = Vector3.INF
+
+func is_aiming() -> bool:
+	return _aiming
+
+## 0..1: wie weit der Ziel-Zoom gerade eingefahren ist (Tests, HUD).
+func aim_blend() -> float:
+	return _aim_t
+
+## Punkt, bis zu dem beim Zielen alles scharf bleibt (Ende der Punkt-Kette). INF = nur der Ball.
+func set_aim_focus(point: Vector3) -> void:
+	_aim_focus = point
+
+## Aktueller Abstand des Balls zur Kamera (wirksam, inkl. Ziel-Zoom).
+func effective_distance() -> float:
+	return distance * lerpf(1.0, AIM_DIST, _aim_t)
 
 ## Ein-Finger-Wischen: dreht/neigt (FOLLOW) bzw. verschiebt (TOP).
 func orbit(drag: Vector2) -> void:
@@ -118,6 +179,7 @@ func set_top(enabled: bool) -> void:
 		_top_pan = Vector3.ZERO
 	elif mode == Mode.TOP:
 		mode = Mode.FOLLOW
+		_target_prev = Vector3.INF
 	_want_fov = _base_fov
 
 func is_top() -> bool:
@@ -138,6 +200,7 @@ func end_hole_cam() -> void:
 	if mode == Mode.HOLE_CAM:
 		mode = Mode.FOLLOW
 		_want_fov = _base_fov
+		_target_prev = Vector3.INF
 
 ## Replay: umkreist den Punkt langsam.
 func replay_at(point: Vector3) -> void:
@@ -173,23 +236,53 @@ func aim_direction(drag: Vector2) -> Vector3:
 
 # ================================================================ Update
 
+## Kritisch gedaempfte Feder in kleinen, festen Schritten (stabil auch bei Rucklern und in der Zeitlupe).
+## Gibt [Position, Geschwindigkeit] zurueck.
+static func spring_step(x: Vector3, v: Vector3, goal: Vector3, omega: float, dt: float) -> Array:
+	var left: float = minf(dt, 0.1)
+	while left > 0.0:
+		var h: float = minf(left, 1.0 / 120.0)
+		v += ((goal - x) * omega * omega - v * (2.0 * omega)) * h
+		x += v * h
+		left -= h
+	return [x, v]
+
 func _process(delta: float) -> void:
 	# Kamera laeuft in Echtzeit, auch waehrend der Zeitlupe
 	var dt: float = delta / maxf(0.05, Engine.time_scale)
 	idle_time += dt
+	var aim_goal: float = 1.0 if (_aiming and mode == Mode.FOLLOW) else 0.0
+	_aim_t = lerpf(_aim_t, aim_goal, 1.0 - exp(-AIM_EASE * dt))
+	if absf(_aim_t - aim_goal) < 0.002:
+		_aim_t = aim_goal
 	var want_pos: Vector3 = _cam_pos
 	var want_look: Vector3 = _cam_look
 	var up := Vector3.UP
 	var k_pos: float = 10.0
+	var use_spring := false
+	var arm_w: float = ARM_W_IDLE
 	match mode:
 		Mode.FOLLOW:
+			use_spring = true
 			if target != null and is_instance_valid(target):
 				var tp: Vector3 = target.global_position
-				_focus = tp if _snap else _focus.lerp(tp, 1.0 - exp(-10.0 * dt))
+				if _target_prev != Vector3.INF and dt > 0.0:
+					_target_speed = lerpf(_target_speed, tp.distance_to(_target_prev) / dt, 1.0 - exp(-8.0 * dt))
+				_target_prev = tp
+				# schneller Ball -> weicher Nachlauf, ruhender Ball -> straff
+				var moving: float = clampf(_target_speed / 6.0, 0.0, 1.0)
+				arm_w = lerpf(ARM_W_IDLE, ARM_W_MOVING, moving)
+				if _snap:
+					_focus = tp
+					_focus_v = Vector3.ZERO
+				else:
+					var fs: Array = spring_step(_focus, _focus_v, tp, lerpf(FOCUS_W_IDLE, FOCUS_W_MOVING, moving), dt)
+					_focus = fs[0]
+					_focus_v = fs[1]
+			var dist: float = effective_distance()
 			var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
-			want_pos = _focus + dir * distance
+			want_pos = _focus + dir * dist
 			want_look = _focus + Vector3.UP * 0.5
-			k_pos = 14.0
 		Mode.TOP:
 			var c: Vector3 = _top_center + _top_pan
 			want_pos = c + Vector3.UP * _top_height - _top_forward * 0.5
@@ -212,14 +305,26 @@ func _process(delta: float) -> void:
 		_snap = false
 		_cam_pos = want_pos
 		_look = want_look
+		_cam_v = Vector3.ZERO
+		_look_v = Vector3.ZERO
 		camera.global_position = want_pos
+	elif use_spring:
+		var cs: Array = spring_step(camera.global_position, _cam_v, want_pos, arm_w, dt)
+		camera.global_position = cs[0]
+		_cam_v = cs[1]
+		var ls: Array = spring_step(_look, _look_v, want_look, LOOK_W, dt)
+		_look = ls[0]
+		_look_v = ls[1]
 	else:
+		_cam_v = Vector3.ZERO
+		_look_v = Vector3.ZERO
 		camera.global_position = camera.global_position.lerp(want_pos, 1.0 - exp(-k_pos * dt))
 		_look = _look.lerp(want_look, 1.0 - exp(-12.0 * dt))
 	if course != null and mode != Mode.TOP:
 		var floor_y: float = course.ground_height(camera.global_position.x, camera.global_position.z) + 1.6
 		if camera.global_position.y < floor_y:
 			camera.global_position.y = floor_y
+			_cam_v.y = maxf(_cam_v.y, 0.0)
 	if mode != Mode.HOLE_CAM:
 		_cam_pos = camera.global_position
 	var to_look: Vector3 = _look - camera.global_position
@@ -227,7 +332,9 @@ func _process(delta: float) -> void:
 		if absf(to_look.normalized().dot(up)) > 0.995:
 			up = _top_forward if absf(_top_forward.dot(to_look.normalized())) < 0.99 else Vector3.FORWARD
 		camera.look_at(_look, up)
-	camera.fov = lerpf(camera.fov, _want_fov, 1.0 - exp(-6.0 * dt))
+	var fov_goal: float = lerpf(_want_fov, AIM_FOV, _aim_t) if mode == Mode.FOLLOW else _want_fov
+	camera.fov = fov_goal if absf(camera.fov - fov_goal) < 0.01 else lerpf(camera.fov, fov_goal, 1.0 - exp(-8.0 * dt))
+	_update_dof()
 	# Screen-Shake
 	if _trauma > 0.001:
 		_shake_t += dt * 38.0
@@ -239,3 +346,29 @@ func _process(delta: float) -> void:
 	else:
 		camera.h_offset = 0.0
 		camera.v_offset = 0.0
+
+## Tiefenunschaerfe nur beim Zielen: scharf bis hinter Ball UND Ende der Punkt-Kette, dahinter weich unscharf.
+## Keine Nah-Unschaerfe (das Gummiband liegt zwischen Kamera und Ball).
+func _update_dof() -> void:
+	if attributes == null:
+		return
+	var amount: float = DOF_AMOUNT * _aim_t if mode == Mode.FOLLOW else 0.0
+	if amount < 0.004:
+		if attributes.dof_blur_far_enabled:
+			attributes.dof_blur_far_enabled = false
+			attributes.dof_blur_amount = 0.0
+		return
+	var cam_p: Vector3 = camera.global_position
+	var sharp: float = cam_p.distance_to(_focus)
+	if target != null and is_instance_valid(target):
+		sharp = maxf(sharp, cam_p.distance_to(target.global_position))
+	if _aim_focus != Vector3.INF:
+		sharp = maxf(sharp, cam_p.distance_to(_aim_focus))
+	attributes.dof_blur_far_enabled = true
+	attributes.dof_blur_far_distance = sharp + DOF_MARGIN
+	attributes.dof_blur_far_transition = DOF_TRANSITION
+	attributes.dof_blur_amount = amount
+
+## Wirksame Unschaerfe (Tests): 0 = aus
+func dof_amount() -> float:
+	return attributes.dof_blur_amount if attributes != null and attributes.dof_blur_far_enabled else 0.0

@@ -4,7 +4,7 @@ extends Node3D
 
 ## Alle aktiven Schilder (zum Stapeln, wenn mehrere Baelle dicht beieinander liegen).
 static var _all: Array[BallTag] = []
-## true, solange der lokale Spieler zielt: alle Namen blenden sich aus (Emotes bleiben sichtbar).
+## true, sobald der lokale Spieler den Ball zum Zielen beruehrt: alle Namen sind sofort weg (Emotes bleiben sichtbar).
 static var hide_names: bool = false
 ## Deckkraft der Namen (dezent, damit sie die Bahn nicht verdecken)
 const NAME_ALPHA := 0.82
@@ -115,9 +115,12 @@ func _process(delta: float) -> void:
 		_stack = lerpf(_stack, want, clampf(delta * 8.0, 0.0, 1.0))
 		global_position = target.global_position + Vector3.UP * (height + _stack)
 		visible = target.visible
-	# Beim Zielen sanft komplett ausblenden, danach wieder einblenden
+	# Beim Zielen SOFORT komplett aus (nichts verdeckt die Bahn), danach sanft wieder einblenden
 	var goal: float = NAME_ALPHA if _shown and not hide_names else 0.0
-	_alpha = move_toward(_alpha, goal, delta * 6.0)
+	if hide_names:
+		_alpha = 0.0
+	else:
+		_alpha = move_toward(_alpha, goal, delta * 4.0)
 	_name_label.modulate.a = _alpha
 	_name_label.outline_modulate.a = _alpha * 0.9
 	_name_label.visible = _alpha > 0.01

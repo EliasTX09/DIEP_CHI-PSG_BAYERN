@@ -187,7 +187,7 @@ scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen
                                   AuthManager (Login, Session, Web-Code), ProfileManager (Profilbild),
                                   NetworkManager (Profil-Sync, Freunde, Lobbys, Realtime), SoundManager (Synthesizer)
 scripts/data/Catalog.gd           Alle Spieldaten (Schläger, Bälle, Truhen, Ligen, Welten)
-scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D (inkl. Abkürzungs-Planung und Rand-Natur), TrackKit,
+scripts/gameplay/                 Ball3D, CameraManager3D, CourseBuilder3D (inkl. Abkürzungs-Planung und Rand-Natur), TrackKit,
                                   Terrain3D (Gelände), WorldTheme (Landschaft, Licht), Gadgets, Obstacles, ShotSim (Vorhersage),
                                   BotBrain (Physik-KI), SmartBotController (adaptive Bots), Match3D (Spielablauf, Ziel-Vorschau)
 scripts/fx/                       Materialien, Partikel, Flora (Bäume, Felsen), Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons

@@ -11,6 +11,8 @@ var _target: Vector3 = Vector3.ZERO
 var _prev: Vector3 = Vector3.ZERO
 var _has_target: bool = false
 var _speed: float = 0.0
+var _shadow: MeshInstance3D = null
+var _shadow_ray := PhysicsRayQueryParameters3D.new()
 
 func setup(p_id: String, skin: String, trail_id: String, color: Color, start: Vector3) -> void:
 	player_id = p_id
@@ -21,6 +23,9 @@ func setup(p_id: String, skin: String, trail_id: String, color: Color, start: Ve
 		_trail.top_level = true
 		_trail.emitting = false
 		add_child(_trail)
+	_shadow = BallFX.make_contact_shadow(Ball3D.RADIUS)
+	add_child(_shadow)
+	_shadow_ray.collision_mask = 1 | 4 | 8
 	reset_to(start)
 
 func reset_to(pos: Vector3) -> void:
@@ -63,3 +68,8 @@ func _process(delta: float) -> void:
 	if _trail != null:
 		_trail.global_position = global_position
 		_trail.emitting = _speed > 1.5 and not holed and visible
+	if _shadow != null:
+		if holed or not is_visible_in_tree():
+			_shadow.visible = false
+		else:
+			BallFX.place_contact_shadow(_shadow, get_world_3d().direct_space_state, _shadow_ray, global_position, Ball3D.RADIUS)

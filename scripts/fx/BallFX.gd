@@ -39,6 +39,47 @@ static func make_ball(skin: String, radius: float, player_color: Color = Color(0
 		mi.add_child(light)
 	return mi
 
+## Weicher Kontaktschatten direkt unter dem Ball (dunkler Fleck = Ambient Occlusion, gibt Tiefe auf der Bahn).
+## Liegt flach am Boden (top_level, dreht nicht mit der Kugel); jeder Schatten hat sein eigenes Material.
+static func make_contact_shadow(radius: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.name = "ContactShadow"
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(radius * 3.4, radius * 3.4)
+	mi.mesh = pm
+	var mat := Mat.shader("contact_shadow", {"strength": 0.62})
+	mat.render_priority = -1
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.top_level = true
+	mi.visible = false
+	return mi
+
+## Legt den Kontaktschatten per Strahl nach unten auf den Boden unter `pos`. Mit der Flughoehe wird er
+## groesser und blasser; ohne Boden in Reichweite (Abgrund, Wasser) verschwindet er.
+static func place_contact_shadow(shadow: MeshInstance3D, space: PhysicsDirectSpaceState3D, ray: PhysicsRayQueryParameters3D,
+		pos: Vector3, radius: float) -> void:
+	ray.from = pos
+	ray.to = pos + Vector3.DOWN * 4.0
+	var hit: Dictionary = space.intersect_ray(ray)
+	if hit.is_empty():
+		shadow.visible = false
+		return
+	var gp: Vector3 = hit["position"]
+	var n: Vector3 = (hit["normal"] as Vector3).normalized()
+	var height: float = maxf(0.0, pos.y - gp.y - radius)
+	var fade: float = clampf(1.0 - height / 2.6, 0.0, 1.0)
+	if fade <= 0.02:
+		shadow.visible = false
+		return
+	shadow.visible = true
+	var ref: Vector3 = Vector3.FORWARD if absf(n.dot(Vector3.FORWARD)) < 0.95 else Vector3.RIGHT
+	var x: Vector3 = ref.cross(n).normalized()
+	var z: Vector3 = x.cross(n).normalized()
+	var s: float = 1.0 + height * 0.55
+	shadow.global_transform = Transform3D(Basis(x * s, n, z * s), gp + n * 0.014)
+	(shadow.material_override as ShaderMaterial).set_shader_parameter("strength", 0.62 * fade * fade)
+
 # ================================================================ Trails
 
 static func make_trail(trail_id: String) -> GPUParticles3D:

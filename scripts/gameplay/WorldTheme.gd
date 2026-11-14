@@ -33,8 +33,8 @@ static func create(world_id: String) -> WorldTheme:
 				Mat.shader("track_floor", {"color_a": Color(0.27, 0.22, 0.21), "color_b": Color(0.33, 0.27, 0.25),
 					"line_color": Color(1.0, 0.45, 0.08), "line_strength": 0.8, "emission_strength": 1.6, "surface_roughness": 0.85, "grass_detail": 0.0}),
 				Mat.flat(Color(0.19, 0.15, 0.14), 0.9),
-				Mat.shader("grass_fairway", {"color_a": Color(0.36, 0.5, 0.24), "color_b": Color(0.42, 0.57, 0.28), "stripe_length": 1.5,
-					"dry_color": Color(0.45, 0.42, 0.25)}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.22, 0.37, 0.13), "color_b": Color(0.36, 0.52, 0.2), "stripe_length": 1.5,
+					"checker_width": 1.0, "dry_color": Color(0.45, 0.42, 0.25)}),
 				Mat.shader("track_floor", {"color_a": Color(0.2, 0.2, 0.22), "color_b": Color(0.26, 0.26, 0.29), "stripe_length": 0.6,
 					"checker": 1.0, "surface_roughness": 0.4, "surface_metallic": 0.7, "grass_detail": 0.0}),
 				Mat.flat(Color(0.07, 0.05, 0.05), 1.0),
@@ -78,7 +78,8 @@ static func create(world_id: String) -> WorldTheme:
 			t.materials = [
 				Mat.shader("wood_planks", {"color_a": Color(0.62, 0.45, 0.26), "color_b": Color(0.74, 0.56, 0.33)}),
 				Mat.flat(Color(0.36, 0.23, 0.12), 0.9),
-				Mat.shader("grass_fairway", {"color_a": Color(0.25, 0.62, 0.3), "color_b": Color(0.3, 0.7, 0.35), "stripe_length": 1.5}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.12, 0.46, 0.18), "color_b": Color(0.25, 0.66, 0.27), "stripe_length": 1.5,
+					"checker_width": 1.0}),
 				Mat.shader("track_floor", {"color_a": Color(0.6, 0.6, 0.56), "color_b": Color(0.68, 0.67, 0.62), "checker": 1.0, "stripe_length": 1.6, "grass_detail": 0.0}),
 				Mat.flat(Color(0.2, 0.13, 0.07), 1.0),
 			]
@@ -95,9 +96,10 @@ static func create(world_id: String) -> WorldTheme:
 			t.accent = Color(0.3, 0.9, 0.4)
 			t.boost_color = Color(0.2, 0.9, 1.0)
 			t.materials = [
-				Mat.shader("grass_fairway", {"color_a": Color(0.19, 0.55, 0.24), "color_b": Color(0.27, 0.68, 0.31)}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.11, 0.44, 0.15), "color_b": Color(0.24, 0.63, 0.24)}),
 				Mat.flat(Color(0.5, 0.33, 0.18), 0.85),
-				Mat.shader("grass_fairway", {"color_a": Color(0.3, 0.72, 0.34), "color_b": Color(0.36, 0.8, 0.4), "stripe_length": 1.5}),
+				Mat.shader("grass_fairway", {"color_a": Color(0.15, 0.52, 0.19), "color_b": Color(0.29, 0.72, 0.3), "stripe_length": 1.5,
+					"checker_width": 1.0}),
 				Mat.shader("wood_planks", {}),
 				Mat.flat(Color(0.22, 0.15, 0.09), 1.0),
 			]

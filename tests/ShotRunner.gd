@@ -60,8 +60,9 @@ func _shot_game() -> void:
 	var screen: Vector2 = m.rig.target_screen_pos()
 	if screen != Vector2.INF:
 		m._touch_down(0, screen)
-		m._touch_move(0, screen + Vector2(30.0, 150.0), Vector2(30.0, 150.0))
-		for i in 6:
+		m._touch_move(0, screen + Vector2(40.0, 260.0), Vector2(40.0, 260.0))
+		# Ziel-Zoom und Tiefenunschaerfe einfahren lassen
+		for i in 40:
 			await get_tree().process_frame
 		await _capture("game_aim")
 		m._cancel_aim()

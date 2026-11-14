@@ -96,6 +96,9 @@ var _last_fx_ms: int = 0
 ## Wie oft der Ball auf dieser Bahn ueber die Abkuerzungs-Schanze geflogen ist
 var shortcut_launches: int = 0
 var _ray := PhysicsRayQueryParameters3D.new()
+## Weicher Kontaktschatten unter der Kugel (eigener Strahl, damit die Physik-Abfragen unberuehrt bleiben)
+var _shadow: MeshInstance3D = null
+var _shadow_ray := PhysicsRayQueryParameters3D.new()
 
 # ================================================================ Aufbau
 
@@ -136,7 +139,10 @@ func setup(p_course: Course3D, p_id: String, shot_profile: Dictionary, p_skin: S
 			_trail.top_level = true
 			_trail.emitting = false
 			add_child(_trail)
+		_shadow = BallFX.make_contact_shadow(RADIUS)
+		add_child(_shadow)
 	_ray.collision_mask = 1 | 4 | 8
+	_shadow_ray.collision_mask = 1 | 4 | 8
 	sim.wind_resist = float(profile.get("wind_resist", 0.0))
 
 ## Setzt den Ball auf den Abschlag (neue Bahn).
@@ -570,10 +576,26 @@ func _process(delta: float) -> void:
 	if _mesh == null:
 		return
 	if state == State.HOLED:
+		if _shadow != null:
+			_shadow.visible = false
 		if _mesh.scale.x > 0.02:
 			_mesh.scale = _mesh.scale * 0.9
 		return
 	_update_visual(delta)
+	_update_shadow()
+
+## Kontaktschatten unter der Kugel nachfuehren (aus, solange der Ball versteckt ist: Aus, Respawn, eingelocht).
+func _update_shadow() -> void:
+	if _shadow == null:
+		return
+	if not is_visible_in_tree() or not is_inside_tree():
+		_shadow.visible = false
+		return
+	BallFX.place_contact_shadow(_shadow, get_world_3d().direct_space_state, _shadow_ray, global_position, RADIUS)
+
+## Liegt gerade ein Kontaktschatten unter dem Ball? (Tests)
+func has_contact_shadow() -> bool:
+	return _shadow != null and _shadow.visible
 
 ## Rollen + Squash & Stretch der sichtbaren Kugel. Die Kollisionsform bleibt immer eine exakte Kugel.
 func _update_visual(delta: float) -> void:

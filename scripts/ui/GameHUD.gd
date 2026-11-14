@@ -1,9 +1,9 @@
 class_name GameHUD
 extends CanvasLayer
 ## Spiel-HUD im Hochformat (Safe-Area-bewusst, einhaendig):
-## - oben: Bahn-Info + Timer + Vogelperspektive/Verlassen in einer Zeile, darunter die Live-Rangliste als Chips,
-##   darunter die Status-Pille (Warten / Replay) - alles in einer Spalte, nichts ueberlappt.
-## - unten (Daumenzone): Emote-Knopf links, Hinweis + Kraftanzeige in der Mitte, Schlagart + Spin-Regler rechts.
+## - oben, schmal und schatten-hinterlegt: Bahn-Info + Timer + Vogelperspektive/Verlassen in einer Zeile, darunter
+##   die Live-Rangliste als kompakte Chips (bis 4 nebeneinander), darunter die Status-Pille (Warten / Replay).
+## - unten (Daumenzone): Emote-Knopf links, Hinweis + glaenzende Kraftanzeige in der Mitte, Schlagart + Spin rechts.
 ## - Banner/Style-Popups in der Bildmitte, Bahn- und Match-Ergebnis als Fenster.
 ## Die Touch-Steuerung der 3D-Ansicht (Zielen, Kamera) liegt in Match3D; das HUD faengt nur seine eigenen Widgets ab.
 
@@ -46,6 +46,33 @@ var _top_on: bool = false
 var _banner_tween: Tween = null
 ## Aktuelle Meldung (immer nur eine, direkt unter der oberen Leiste - nie ueber Rangliste oder Kraftanzeige)
 var _toast: PanelContainer = null
+## Fuellung der Kraftanzeige (Farbe + Leuchten folgen der Kraft)
+var _power_fill: StyleBoxFlat = null
+## Breite, fuer die die Ranglisten-Chips zuletzt ausgelegt wurden
+var _board_w: float = -1.0
+## Rangliste: hoechstens so viele Chips nebeneinander
+const BOARD_COLUMNS := 4
+const BOARD_GAP := 4
+
+## Farbe der Schlagkraft (Gummiband und Kraftanzeige): Neon-Gold -> Orange -> Rot.
+static func power_color(power: float) -> Color:
+	var p: float = clampf(power, 0.0, 1.0)
+	return Color(1.0, 0.78, 0.16).lerp(Color(1.0, 0.45, 0.06), clampf(p * 2.0, 0.0, 1.0)).lerp(Color(1.0, 0.13, 0.1), clampf(p * 2.0 - 1.0, 0.0, 1.0))
+
+## Dunkler, halbtransparenter Hintergrund mit weichem Schlagschatten (fuegt sich ruhig ueber der 3D-Szene ein).
+static func _shadow_panel(color: Color, radius: int) -> PanelContainer:
+	var p := PanelContainer.new()
+	var sb := UIKit.box(color, radius)
+	sb.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
+	sb.shadow_size = 7
+	sb.shadow_offset = Vector2(0.0, 2.0)
+	sb.content_margin_left = 0.0
+	sb.content_margin_right = 0.0
+	sb.content_margin_top = 0.0
+	sb.content_margin_bottom = 0.0
+	p.add_theme_stylebox_override("panel", sb)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return p
 
 # ================================================================ Spin-Selector
 
@@ -124,48 +151,49 @@ func _ready() -> void:
 
 ## Obere Spalte: Info-Zeile, Rangliste, Status.
 func _build_top(area: Control) -> void:
-	_top_box = UIKit.vbox(6)
+	_top_box = UIKit.vbox(4)
 	_top_box.name = "TopBox"
 	_top_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	area.add_child(_top_box)
 	_top_box.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	var row := UIKit.hbox(8)
+	var row := UIKit.hbox(6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_top_box.add_child(row)
-	var p := UIKit.panel(Color(0.04, 0.06, 0.14, 0.82), 16, Color(1, 1, 1, 0.12), 1)
+	# Schmale Info-Leiste: Bahn + Par/Schlag links, Timer rechts
+	var p := _shadow_panel(Color(0.03, 0.05, 0.11, 0.68), 12)
 	p.name = "InfoPanel"
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(p)
-	var h := UIKit.hbox(8)
+	var h := UIKit.hbox(6)
 	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(UIKit.margin(h, 8, 2, 8, 2))
+	p.add_child(UIKit.margin(h, 10, 2, 8, 2))
 	var v := UIKit.vbox(0)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_child(v)
-	_info_title = UIKit.label("", 19, UIKit.TEXT)
+	_info_title = UIKit.label("", 17, UIKit.TEXT)
 	_info_title.clip_text = true
 	_info_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	v.add_child(_info_title)
-	_info_sub = UIKit.label("", 16, UIKit.TEXT_DIM)
+	_info_sub = UIKit.label("", 14, UIKit.TEXT_DIM)
 	v.add_child(_info_sub)
-	h.add_child(UIIcon.new("timer", 24.0, UIKit.GOLD))
-	_timer = UIKit.label("0:00", 28, UIKit.GOLD)
-	_timer.custom_minimum_size = Vector2(66, 0)
+	h.add_child(UIIcon.new("timer", 20.0, UIKit.GOLD))
+	_timer = UIKit.label("0:00", 24, UIKit.GOLD)
+	_timer.custom_minimum_size = Vector2(56, 0)
 	h.add_child(_timer)
-	_top_btn = UIKit.icon_button("eye", UIKit.PURPLE, _on_top_pressed, 60.0)
+	_top_btn = UIKit.icon_button("eye", UIKit.PURPLE, _on_top_pressed, 50.0)
 	_top_btn.name = "TopViewButton"
 	row.add_child(_top_btn)
-	_exit_btn = UIKit.icon_button("exit", UIKit.RED, confirm_exit, 60.0)
+	_exit_btn = UIKit.icon_button("exit", UIKit.RED, confirm_exit, 50.0)
 	_exit_btn.name = "ExitButton"
 	row.add_child(_exit_btn)
-	# Live-Rangliste: Chips, 2 pro Zeile
+	# Live-Rangliste: kompakte Chips, bis zu 4 nebeneinander (Breite aus dem Container, siehe _layout_board)
 	_board = HFlowContainer.new()
 	_board.name = "Board"
 	_board.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_board.add_theme_constant_override("h_separation", 6)
-	_board.add_theme_constant_override("v_separation", 6)
+	_board.add_theme_constant_override("h_separation", BOARD_GAP)
+	_board.add_theme_constant_override("v_separation", BOARD_GAP)
 	_top_box.add_child(_board)
 	# Status-Pille (Warten / Replay)
 	_status_pill = UIKit.panel(Color(0.6, 0.35, 0.05, 0.9), 16, Color(1, 1, 1, 0.25), 1)
@@ -199,16 +227,36 @@ func _build_bottom(area: Control) -> void:
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.alignment = BoxContainer.ALIGNMENT_END
 	_bottom_box.add_child(mid)
-	_power_panel = UIKit.panel(Color(0.04, 0.06, 0.14, 0.85), 14, Color(1, 1, 1, 0.15), 1)
+	_power_panel = _shadow_panel(Color(0.03, 0.05, 0.11, 0.72), 14)
 	_power_panel.name = "PowerPanel"
-	_power_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_power_panel.visible = false
 	var ph := UIKit.hbox(8)
-	_power_panel.add_child(UIKit.margin(ph, 6, 4, 6, 4))
+	_power_panel.add_child(UIKit.margin(ph, 8, 5, 8, 5))
 	ph.add_child(UIIcon.new("bolt", 24.0, UIKit.GOLD))
-	_power_bar = UIKit.bar(0.0, UIKit.GREEN, Vector2(0, 22))
+	# Glaenzender Kraftbalken: dunkle Roehre, leuchtende Fuellung (Farbe wie das Gummiband) mit weissem Rand,
+	# darueber ein Glanzstreifen
+	_power_bar = UIKit.bar(0.0, power_color(0.0), Vector2(0, 22))
 	_power_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_power_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var tube := UIKit.box(Color(0.01, 0.02, 0.05, 0.9), 11, Color(1, 1, 1, 0.22), 1)
+	_power_bar.add_theme_stylebox_override("background", tube)
+	_power_fill = UIKit.box(power_color(0.0), 11, Color(1.0, 1.0, 1.0, 0.9), 2)
+	_power_fill.shadow_color = Color(power_color(0.0), 0.55)
+	_power_fill.shadow_size = 7
+	_power_bar.add_theme_stylebox_override("fill", _power_fill)
+	var gloss := Panel.new()
+	gloss.name = "Gloss"
+	gloss.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var gs := UIKit.box(Color(1.0, 1.0, 1.0, 0.24), 8)
+	gs.corner_radius_bottom_left = 2
+	gs.corner_radius_bottom_right = 2
+	gloss.add_theme_stylebox_override("panel", gs)
+	gloss.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	gloss.offset_left = 5.0
+	gloss.offset_right = -5.0
+	gloss.offset_top = 3.0
+	gloss.offset_bottom = 9.0
+	_power_bar.add_child(gloss)
 	ph.add_child(_power_bar)
 	_power_label = UIKit.label("0%", 22, UIKit.TEXT)
 	_power_label.custom_minimum_size = Vector2(58, 0)
@@ -348,26 +396,25 @@ func set_leaderboard(rows: Array) -> void:
 		_board.remove_child(last)
 		last.queue_free()
 	while _board.get_child_count() < rows.size():
-		var chip := UIKit.panel(Color(0.04, 0.06, 0.14, 0.8), 12, Color(1, 1, 1, 0.12), 1)
-		chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.custom_minimum_size = Vector2(342, 0)
-		var h := UIKit.hbox(6)
+		var chip := _shadow_panel(Color(0.03, 0.05, 0.11, 0.62), 10)
+		var h := UIKit.hbox(5)
 		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.add_child(UIKit.margin(h, 4, 1, 6, 1))
+		chip.add_child(UIKit.margin(h, 5, 0, 7, 0))
 		var dot := ColorRect.new()
-		dot.custom_minimum_size = Vector2(8, 22)
+		dot.custom_minimum_size = Vector2(5, 18)
+		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		h.add_child(dot)
-		var nm := UIKit.label("", 17)
+		var nm := UIKit.label("", 15)
 		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		nm.clip_text = true
 		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		h.add_child(nm)
-		var st := UIKit.label("", 17, UIKit.TEXT_DIM)
-		st.custom_minimum_size = Vector2(62, 0)
+		var st := UIKit.label("", 15, UIKit.TEXT_DIM)
 		st.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		h.add_child(st)
 		_board.add_child(chip)
+		_board_w = -1.0
 	for i in rows.size():
 		var row: Dictionary = rows[i]
 		var h2 := _board.get_child(i).get_child(0).get_child(0) as HBoxContainer
@@ -381,6 +428,21 @@ func set_leaderboard(rows: Array) -> void:
 		else:
 			st2.text = "%d (%d)" % [int(row.get("strokes", 0)), int(row.get("total", 0))]
 		st2.add_theme_color_override("font_color", UIKit.GREEN if bool(row.get("holed", false)) else UIKit.TEXT_DIM)
+	_layout_board()
+
+## Chips gleich breit verteilen: bis zu BOARD_COLUMNS pro Zeile, Breite aus dem Container (Handy und Testfenster).
+func _layout_board() -> void:
+	var n: int = _board.get_child_count()
+	if n == 0:
+		return
+	var avail: float = _top_box.size.x if _top_box.size.x > 1.0 else (_root.size.x if _root.size.x > 1.0 else get_viewport().get_visible_rect().size.x - 24.0)
+	if is_equal_approx(avail, _board_w):
+		return
+	_board_w = avail
+	var cols: int = clampi(n, 1, BOARD_COLUMNS) if n <= BOARD_COLUMNS else ceili(float(n) / 2.0)
+	var w: float = floorf((avail - float(BOARD_GAP * (cols - 1))) / float(cols)) - 1.0
+	for c in _board.get_children():
+		(c as Control).custom_minimum_size = Vector2(maxf(90.0, w), 0.0)
 
 func set_power(power: float, shown: bool) -> void:
 	_power_panel.visible = shown
@@ -388,8 +450,9 @@ func set_power(power: float, shown: bool) -> void:
 		return
 	_power_bar.value = power
 	_power_label.text = "%d%%" % int(round(power * 100.0))
-	var col: Color = UIKit.GREEN.lerp(UIKit.GOLD, clampf(power * 2.0, 0.0, 1.0)).lerp(UIKit.RED, clampf(power * 2.0 - 1.0, 0.0, 1.0))
-	_power_bar.add_theme_stylebox_override("fill", UIKit.box(col, 8))
+	var col: Color = power_color(power)
+	_power_fill.bg_color = col
+	_power_fill.shadow_color = Color(col, 0.35 + 0.35 * power)
 
 func set_hint(text: String) -> void:
 	_hint.text = text
@@ -462,6 +525,9 @@ func _process(_delta: float) -> void:
 	# Die obere Leiste waechst, wenn Spieler dazukommen -> Meldung bleibt darunter
 	if _toast != null and is_instance_valid(_toast):
 		_place_toast()
+	# Fenstergroesse geaendert (Drehen, Safe-Area) -> Chips neu verteilen
+	if _board != null and _top_box.size.x > 1.0 and not is_equal_approx(_top_box.size.x, _board_w):
+		_layout_board()
 
 # ================================================================ Overlays
 

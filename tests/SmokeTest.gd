@@ -861,6 +861,11 @@ func _stage_match() -> void:
 	check(topr.end.y < botr.position.y, "HUD oben und unten ueberlappen nicht")
 	check(m.hud._board.get_child_count() == 3 and m.hud._board.get_global_rect().position.y >= m.hud._info_title.get_global_rect().end.y,
 		"Rangliste unter der Bahn-Info (3 Chips)")
+	var chip_ys: Array = []
+	for c in m.hud._board.get_children():
+		chip_ys.append(roundi((c as Control).get_global_rect().position.y))
+	check(topr.size.y <= 120.0 and chip_ys.min() == chip_ys.max(), "Obere Leiste schmal: %.0f px, 3 Chips in einer Zeile" % topr.size.y)
+	check(m.hud._top_btn.get_global_rect().size.y >= 48.0 and m.hud._exit_btn.get_global_rect().size.y >= 48.0, "Knoepfe oben bleiben gut tippbar (>= 48 px)")
 	check(m.hud._mode_btn.get_global_rect().position.y > hvp.size.y * 0.5 and m.hud._spin_pad.get_global_rect().position.y > hvp.size.y * 0.5,
 		"Schlagart und Spin in der Daumenzone")
 	# HUD-Funktionen einmal durchlaufen
@@ -933,6 +938,19 @@ func _drag(index: int, pos: Vector2, rel: Vector2) -> void:
 
 func _stage_input() -> void:
 	print("[SMOKE] Stage: Touch-Eingabe")
+	# Kamera-Feder (kritisch gedaempft): weicher Start, kein Ueberschwingen, kommt an
+	var sx := Vector3.ZERO
+	var sv := Vector3.ZERO
+	var peak := 0.0
+	var first := 0.0
+	for i in 120:
+		var r: Array = CameraManager3D.spring_step(sx, sv, Vector3(1.0, 0.0, 0.0), 8.0, 1.0 / 60.0)
+		sx = r[0]
+		sv = r[1]
+		peak = maxf(peak, sx.x)
+		if i == 0:
+			first = sx.x
+	check(first < 0.05 and peak <= 1.0005 and sx.x > 0.99, "Spring-Arm-Kamera: weicher Start (%.3f), kein Ueberschwingen (%.4f), kommt an" % [first, peak])
 	var cfg: Dictionary = GameManager.make_bot_match("emerald", 3, 1)
 	cfg["courses"] = ["e1"]
 	var m: Match3D = await _run_match(cfg, false, 0.0)
@@ -990,7 +1008,20 @@ func _stage_input() -> void:
 		if rec.tag != null:
 			tag_count += 1
 			tag_alpha = maxf(tag_alpha, rec.tag.name_alpha())
-	check(BallTag.hide_names and tag_count > 0 and tag_alpha < 0.2, "Namensschilder blenden beim Zielen aus (Deckkraft %.2f)" % tag_alpha)
+	check(BallTag.hide_names and tag_count > 0 and tag_alpha < 0.01, "Namensschilder sind beim Zielen sofort komplett aus (Deckkraft %.2f)" % tag_alpha)
+	# Ziel-Kamera: naeher am Ball, engerer Blickwinkel, Hintergrund unscharf (nur beim Zielen)
+	for i in 40:
+		await _process_frames(1)
+		if m.rig.aim_blend() > 0.97:
+			break
+	check(m.rig.is_aiming() and m.rig.aim_blend() > 0.9 and m.rig.effective_distance() < m.rig.distance * 0.8 and m.rig.camera.fov < 54.0,
+		"Ziel-Kamera faehrt heran (Abstand %.1f statt %.1f m, Blickwinkel %.0f Grad)" % [m.rig.effective_distance(), m.rig.distance, m.rig.camera.fov])
+	var dof_far: float = m.rig.attributes.dof_blur_far_distance
+	var cam_to_ball: float = m.rig.camera.global_position.distance_to(ball.global_position)
+	check(m.rig.dof_amount() > 0.05 and dof_far > cam_to_ball, "Tiefenunschaerfe beim Zielen: scharf bis %.1f m (Ball %.1f m entfernt)" % [dof_far, cam_to_ball])
+	if m._preview_end != Vector3.INF:
+		check(dof_far >= m.rig.camera.global_position.distance_to(m._preview_end), "Ende der Punkt-Kette liegt im scharfen Bereich")
+	check(ball.has_contact_shadow(), "Weicher Kontaktschatten unter dem ruhenden Ball")
 	# Spin live: Seiten-Effet waehrend des Zielens verschiebt die Punkt-Kette
 	await _process_frames(4)
 	var end_before: Vector3 = m._preview_end
@@ -1004,9 +1035,12 @@ func _stage_input() -> void:
 	await _process_frames(2)
 	var end_after: Vector3 = m._preview_end
 	check(end_before != Vector3.INF and end_after != Vector3.INF and end_before.distance_to(end_after) > 0.05, "Spin live: Seiten-Effet verschiebt die Punkt-Kette (%.2f m)" % end_before.distance_to(end_after))
-	check(m._target_ring.visible or (m._dots.material_override as StandardMaterial3D).albedo_color.g < 0.5, "Zielkreis am Ende der Punkt-Kette (oder rote Kette = Aus)")
+	check(m._target_ring.visible or m._dots_out, "Zielkreis am Ende der Punkt-Kette (oder rote Kette = Aus)")
 	var knob: Node3D = m._arrow.get_node("Knob")
-	check(knob.position.z > 0.5 and (m._arrow.get_node("StrandL2") as Node3D).visible, "Gummiband gespannt (Knauf %.2f m hinter dem Ball, Straenge mit Knick)" % knob.position.z)
+	check(knob.position.z > 0.5 and m._band_mesh.visible and m._band_im.get_surface_count() == 1,
+		"Gummiband gespannt (Griff %.2f m hinter dem Ball, leuchtendes Band gebaut)" % knob.position.z)
+	var band_col: Color = (m._band_mat.get_shader_parameter("core_color") as Color)
+	check(band_col.r > 0.9 and band_col.b < 0.3, "Gummiband-Kern leuchtet neon-orange/rot (%s)" % band_col)
 	m.hud._spin_pad.set_value(Vector2.ZERO)
 	await _process_frames(6)
 	_touch(0, screen + Vector2(0.0, 320.0), false)
@@ -1017,7 +1051,12 @@ func _stage_input() -> void:
 	check(is_equal_approx(((ball.get_child(0) as CollisionShape3D).shape as SphereShape3D).radius, Ball3D.RADIUS), "Kollisionskugel bleibt unverformt")
 	await _process_frames(3)
 	check(ball.strokes == 1 and ball.state == Ball3D.State.MOVING, "Loslassen fuehrt den Schlag aus")
+	check(not m.rig.is_aiming(), "Nach dem Schlag verlaesst die Kamera den Ziel-Modus")
 	await _wait_ball(ball, 16.0)
+	check(m.rig.aim_blend() < 0.05 and m.rig.dof_amount() == 0.0, "Ziel-Zoom und Unschaerfe nach dem Schlag wieder aus")
+	await _process_frames(45)
+	var follow_err: float = absf(m.rig.camera.global_position.distance_to(ball.global_position) - m.rig.effective_distance())
+	check(follow_err < 3.0, "Kamera gleitet dem Ball nach und steht wieder im Abstand (Abweichung %.2f m)" % follow_err)
 	var fwd: Vector3 = -m.course.tee.basis.z
 	var moved: Vector3 = ball.global_position - m.course.tee.origin
 	check(moved.dot(fwd) > 3.0, "Slingshot: nach unten ziehen schiesst nach vorn (%.1f m)" % moved.dot(fwd))

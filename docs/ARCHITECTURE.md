@@ -28,7 +28,7 @@ Bälle, Trails, Loch-Explosionen, Avatar-Rahmen, Truhen, Ligen, Trophäen-Pfad, 
 MainMenuView  --GameManager.start_match(config)-->  Game.tscn (Match3D)
 Match3D: pro Bahn  CourseBuilder3D.build(id) -> Course3D
          Ball3D je Spieler (lokal + Bots), RemoteBall3D für Online-Gegner
-         CameraRig3D, GameHUD, ShotSim (Vorschau + Bot-KI)
+         CameraManager3D, GameHUD, ShotSim (Vorschau + Bot-KI)
 Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_menu()
 ```
 
