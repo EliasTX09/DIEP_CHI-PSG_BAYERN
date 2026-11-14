@@ -66,6 +66,7 @@ var _trophy_label: Label
 var _coin_pill: PanelContainer
 var _gem_pill: PanelContainer
 var _status_label: Label
+var _account_btn: Button
 var _arena_panel: PanelContainer
 var _arena_name: Label
 var _arena_index: Label
@@ -535,6 +536,12 @@ func _build_home(parent: Control) -> void:
 	_home.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(_home)
 	_build_arena_banner(_home)
+	# Account verknuepfen / anmelden: oeffnet das Web-Portal (GitHub Pages) und gleich die Profil-Seite mit dem Code-Feld
+	_account_btn = UIKit.button("Account verknüpfen / Anmelden", UIKit.PURPLE, _on_account_pressed, Vector2(0, 54), 20)
+	_account_btn.name = "AccountButton"
+	_home.add_child(_account_btn)
+	AuthManager.auth_changed.connect(_refresh_account_button)
+	_refresh_account_button()
 	_showcase_slot = Control.new()
 	_showcase_slot.name = "ShowcaseSlot"
 	_showcase_slot.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -549,6 +556,20 @@ func _build_home(parent: Control) -> void:
 	refresh_showcase()
 	_build_play_area(_home)
 	_build_chest_row(_home)
+
+func _on_account_pressed() -> void:
+	var opened: bool = AuthManager.open_portal()
+	pages.open("settings")
+	if not opened:
+		UIKit.toast(ui, "Keine Web-Portal-Adresse eingetragen (config/backend.cfg, Abschnitt [web]).")
+	else:
+		UIKit.toast(ui, "Im Browser anmelden, dort einen Spiel-Code erzeugen und hier unter „Spiel-Code“ einlösen.")
+
+## Nur sichtbar, solange kein Web-Account verknuepft ist.
+func _refresh_account_button() -> void:
+	if _account_btn == null or not is_instance_valid(_account_btn):
+		return
+	_account_btn.visible = not (AuthManager.is_online() and not AuthManager.is_anonymous)
 
 func _build_arena_banner(parent: Control) -> void:
 	_arena_panel = UIKit.panel(Color(0.03, 0.05, 0.12, 0.78), 22, Color(1, 1, 1, 0.3), 3)
@@ -779,7 +800,13 @@ func _refresh_arena() -> void:
 	_arena_name.text = str(w["name"]).to_upper()
 	_arena_name.add_theme_color_override("font_color", col.lightened(0.35))
 	_arena_desc.text = str(w.get("desc", ""))
-	_arena_info.text = "%d Bahnen · im Bild: %s" % [(w["courses"] as Array).size(), CourseBuilder3D.course_title(str(BACKDROPS[str(w["id"])]))]
+	var wid: String = str(w["id"])
+	if GameManager.world_unlocked(wid):
+		_arena_info.text = "%d Bahnen · %d Bahn-Trophäen · im Bild: %s" % [(w["courses"] as Array).size(), GameManager.world_trophies(wid),
+			CourseBuilder3D.course_title(str(BACKDROPS[wid]))]
+	else:
+		_arena_info.text = "GESPERRT · öffnet ab %d Trophäen (beste: %d)" % [Catalog.world_unlock(wid), int(GameManager.data.get("best_trophies", 0))]
+		col = col.lerp(UIKit.GREY, 0.55)
 	_arena_panel.add_theme_stylebox_override("panel", UIKit.box(Color(0.03, 0.05, 0.12, 0.78), 22, col, 3))
 	refresh_play_info()
 
@@ -791,7 +818,7 @@ func refresh_play_info() -> void:
 	if NetworkManager.is_online():
 		_mode_button.text = "Online · %s · %d Runden · ändern" % [w, MenuPages.sel_rounds]
 	else:
-		_mode_button.text = "%d Bots · %s · %d Runden · ändern" % [MenuPages.sel_bots, w, MenuPages.sel_rounds]
+		_mode_button.text = "%d Bots · %s · %d Runden · ändern" % [GameManager.auto_bot_count(), w, MenuPages.sel_rounds]
 
 func _refresh_badges() -> void:
 	if _nav_badges.is_empty():
@@ -872,11 +899,13 @@ func _on_inventory_changed() -> void:
 
 ## SPIELEN: online ein Schnellspiel, sonst sofort ein Bot-Match mit den gewaehlten Einstellungen.
 func _quick_play() -> void:
+	if not MenuPages.world_playable(MenuPages.sel_world, ui):
+		return
 	if NetworkManager.is_online():
 		NetworkManager.quick_match(MenuPages.sel_world, MenuPages.sel_rounds)
 		pages.open("lobby")
 		return
-	NetworkManager.start_bot_match(MenuPages.sel_world, MenuPages.sel_rounds, MenuPages.sel_bots)
+	NetworkManager.start_bot_match(MenuPages.sel_world, MenuPages.sel_rounds, 0)
 
 func _on_chest_pressed(slot: int) -> void:
 	match GameManager.chest_state(slot):

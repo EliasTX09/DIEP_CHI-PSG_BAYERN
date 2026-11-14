@@ -68,16 +68,33 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Steg) und Landezone (`Gadgets.LandingZone`: fängt den Ball weich ab). Ohne Abkürzung: e1 (gerade Einsteiger-Bahn) und
   der Golden Shot. Hindernisse auf der Bahn: Bach mit Holzsteg (`Gadgets.Creek`), Rough (`Gadgets.RoughZone`),
   Baumstämme und Felsbrocken (`Obstacles.log_obstacle/boulder`), Lianen-Bögen (Deko).
+  **Natur am Bahnrand** (`CourseBuilder3D._edge_nature`, nach dem Gelände, immer gebaut, Seed aus Bahn-ID): auf
+  geraden Stücken mit Bande stehen Randbäume (`Obstacles.edge_tree`), mindestens 40 % davon mit einem dicken Ast quer
+  über die Bahn (Kollision: Stamm-Zylinder + zwei Ast-Kapseln, Unterkante 2,55 m über dem Belag → rollende Bälle passen
+  drunter durch, hohe Schläge prallen ab), dazu Wurzeln (`Obstacles.root_obstacle`, flache Kapsel, ragt 0,6–0,95 m in
+  die Bahn) und Randfelsen. Frei bleiben Abschlag, Grün, Abkürzung (Öffnung, Tor, Flug), Flug-Korridore, Gadgets und
+  Hindernisse. Laub, Lianen (`Motion.swinger`), Grasbüschel und lose Steine sind reine Optik. Neon-Welt und Golden
+  Shot haben keine Rand-Natur. Der Smoke-Test prüft Quote, Höhe (Ball-Kugel passt drunter durch) und Kollision der Äste.
 - `Course3D` – Tee-Transform, Loch-Position, Par, Mittellinie (`path_points`), Gadgets, Kill-Höhe, Kollisions-Körper,
   Belag-Proben, Flug-Korridore, Gelände (`terrain`) und Abkürzung (`shortcut`).
 - `Terrain3D` – Höhenfeld (2,5-m-Raster, 80 m Rand) um die Bahn: Abstandsfeld zur Bahn (Chamfer), flacher Randstreifen
   knapp unter dem Belag, Böschungen, Felsterrassen (Klippen), Bergrücken, Schluchten unter Korridoren und Stücken ohne
   Bande, Küstenseite (Piratenbucht). Hängt nur von der Bahn-Geometrie und einem festen Seed ab (für alle Spieler gleich).
   Der Smoke-Test prüft, dass es auf allen 16 Bahnen überall unter dem Belag liegt.
-- `WorldTheme` – Materialien, Himmel, Sonne mit weichen Schatten, Tiefen- und Talnebel, Bloom; kleidet die Bahn ein:
-  Gelände-Mesh (`landscape.gdshader`: Rough, Wiese mit Farbverlauf, Fels an Steilhängen, Schnee, Ufer), Bergkranz,
-  Wald (`Flora`: Tannen, Laubbäume, Palmen, tote Bäume als MultiMesh), Felsen, Wasserfall-Kaskade bzw. Lavastrom,
-  Neon-Hochhäuser, Piratenschiff in der Bucht. Kameras (Spiel, Menü, Screenshots) bleiben über dem Gelände.
+- `WorldTheme` – Materialien, Himmel, Sonne mit weichen Schatten (Filter „Soft High“, überblendete Kaskaden),
+  Tiefen- und Talnebel, Bloom; kleidet die Bahn ein: Gelände-Mesh (`landscape.gdshader`: Rough, Wiese mit Farbverlauf,
+  Fels an Steilhängen, Schnee, Ufer), Bergkranz, Wald, Felsen mit Moos, bemooste Säulenhallen-Ruinen, Grasbüschel und
+  Steine am Rand, Wasserfall-Kaskade bzw. Lavastrom, Neon-Hochhäuser, Piratenschiff in der Bucht. Kameras (Spiel,
+  Menü, Screenshots) bleiben über dem Gelände.
+- `Flora` – alle Natur-Modelle als ein Mesh mit Vertex-Farben (MultiMesh-tauglich): Laubbaum = dicker Stamm mit
+  Wurzelansatz + Äste + 3–5 klumpige, überlappende Kronen-Ellipsoide (Farbverlauf unten→oben, eingebackener
+  Kronen-Schatten), Tanne = 4–5 gestapelte Nadel-Klumpen, Palme, toter Baum, Wurzel, Grasbüschel, Säule, Block,
+  Architrav, Eisberg; je Baumart 2–3 Varianten und eine sparsame Fern-Version. Shader `flora.gdshader`:
+  Vertex-Farbe a = Materialart (Laub/Rinde/Stein), Rinden-Furchen, Blatt-Klumpen und Stein-Körnung als Bump-Map
+  ohne Tangenten, Wind (Wiegen + Flattern), Durchscheinen des Laubs, Moos auf Stein-Oberseiten.
+- **Renderer-Grenzen:** Der Mobile-Renderer unterstützt laut Godot-Doku **kein SSAO und keinen volumetrischen Nebel**
+  (nur Forward+). Ersatz: eingebackener Kronen-Schatten (Flora), Kontaktschatten an den Banden (`grass_fairway`,
+  UV2 aus `TrackKit`), Dellen-AO im Ball-Shader, Tiefen- und Höhennebel des Environments.
 
 ## Hauptmenü
 - `MainMenuView` (`scenes/MainMenuView.tscn`, `scripts/ui/MainMenu.gd`) – Hochformat, einhändig bedienbar:
@@ -95,13 +112,39 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 - `Preview3D` – kleine 3D-Vorschau in einem eigenen `SubViewport` (eigene Welt): Bälle und Schläger als einmal
   gerenderte Bilder, Trails und das Schläger-Detail live.
 
+## Ball-Optik
+- `BallFX.make_ball`: Kugel mit 64 Segmenten / 32 Ringen. Standard- und Gold-Ball nutzen `golfball_dimples.gdshader`
+  (≈330 Dellen aus einem fast regelmäßigen Punktgitter auf der Kugel als prozedurale Normalen, Dellen-AO,
+  Klarlack-Schicht, Detail blendet mit der Entfernung aus).
+- `Ball3D._update_visual`: Squash & Stretch als gedämpfte Feder (Abschlag streckt in Flugrichtung, Aufprall staucht
+  entlang der Normale) und Rollen der Optik; nur das Mesh wird verformt, die Kollisionskugel nie.
+- Harter Aufprall (> 5,5 m/s) → Signal `impacted` → `BallFX.impact_dust` (Staubwolke) + kurzes Kamerawackeln beim
+  eigenen Ball.
+
 ## Zielen
 - Am Ball ziehen = Gummiband: ein Keil mit zwei Strängen spannt sich vom Ball **nach hinten** Richtung Finger,
-  Länge und Farbe zeigen die Kraft. Loslassen schießt in die Gegenrichtung.
+  Länge und Farbe zeigen die Kraft. Loslassen schießt in die Gegenrichtung. Der Knauf hängt an einer gedämpften Feder
+  (`Match3D._update_band`, jedes Bild): er schwingt nach, die Stränge knicken durch, solange das Band nicht ganz
+  gespannt ist, und beim Loslassen schnellt das Band zurück. Ändert sich Spin oder Schlagart während des Zielens,
+  wird die Vorschau sofort neu gerechnet; am Ende der Kette sitzt ein Zielkreis.
 - Nach vorn eine **Punkt-Kette auf dem Boden** aus der echten Simulation (`ShotSim`, inkl. Banden, Rampen, Gadgets):
   Rollen und Aufsetzen als helle Punkte, der Flugabschnitt als Schatten-Punkte senkrecht darunter. Die Länge der Kette
   kommt vom **Guide**-Wert des Schlägers, die Größe des Landerings von der **Accuracy** (mögliche Streuung).
   Endet der Schlag im Aus, wird die Kette rot.
+
+## Trophäen, Arenen, adaptive Bots
+- Gesamt-Trophäen (Ligen, Cloud-Profil) bleiben eine Zahl. `GameManager.split_course_trophies` teilt das Match-Delta
+  nach der Platzierung auf jeder gespielten Bahn auf (`summary.course_ranks` aus `Match3D._end_hole`); die Summe ist
+  exakt das Delta. Gespeichert in `course_trophies` im Spielstand (kein neues SQL-Feld).
+- Arenen öffnen ab `Catalog.WORLDS[].unlock` (0 / 150 / 400 / 800) – gemessen an `best_trophies`, damit sich nichts
+  wieder sperrt und bestehende Spielstände nichts verlieren. Gesperrt ist nur das Starten (Bots, Schnellspiel, eigene
+  Lobby); Einladungen in Lobbys anderer bleiben möglich. Die Welttour bei vielen Runden läuft offline nur durch offene
+  Arenen.
+- Keine Bot-Auswahl mehr: `GameManager.auto_bot_count()` (2–4 je nach Trophäen). `SmartBotController` ist eine dünne
+  Steuerschicht über `BotBrain`: Bahn-Trophäen des Spielers → Können-Bonus (bis +0,15) und Wahrscheinlichkeit, mit
+  der ein Bot pro Schlag die Abkürzung in Betracht zieht (0 unter 20, 1 ab 160 Bahn-Trophäen). Ist sie für einen
+  Schlag nicht erlaubt, wertet `BotBrain._score` jede Vorhersage mit Schanzen-Flug (`ShotSim.result.launched`) wie
+  einen Fehlschlag.
 
 ## Battle Pass
 - Kostenlos, Saisons zu 28 Tagen ab 05.01.2026 (`Catalog.pass_season_at`), 30 Stufen à 150 XP (`Catalog.PASS_TIERS`).
@@ -114,8 +157,12 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 - `AuthManager` ist der einzige Besitzer von `user_id`, Access-/Refresh-Token und E-Mail und führt alle
   Supabase-HTTP-Aufrufe aus (`request()`, erneuert die Session bei 401 einmal). `NetworkManager` liest diese Werte
   nur über Getter. Signale: `auth_changed`, `status_changed`, `account_changing` (vor einem Wechsel → Lobby verlassen).
-- Session-Speicher: nur das Refresh-Token, in `user://auth.json`, verschlüsselt mit einem geräte­bezogenen Schlüssel
-  (Verschleierung). Alte `session.json` wird übernommen und gelöscht; eine unlesbare Datei gilt als „keine Session“.
+- Session-Speicher: nur das Refresh-Token (nie E-Mail oder Passwort), in `user://auth.save`, verschlüsselt mit einem
+  geräte­bezogenen Schlüssel (Verschleierung). Alte `session.json` wird übernommen und gelöscht, ein altes `auth.json`
+  wird umbenannt; eine unlesbare Datei gilt als „keine Session“.
+- Startbildschirm: Knopf „Account verknüpfen / Anmelden“ (nur ohne verknüpften Web-Account) öffnet das Portal im
+  Browser und die Profil-Seite mit dem Feld für den Spiel-Code.
+- Lobby: Freunde ankreuzen und mit einem Knopf alle gleichzeitig einladen (bzw. „Alle online“), begrenzt auf freie Plätze.
 - Web-Code-Ablauf: Portal → eigener Passwort-Login nur für das Spiel → `create_game_link_code(refresh_token)` →
   Code (8 Zeichen, 10 min, einmalig) → Spiel `redeem_game_link_code(code)` (als anon) → Refresh-Token →
   `grant_type=refresh_token` → eigene Spiel-Session. Die Tabelle `game_link_codes` hat RLS ohne Policies.

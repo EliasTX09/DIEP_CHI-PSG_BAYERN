@@ -49,6 +49,8 @@ var terrain: Terrain3D = null
 var blockers: PackedVector3Array = PackedVector3Array()
 ## Abkuerzung (leer = keine): gate, dir, lane_start, lip, landing, elev, remaining (Hauptweg ab Tor), direct (Steg + Flug)
 var shortcut: Dictionary = {}
+## Natur am Bahnrand mit Kollision: {kind: "tree" | "root" | "rock", pos, branch (bool), clearance (m ueber dem Belag)}
+var edge_items: Array[Dictionary] = []
 
 # Schatten-Physikraum fuer Vorhersagen mit beweglichen Teilen (statische Kopien aller Bahn-Kollisionen)
 var _shadow_space: RID = RID()

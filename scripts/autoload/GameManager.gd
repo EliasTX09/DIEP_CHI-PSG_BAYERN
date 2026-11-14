@@ -62,6 +62,9 @@ func default_save() -> Dictionary:
 		"gems": 30,
 		"trophies": 0,
 		"best_trophies": 0,
+		# Trophaeen je Bahn: Aufschluesselung der Match-Trophaeen nach Leistung auf der jeweiligen Bahn
+		# (Summe folgt der Gesamtzahl; steuert, wie clever die Bots dort spielen)
+		"course_trophies": {},
 		"clubs": {Catalog.START_CLUB: {"level": 1, "cards": 0}},
 		"equipped": {"club": Catalog.START_CLUB, "ball": "standard", "trail": "none", "explosion": "confetti"},
 		"owned": {"ball": ["standard"], "trail": ["none"], "explosion": ["confetti"], "frame": ["bronze"]},
@@ -107,7 +110,7 @@ func _merge_into(target: Dictionary, src: Dictionary) -> void:
 		var tv: Variant = target[k]
 		var sv: Variant = src[k]
 		if tv is Dictionary and sv is Dictionary:
-			if k == "clubs":
+			if k == "clubs" or k == "course_trophies":
 				target[k] = (sv as Dictionary).duplicate(true)
 			else:
 				_merge_into(tv, sv)
@@ -123,6 +126,13 @@ func _sanitize() -> void:
 	data["gems"] = maxi(0, int(data.get("gems", 0)))
 	data["trophies"] = maxi(0, int(data.get("trophies", 0)))
 	data["best_trophies"] = maxi(int(data["trophies"]), int(data.get("best_trophies", 0)))
+	var ct: Dictionary = data.get("course_trophies", {}) if data.get("course_trophies", {}) is Dictionary else {}
+	var ct_clean := {}
+	var known: Array[String] = Catalog.all_course_ids()
+	for cid in ct.keys():
+		if known.has(str(cid)):
+			ct_clean[str(cid)] = maxi(0, int(ct[cid]))
+	data["course_trophies"] = ct_clean
 	data["avatar_color"] = clampi(int(data.get("avatar_color", 0)), 0, Catalog.AVATAR_COLORS.size() - 1)
 	var clubs: Dictionary = data["clubs"]
 	var clean := {}
@@ -397,6 +407,62 @@ func trophies() -> int:
 
 func league() -> Dictionary:
 	return Catalog.league_for(trophies())
+
+## Trophaeen des Spielers auf einer Bahn (0, wenn dort noch nie gespielt).
+func course_trophies(course_id: String) -> int:
+	return int((data.get("course_trophies", {}) as Dictionary).get(course_id, 0))
+
+## Summe der Bahn-Trophaeen einer Welt.
+func world_trophies(world_id: String) -> int:
+	var sum := 0
+	for cid in (Catalog.world_by_id(world_id)["courses"] as Array):
+		sum += course_trophies(str(cid))
+	return sum
+
+## Arena freigeschaltet? Massgeblich ist die BESTE Trophaeenzahl -> nichts sperrt sich wieder zu.
+func world_unlocked(world_id: String) -> bool:
+	return int(data.get("best_trophies", 0)) >= Catalog.world_unlock(world_id)
+
+func unlocked_worlds() -> Array[String]:
+	var out: Array[String] = []
+	for wid in Catalog.world_ids():
+		if world_unlocked(wid):
+			out.append(wid)
+	return out
+
+## Verteilt die Match-Trophaeen (delta) auf die gespielten Bahnen: bei Gewinn bekommen Bahnen mit besserer
+## Platzierung mehr, bei Verlust verlieren Bahnen mit schlechterer Platzierung mehr. Die Summe ist genau delta.
+## course_ranks: [{course, rank}] (Platz des Spielers auf der jeweiligen Bahn), count = Spielerzahl.
+static func split_course_trophies(delta: int, course_ranks: Array, count: int) -> Dictionary:
+	var out := {}
+	if delta == 0 or course_ranks.is_empty():
+		return out
+	var weights: Array[float] = []
+	var wsum := 0.0
+	for e: Dictionary in course_ranks:
+		var r: int = clampi(int(e.get("rank", 1)), 1, maxi(1, count))
+		var w: float = float(count - r + 1) if delta > 0 else float(r)
+		weights.append(w)
+		wsum += w
+	var given := 0
+	var best_i := 0
+	for i in course_ranks.size():
+		var share: int = int(floor(float(delta) * weights[i] / wsum)) if delta > 0 else -int(floor(float(-delta) * weights[i] / wsum))
+		var cid: String = str((course_ranks[i] as Dictionary)["course"])
+		out[cid] = int(out.get(cid, 0)) + share
+		given += share
+		if weights[i] > weights[best_i]:
+			best_i = i
+	# Rundungsrest an die Bahn mit dem groessten Gewicht
+	var rest_cid: String = str((course_ranks[best_i] as Dictionary)["course"])
+	out[rest_cid] = int(out.get(rest_cid, 0)) + (delta - given)
+	return out
+
+func _apply_course_trophies(split: Dictionary) -> void:
+	var ct: Dictionary = data["course_trophies"]
+	for cid in split.keys():
+		if Catalog.all_course_ids().has(str(cid)):
+			ct[str(cid)] = maxi(0, int(ct.get(str(cid), 0)) + int(split[cid]))
 
 func add_trophies(delta: int) -> void:
 	var t: int = maxi(0, trophies() + delta)
@@ -998,15 +1064,26 @@ func make_match_config(mode: String, world_id: String, rounds: int, players: Arr
 		"online": online,
 	}
 
-## Offline-Match gegen Bots.
-func make_bot_match(world_id: String, rounds: int, bot_count: int) -> Dictionary:
+## Anzahl Bots im Offline-Match (keine manuelle Auswahl): waechst mit den Trophaeen von 2 auf 4.
+func auto_bot_count() -> int:
+	return clampi(2 + int(trophies() / 300), 2, 4)
+
+## Offline-Match gegen Bots. bot_count <= 0 = automatisch. Die Welt-Tour bei vielen Runden fuehrt nur
+## durch freigeschaltete Arenen.
+func make_bot_match(world_id: String, rounds: int, bot_count: int = 0) -> Dictionary:
+	if bot_count <= 0:
+		bot_count = auto_bot_count()
 	var players: Array = [local_player_entry()]
 	var names: Array = Catalog.BOT_NAMES.duplicate()
 	names.shuffle()
 	var tier: float = clampf(float(trophies()) / 1500.0, 0.0, 1.0)
 	for i in clampi(bot_count, 1, Catalog.MAX_PLAYERS - 1):
 		players.append(make_bot_entry("bot%d" % i, str(names[i % names.size()]), i + 1, tier))
-	return make_match_config("quick", world_id, rounds, players, int(_rng.randi() & 0x7fffffff), false)
+	var cfg: Dictionary = make_match_config("quick", world_id, rounds, players, int(_rng.randi() & 0x7fffffff), false)
+	if world_unlocked(world_id):
+		cfg["courses"] = Catalog.build_course_list(world_id, rounds, int(cfg["seed"]), unlocked_worlds())
+		cfg["rounds"] = (cfg["courses"] as Array).size()
+	return cfg
 
 func make_bot_entry(id: String, bot_name: String, color_index: int, tier: float) -> Dictionary:
 	var balls: Array = Catalog.BALL_ORDER.duplicate()
@@ -1067,6 +1144,10 @@ func finish_match(summary: Dictionary) -> Dictionary:
 		if trophies() + delta < 0:
 			delta = -trophies()
 		rewards["trophies"] = delta
+		var split: Dictionary = split_course_trophies(delta, summary.get("course_ranks", []), count)
+		if not split.is_empty():
+			rewards["course_trophies"] = split
+			_apply_course_trophies(split)
 		var base: int = Catalog.coins_for_rank(rank)
 		var style_coins: int = int(float(style) * Catalog.STYLE_TO_COINS)
 		var bonus: Dictionary = Catalog.BALLS[equipped("ball")]["bonus"] if Catalog.BALLS.has(equipped("ball")) else {}

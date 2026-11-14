@@ -12,10 +12,11 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 > Die `index.html` im Repo-Root gehört nicht zum Spiel.
 
 > **Umbau-Stand:** Hochformat-Hauptmenü (Arena-Auswahl mit 3D-Hintergrund, Tab-Leiste Spielen · Tasche · Pass ·
-> Freunde · Shop), Hochformat-HUD, kostenloser Battle Pass (28-Tage-Saisons, 30 Stufen), Bahnen in Berg-Tälern
-> statt im offenen Wasser, eine riskante Abkürzung pro Bahn, Hindernisse auf der Bahn (Bach, Rough, Baumstämme,
-> Felsen) und die neue Ziel-Vorschau (Gummiband + Punkt-Kette) sind fertig.
-> Noch offen: Flyover-Vorschau, Trophäen pro Bahn, adaptive Bots, Clans.
+> Freunde · Shop, Account-Knopf), Hochformat-HUD, kostenloser Battle Pass (28-Tage-Saisons, 30 Stufen), Bahnen in
+> Berg-Tälern, eine riskante Abkürzung pro Bahn, Hindernisse auf der Bahn, Randbäume mit Ästen über der Bahn,
+> Wurzeln und Felsen, neue Bäume (Stamm + Kronen-Cluster), Ruinen, Golfball mit Dellen, Squash & Stretch,
+> federndes Gummiband, Trophäen pro Bahn, Arena-Sperren, adaptive Bots und Mehrfach-Einladungen sind fertig.
+> Noch offen: Flyover-Vorschau, Eis-Welt, Clans.
 
 ---
 
@@ -99,11 +100,13 @@ Das Portal liegt in [`webapp/`](webapp) – reines HTML/CSS/JavaScript ohne exte
 3. **Actions → „Web-Portal veröffentlichen“ → Run workflow** (läuft bewusst nur manuell und vom Standard-Branch).
 
 **So verbindet man das Spiel mit dem Web-Account:**
-1. Im Spiel: **Profil → „Account verknüpfen / Registrieren“** öffnet das Portal im Browser.
+1. Im Spiel: **„Account verknüpfen / Anmelden“** auf dem Startbildschirm (oder Profil → „Account verknüpfen /
+   Registrieren“) öffnet das Portal im Browser.
 2. Dort registrieren bzw. einloggen, Profilbild hochladen, Freunde verwalten.
 3. **„Spiel-Code erzeugen“** (Passwort bestätigen) → 8-stelliger Code, 10 Minuten und nur einmal gültig.
 4. Code im Spiel unter **Profil → Spiel-Code → Einlösen** eingeben. Das Spiel erhält dabei eine **eigene** Anmeldung
-   (die Browser-Sitzung wird nie weitergegeben) und speichert sie verschleiert in `user://auth.json`.
+   (die Browser-Sitzung wird nie weitergegeben) und speichert nur das Refresh-Token verschleiert in `user://auth.save`
+   (nie E-Mail oder Passwort).
 5. Hatte das Spiel schon Fortschritt als Gast und der Web-Account ebenfalls, wird der Stand des Accounts geladen
    und der Gast-Stand als Sicherung (`user://save_backup_*.json`) abgelegt – es geht nichts still verloren.
    Ist der Web-Account neu, übernimmt er den Gast-Fortschritt.
@@ -117,7 +120,7 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
 
 | Geste | Wirkung |
 |---|---|
-| Am Ball ziehen und loslassen | Schlag: nach hinten ziehen wie ein Gummiband (das Band spannt sich hinter dem Ball zum Finger), loslassen schießt nach vorn. Vorn zeigt eine Punkt-Kette auf dem Boden, wo der Ball aufkommt, abprallt und ausrollt (echte Simulation). Länge der Kette = Guide-Wert des Schlägers, Größe des Landerings = Accuracy |
+| Am Ball ziehen und loslassen | Schlag: nach hinten ziehen wie ein Gummiband (das Band federt und schwingt nach, beim Loslassen schnellt es zurück), loslassen schießt nach vorn. Vorn zeigt eine Punkt-Kette auf dem Boden, wo der Ball aufkommt, abprallt und ausrollt (echte Simulation, Spin wird live eingerechnet), am Ende ein Zielkreis. Länge der Kette = Guide-Wert des Schlägers, Größe des Landerings = Accuracy |
 | Ein Finger irgendwo sonst | Kamera 360° drehen und neigen |
 | Zwei Finger | Pinch-Zoom |
 | Auge-Button | Vogelperspektive |
@@ -139,12 +142,26 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
   Ball mit Schwung aufs Grün (bzw. ein späteres Fairway-Stück) schießt. Vom Steg gerollt = Schlucht = Aus, zu
   langsam = der Ball bleibt auf dem Steg; wer seitlich versetzt oder mit falschem Tempo aufs Pad kommt, landet versetzt.
 - **Hindernisse:** Bäche quer über die Bahn mit schmalem Holzsteg, tiefes Rough am Rand, Baumstämme und Felsbrocken,
-  Lianen-Bögen, Sandbunker.
+  Lianen-Bögen, Sandbunker. Am Bahnrand stehen Bäume, von denen mindestens 40 % einen dicken Ast quer über die Bahn
+  strecken (2,55 m hoch: gerollte Bälle passen drunter durch, hohe Chips prallen ab), knorrige Wurzeln und Felsen
+  ragen in die Bahn (echte Kollision, der Ball hüpft drüber oder prallt ab). Laub, Lianen, Grasbüschel und lose Steine
+  sind nur Optik.
+- **Grafik:** Bäume aus dickem Stamm mit Rinden-Struktur und 3–5 Kronen-Clustern (Wind, Durchscheinen),
+  bemooste Felsen und Säulen-Ruinen, Rasen mit Mäh-Streifen und Kontaktschatten an den Banden, Wasser mit
+  Gerstner-Wellen, Golfball mit ~330 Dellen und Klarlack, Squash & Stretch, Staubwolke + Kamerawackeln bei harten
+  Abprallern, weiche Schatten („Soft High“), 4× MSAA. SSAO und volumetrischer Nebel gibt es im Mobile-Renderer
+  nicht (siehe Ehrlicher Status).
+- **Arenen & Trophäen:** Arena 1 ist offen, die weiteren ab 150 / 400 / 800 Trophäen (beste erreichte Zahl).
+  Jede Bahn führt eigene Trophäen (Aufteilung der Match-Trophäen nach deiner Platzierung auf der Bahn).
+- **Bots:** keine manuelle Auswahl – 2 bis 4 Bots je nach Trophäen. Sie planen jeden Schlag mit der echten
+  Physik-Simulation; je mehr Trophäen du auf einer Bahn hast, desto genauer spielen sie dort und desto öfter
+  wagen sie die Abkürzung (unter 20 Bahn-Trophäen nie).
 - **Bahn-Baukasten:** Rampen, Steilkurven, Spiralen, Loopings, Brücken, Lücken, Boost-Pads, Windzonen, Teleporter,
   Kanonen, Laser-Tore, Sandbunker, Windmühlen, Pendel-Hämmer, Schiebeblöcke, fahrende Plattformen.
 - **Multiplayer:** Gast-Login per Geräte-ID, Verknüpfen mit E-Mail/Passwort, Spielername, Avatar-Farbe und -Rahmen,
   bis zu 6 Spieler gleichzeitig (alle schlagen parallel), Live-Rangliste, Emotes, Freunde (Suche per Name oder
-  Freundes-Code, Anfragen, Online-Status), private Lobby mit 4-stelligem Raum-Code oder Einladung, Welt und 3/5/9 Runden.
+  Freundes-Code, Anfragen, Online-Status), private Lobby mit 4-stelligem Raum-Code oder Einladung (mehrere Freunde
+  auf einmal ankreuzen), Welt und 3/5/9 Runden.
 - **Progression:** 16 Schläger (4 Kategorien × 4 Seltenheiten, Werte Power/Accuracy/Spin/Guide, Upgrades mit Coins + Karten),
   6 Bälle mit kleinen Boni, 6 Trails, 5 Loch-Explosionen mit Screen-Shake und Bass, 4 Truhen-Slots mit Timern
   (oder sofort per Gems), Trophäen, 5 Ligen und Trophäen-Pfad.
@@ -164,14 +181,15 @@ config/backend.cfg                Supabase-URL + anon-Key + Web-Portal-Adresse (
 .github/workflows/pages.yml           Web-Portal auf GitHub Pages veröffentlichen (manuell)
 webapp/                           Web-Portal: index.html, app.js, style.css, config.js
 scenes/                           MainMenuView.tscn, Game.tscn, GameHUD.tscn
-shaders/                          17 eigene Shader (Gelände, Gras/Grün, Sand, Wasser, Lava, Himmel, Neon, Portal, Ball-Skins …)
+shaders/                          19 eigene Shader (Gelände, Rasen grass_fairway, Flora, Sand, Wasser water_realistic, Lava,
+                                  Himmel, Neon, Portal, Golfball golfball_dimples, Ball-Skins …)
 scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen, Ligen),
                                   AuthManager (Login, Session, Web-Code), ProfileManager (Profilbild),
                                   NetworkManager (Profil-Sync, Freunde, Lobbys, Realtime), SoundManager (Synthesizer)
 scripts/data/Catalog.gd           Alle Spieldaten (Schläger, Bälle, Truhen, Ligen, Welten)
-scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D (inkl. Abkürzungs-Planung), TrackKit, Terrain3D (Gelände),
-                                  WorldTheme (Landschaft, Licht), Gadgets, Obstacles, ShotSim (Vorhersage), BotBrain (KI),
-                                  Match3D (Spielablauf)
+scripts/gameplay/                 Ball3D, CameraRig3D, CourseBuilder3D (inkl. Abkürzungs-Planung und Rand-Natur), TrackKit,
+                                  Terrain3D (Gelände), WorldTheme (Landschaft, Licht), Gadgets, Obstacles, ShotSim (Vorhersage),
+                                  BotBrain (Physik-KI), SmartBotController (adaptive Bots), Match3D (Spielablauf, Ziel-Vorschau)
 scripts/fx/                       Materialien, Partikel, Flora (Bäume, Felsen), Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons
 scripts/ui/                       MainMenu (MainMenuView), MenuPages, Preview3D, GameHUD, UIKit, UIIcon, UIAvatar
 tests/                            Smoke-Test, Schein-Supabase-Server, Screenshot-Runner, Physik-Fingerabdruck,
@@ -200,7 +218,14 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Gelände-Tal | in CI geprüft: liegt auf allen 16 Bahnen überall unter dem Belag, Schluchten unter allen Sprüngen/Flügen, Aus-Grenze greift neben der Bahn; Bau ~40 ms pro Bahn |
 | Abkürzungen | in CI geprüft auf allen 14 Bahnen: Vorhersage landet auf dem Grün, seitlich vom Steg = Aus, zu langsam = bleibt auf dem Steg; echter Ball auf e2, v3, n3, p1 landet wie vorhergesagt (≤ 0,1 m Abweichung). Die Ersparnis wird gemessen (11–101 m Weg), nicht pauschal „2 Schläge“ |
 | Hindernisse (Bach, Rough, Stamm, Fels) | in CI geprüft (Wirkung + Bots locht weiter auf allen 15 Bahnen ein) |
-| Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen) |
+| Randbäume mit Ästen über der Bahn, Wurzeln, Randfelsen | in CI geprüft: ≥ 30 % der Randbäume mit Ast (Ziel 40 %), Ball-Kugel passt rollend unter jedem Ast durch, Äste haben Kollision; Bots/Abkürzungen weiter geprüft |
+| Trophäen pro Bahn, Arena-Sperren | in CI geprüft (Aufteilung summiert exakt, Freischaltung nach bester Trophäenzahl, sperrt nicht wieder zu, Welttour nur durch offene Arenen) |
+| Adaptive Bots (SmartBotController) | in CI geprüft: ohne Bahn-Trophäen nimmt kein Bot die Abkürzung, mit vielen nutzen Bots sie |
+| Squash & Stretch, federndes Gummiband, Spin live in der Vorschau, Zielkreis | in CI geprüft (Logik); wie es sich anfühlt, nur auf dem Gerät beurteilbar |
+| Golfball-Dellen, Bäume, Ruinen, Rasen-, Wasser-, Flora-Shader | Shader kompilieren im CI-Rendering; Aussehen per Screenshot angesehen (Software-Rendering, nicht Handy-GPU) |
+| SSAO, volumetrischer Nebel | **nicht vorhanden** – der Mobile-Renderer unterstützt beides nicht (nur Forward+); Ersatz: eingebackene Schatten, Kontaktschatten, Tiefen-/Höhennebel |
+| Mehrfach-Einladung, Account-Knopf, `auth.save` | Oberfläche und Datei-Migration in CI geprüft; das Versenden gegen ein echtes Supabase-Projekt **nicht getestet** |
+| Spiel auf einem echten Android-Gerät | **nicht getestet** (Performance, Touch-Gefühl, Safe-Areas bitte selbst prüfen). Besonders die Bildrate: weiche Schatten „Soft High“, 4× MSAA, mehr schattenwerfende Bäume und die neuen Shader kosten GPU-Zeit – das kann die CI nicht messen |
 | APK-Export + Artifact `GolfBattle3D-apk` | in CI gebaut (Entwicklungs-Branch) |
 | GitHub-Release-Schritt | läuft nur auf `main` – **erst nach dem Merge geprüft** |
 

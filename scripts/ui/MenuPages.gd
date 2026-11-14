@@ -32,7 +32,10 @@ const STAT_COLORS := {"power": Color(1.0, 0.45, 0.25), "accuracy": Color(0.3, 0.
 ## Auswahl fuer das Spielen (bleibt waehrend der Sitzung erhalten)
 static var sel_world: String = "emerald"
 static var sel_rounds: int = 3
-static var sel_bots: int = 3
+## Angekreuzte Freunde fuer die Mehrfach-Einladung (friend_id -> true)
+var _invite_sel: Dictionary = {}
+var _invite_btn: Button = null
+var _invite_free: int = 0
 
 var menu: Node
 ## Fenster und Dialoge
@@ -354,12 +357,17 @@ static func _days_text(seconds: float) -> String:
 # ================================================================ Overlay: Spielen
 
 func _page_play(body: VBoxContainer) -> void:
-	_section(body, "Arena (danach geht es auf Welttour)")
+	_section(body, "Arena (danach geht es auf Welttour durch deine offenen Arenen)")
 	var worlds := _grid(body, 2)
 	for w in Catalog.WORLDS:
 		var id: String = w["id"]
 		var col: Color = w["color"]
-		var b := UIKit.button("%s\n%d Bahnen" % [str(w["name"]), (w["courses"] as Array).size()],
+		var open_w: bool = GameManager.world_unlocked(id)
+		var sub: String = ("%d Bahnen · %d Bahn-Trophäen" % [(w["courses"] as Array).size(), GameManager.world_trophies(id)]) if open_w \
+			else "GESPERRT · ab %d Trophäen" % Catalog.world_unlock(id)
+		if not open_w:
+			col = col.lerp(UIKit.GREY, 0.6)
+		var b := UIKit.button("%s\n%s" % [str(w["name"]), sub],
 			col.darkened(0.2) if id == sel_world else col.darkened(0.7), func() -> void:
 				if menu != null and menu.has_method("select_world"):
 					menu.call("select_world", id)
@@ -380,25 +388,23 @@ func _page_play(body: VBoxContainer) -> void:
 		sel_rounds = int(v)
 		_sync_menu()
 		refresh(), Vector2(0, 58), 24, true))
-	_section(body, "Bots (Offline-Modus)")
-	var bot_opts: Array = []
-	for n in range(1, Catalog.MAX_PLAYERS):
-		bot_opts.append([n, str(n)])
-	body.add_child(_choice_row(bot_opts, sel_bots, func(v: Variant) -> void:
-		sel_bots = int(v)
-		_sync_menu()
-		refresh(), Vector2(0, 58), 24, true))
+	# Keine manuelle Bot-Auswahl: Anzahl und Staerke passen sich an (SmartBotController)
+	body.add_child(UIKit.wrap_label("Bots passen sich an: %d Gegner, und je mehr Trophäen du auf einer Bahn hast, desto genauer spielen sie dort und desto öfter wagen sie die Abkürzung." % GameManager.auto_bot_count(), 18, UIKit.TEXT_DIM))
 	body.add_child(UIKit.spacer(true))
 	var bots := UIKit.button("GEGEN BOTS", UIKit.GREEN, func() -> void:
+		if not world_playable(sel_world, self):
+			return
 		close_all()
-		NetworkManager.start_bot_match(sel_world, sel_rounds, sel_bots), Vector2(0, 84), 30)
+		NetworkManager.start_bot_match(sel_world, sel_rounds, 0), Vector2(0, 84), 30)
 	bots.name = "StartBots"
 	body.add_child(bots)
 	body.add_child(UIKit.button("ONLINE-SCHNELLSPIEL", UIKit.BLUE, func() -> void:
+		if not world_playable(sel_world, self):
+			return
 		if not NetworkManager.is_online():
 			_toast("Offline – du spielst gegen Bots.")
 			close_all()
-			NetworkManager.start_bot_match(sel_world, sel_rounds, sel_bots)
+			NetworkManager.start_bot_match(sel_world, sel_rounds, 0)
 			return
 		NetworkManager.quick_match(sel_world, sel_rounds)
 		open("lobby"), Vector2(0, 76), 26))
@@ -406,6 +412,18 @@ func _page_play(body: VBoxContainer) -> void:
 	var hint: String = "Online: bis zu 6 Spieler gleichzeitig, freie Plätze werden mit Bots aufgefüllt." if NetworkManager.is_online() \
 		else "Ohne Server-Verbindung spielst du gegen Bots – Fortschritt und Belohnungen zählen trotzdem."
 	body.add_child(UIKit.wrap_label(hint, 18, UIKit.TEXT_DIM, true))
+
+## Arena spielbar? Sonst Hinweis, ab wie vielen Trophaeen sie aufgeht. (Beitreten zu Lobbys anderer bleibt erlaubt.)
+static func world_playable(world_id: String, notify_on: Object) -> bool:
+	if GameManager.world_unlocked(world_id):
+		return true
+	var msg: String = "%s ist noch gesperrt – ab %d Trophäen (deine beste Zahl: %d)." % [str(Catalog.world_by_id(world_id)["name"]),
+		Catalog.world_unlock(world_id), int(GameManager.data.get("best_trophies", 0))]
+	if notify_on is Control:
+		UIKit.toast(notify_on as Control, msg)
+	elif notify_on != null and notify_on.has_method("_toast"):
+		notify_on.call("_toast", msg)
+	return false
 
 func _sync_menu() -> void:
 	if menu != null and menu.has_method("refresh_play_info"):
@@ -419,12 +437,14 @@ func _page_lobby(body: VBoxContainer) -> void:
 		body.add_child(UIKit.spacer(true))
 		body.add_child(UIKit.button("Stattdessen gegen Bots spielen", UIKit.GREEN, func() -> void:
 			close_all()
-			NetworkManager.start_bot_match(sel_world, sel_rounds, sel_bots), Vector2(0, 76), 24))
+			if world_playable(sel_world, self):
+				NetworkManager.start_bot_match(sel_world, sel_rounds, 0), Vector2(0, 76), 24))
 		return
 	if not NetworkManager.in_lobby():
 		_section(body, "Neue Lobby mit Raum-Code (%s, %d Runden)" % [str(Catalog.world_by_id(sel_world)["name"]), sel_rounds])
 		body.add_child(UIKit.button("LOBBY ERSTELLEN", UIKit.GREEN, func() -> void:
-			NetworkManager.create_lobby(sel_world, sel_rounds, false), Vector2(0, 76), 26))
+			if world_playable(sel_world, self):
+				NetworkManager.create_lobby(sel_world, sel_rounds, false), Vector2(0, 76), 26))
 		_section(body, "Oder mit 4-stelligem Code beitreten")
 		var row := UIKit.hbox(10)
 		body.add_child(row)
@@ -500,20 +520,59 @@ func _page_lobby(body: VBoxContainer) -> void:
 	else:
 		body.add_child(UIKit.wrap_label("Arena: %s · %d Runden\nWarte, bis der Host das Match startet ..." % [
 			str(Catalog.world_by_id(str(lobby.get("world", "emerald")))["name"]), int(lobby.get("rounds", 3))], 21, UIKit.TEXT))
-	_section(body, "Freunde einladen")
-	var flist := _scroll(body, 150, 8)
-	var any_friend := false
+	# Mehrere Freunde gleichzeitig einladen: ankreuzen, dann eine Einladung an alle
+	var in_room: Array[String] = []
+	for p in NetworkManager.roster:
+		in_room.append(str((p as Dictionary).get("id", "")))
+	var free: int = maxi(0, Catalog.MAX_PLAYERS - maxi(1, NetworkManager.roster.size()))
+	_section(body, "Freunde einladen (mehrere gleichzeitig · %d Plätze frei)" % free)
+	var flist := _scroll(body, 170, 8)
+	var invitable: Array[String] = []
+	var online_ids: Array[String] = []
 	for f in NetworkManager.friends:
-		if str(f["state"]) != "accepted":
+		if str(f["state"]) != "accepted" or in_room.has(str(f["id"])):
 			continue
-		any_friend = true
+		var fid: String = str(f["id"])
+		invitable.append(fid)
+		if bool(f["online"]):
+			online_ids.append(fid)
 		var h := _row_panel(flist)
+		var cb := CheckBox.new()
+		cb.name = "InviteCheck_" + fid
+		cb.focus_mode = Control.FOCUS_NONE
+		cb.button_pressed = _invite_sel.has(fid)
+		cb.custom_minimum_size = Vector2(44, 44)
+		cb.toggled.connect(func(on: bool) -> void:
+			if on:
+				_invite_sel[fid] = true
+			else:
+				_invite_sel.erase(fid)
+			_update_invite_button())
+		h.add_child(cb)
 		h.add_child(UIKit.label("•", 30, UIKit.GREEN if bool(f["online"]) else UIKit.GREY))
 		h.add_child(_fill_label(str(f["name"]), 20))
-		var fid: String = str(f["id"])
-		h.add_child(UIKit.button("Einladen", UIKit.BLUE, func() -> void: _invite(fid), Vector2(130, 46), 18))
-	if not any_friend:
-		flist.add_child(UIKit.wrap_label("Noch keine Freunde – füge sie im Freunde-Tab hinzu.", 18, UIKit.TEXT_DIM))
+	# Auswahl auf aktuelle Freunde begrenzen
+	for k in _invite_sel.keys():
+		if not invitable.has(str(k)):
+			_invite_sel.erase(k)
+	if invitable.is_empty():
+		flist.add_child(UIKit.wrap_label("Keine Freunde zum Einladen – füge sie im Freunde-Tab hinzu.", 18, UIKit.TEXT_DIM))
+	else:
+		var irow := UIKit.hbox(8)
+		body.add_child(irow)
+		var sel_btn := UIKit.button("AUSGEWÄHLTE EINLADEN (%d)" % _invite_sel.size(), UIKit.BLUE, func() -> void:
+			_invite_many(_invite_sel.keys()), Vector2(0, 58), 19)
+		sel_btn.name = "InviteSelected"
+		sel_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_invite_btn = sel_btn
+		_invite_free = free
+		_update_invite_button()
+		irow.add_child(sel_btn)
+		var all_btn := UIKit.button("Alle online", UIKit.PURPLE, func() -> void:
+			_invite_many(online_ids), Vector2(170, 58), 19)
+		all_btn.name = "InviteAllOnline"
+		all_btn.disabled = online_ids.is_empty() or free == 0
+		irow.add_child(all_btn)
 	var actions := UIKit.hbox(10)
 	body.add_child(actions)
 	if host_me:
@@ -530,6 +589,32 @@ func _page_lobby(body: VBoxContainer) -> void:
 func _invite(friend_id: String) -> void:
 	var r: Dictionary = await NetworkManager.invite_friend(friend_id)
 	_toast(str(r["message"]), UIKit.GREEN.darkened(0.4) if bool(r["ok"]) else UIKit.RED.darkened(0.3))
+
+func _update_invite_button() -> void:
+	if _invite_btn == null or not is_instance_valid(_invite_btn):
+		return
+	_invite_btn.text = "AUSGEWÄHLTE EINLADEN (%d)" % _invite_sel.size()
+	_invite_btn.disabled = _invite_sel.is_empty() or _invite_free == 0
+
+## Laedt mehrere Freunde auf einmal ein (hoechstens so viele, wie Plaetze frei sind).
+func _invite_many(ids: Array) -> void:
+	var free: int = maxi(0, Catalog.MAX_PLAYERS - maxi(1, NetworkManager.roster.size()))
+	var sent := 0
+	var failed := 0
+	for i in mini(ids.size(), free):
+		var r: Dictionary = await NetworkManager.invite_friend(str(ids[i]))
+		if bool(r["ok"]):
+			sent += 1
+		else:
+			failed += 1
+	_invite_sel.clear()
+	var msg: String = "%d Einladung%s gesendet." % [sent, "" if sent == 1 else "en"]
+	if failed > 0:
+		msg += " %d fehlgeschlagen." % failed
+	if ids.size() > free:
+		msg += " Nur %d Plätze frei." % free
+	_toast(msg, UIKit.GREEN.darkened(0.4) if failed == 0 and sent > 0 else UIKit.RED.darkened(0.3))
+	refresh()
 
 # ================================================================ Tab Tasche: Schlaeger
 

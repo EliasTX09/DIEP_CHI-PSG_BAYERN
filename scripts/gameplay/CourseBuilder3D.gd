@@ -66,6 +66,10 @@ static func build(course_id: String, rng_seed: int = 0, with_environment: bool =
 		gm.set_shader_parameter("ring_strength", 0.5)
 	_flag(c, th)
 	th.dress_course(c, k.supports, with_environment)
+	# Natur mit Kollision am Bahnrand: immer (auch ohne Umgebung) und nur aus Bahn-ID + Seed, damit Handy,
+	# Mitspieler und Tests dieselbe Bahn spielen
+	if id != "daily":
+		_edge_nature(c, k, th, absi(hash(id + "|edge")) ^ rng_seed)
 	if with_environment:
 		th.build_environment(c)
 	return c
@@ -470,6 +474,181 @@ static func _rock(c: Course3D, k: TrackKit, th: WorldTheme, local: Vector3, radi
 	b.transform = k.frame(local)
 	c.add_child(b)
 	c.blockers.append(k.at(local))
+
+# ================================================================ Natur am Bahnrand
+
+## Max. Anzahl je Bahn
+const EDGE_TREES := 6
+const EDGE_ROOTS := 2
+const EDGE_ROCKS := 2
+## Mindestanteil der Randbaeume mit Ast ueber der Bahn
+const BRANCH_SHARE := 0.4
+## Unterkante der Aeste ueber dem Belag (rollende Baelle passen immer drunter durch)
+const BRANCH_CLEAR := 2.55
+
+## Randbaeume (ein Teil mit dickem Ast quer ueber die Bahn), Wurzeln und Felsen, die von der Bande in die Bahn ragen.
+## Platziert auf geraden Stuecken der Hauptbahn; frei bleiben Abschlag, Gruen, Abkuerzung (Oeffnung, Tor, Flug),
+## Fluege ueber Luecken/Kanonen (Korridore), Gadgets und bestehende Hindernisse.
+static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: int) -> void:
+	if th.id == "neon":
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = nature_seed
+	var kind: String = {"volcano": "dead", "pirate": "jungle"}.get(th.id, "broadleaf")
+	var moss: float = float(th.land.get("moss", 0.0))
+	var easy: bool = c.course_id == "e1"
+	var avoid: Array[Vector3] = []
+	for g in c.gadgets:
+		if g.get_parent() == c:
+			avoid.append(g.position)
+	for o in c.obstacles:
+		if o is Node3D:
+			avoid.append((o as Node3D).position)
+	for p in c.blockers:
+		avoid.append(p)
+	var trees := 0
+	var branches := 0
+	var roots := 0
+	var rocks := 0
+	var cycle: Array[String] = ["tree", "root", "tree", "rock", "tree", "tree", "root", "rock", "tree", "tree"]
+	var turn := 0
+	for st: Dictionary in k.straights:
+		var length: float = float(st["length"])
+		if length < 5.0:
+			continue
+		var xf: Transform3D = st["xf"]
+		var half: float = float(st["width"]) * 0.5
+		var s: float = 2.5 + rng.randf_range(0.0, 1.5)
+		while s < length - 2.0:
+			var side: float = -1.0 if rng.randf() < 0.5 else 1.0
+			if not bool(st["wall_l" if side < 0.0 else "wall_r"]):
+				side = -side
+			if not bool(st["wall_l" if side < 0.0 else "wall_r"]):
+				break
+			var center: Vector3 = xf * Vector3(0.0, 0.0, -s)
+			var edge: Vector3 = xf * Vector3(side * half, 0.0, -s)
+			var what: String = cycle[turn % cycle.size()]
+			if easy and what != "tree":
+				what = "tree"
+			if (what == "root" and roots >= EDGE_ROOTS) or (what == "rock" and rocks >= EDGE_ROCKS):
+				what = "tree"
+			if what == "tree" and trees >= EDGE_TREES:
+				what = "root" if roots < EDGE_ROOTS and not easy else ("rock" if rocks < EDGE_ROCKS and not easy else "")
+			if what == "" or not _edge_free(c, center, edge, avoid, 4.5):
+				s += 3.0
+				continue
+			turn += 1
+			# Rahmen am Bahnrand: +X zeigt in die Bahn, Z entlang der Bahn
+			var inward: Vector3 = (center - edge).normalized()
+			var along: Vector3 = -xf.basis.z.normalized()
+			var up: Vector3 = inward.cross(along).normalized() * -1.0
+			if up.y < 0.0:
+				up = -up
+			var frame_b := Basis(inward, up, inward.cross(up).normalized())
+			if what == "tree":
+				var base: Vector3 = edge - inward * (TrackKit.WALL_T + 1.55)
+				var ground: float = c.ground_height(base.x, base.z)
+				if ground == -INF or ground < edge.y - 3.5:
+					s += 3.0
+					continue
+				# Hoehen im Baum-Raum (Ursprung = Stammfuss, 0.15 m eingegraben): Belag liegt bei floor_l
+				var drop: float = edge.y - ground
+				var floor_l: float = drop + 0.15
+				var want_branch: bool = float(branches) < BRANCH_SHARE * float(trees + 1) or rng.randf() < 0.35
+				var reach: float = 0.0
+				var attach_h: float = floor_l + BRANCH_CLEAR + 0.9
+				# Ast-Ende: Unterkante der Kollisions-Kapsel (Radius 0.17) genau BRANCH_CLEAR ueber dem Belag
+				var end_h: float = floor_l + BRANCH_CLEAR + 0.17
+				if want_branch:
+					reach = TrackKit.WALL_T + 1.55 + half * (1.25 if not easy else 0.7)
+					var tip: Vector3 = base + inward * reach
+					if not _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, avoid):
+						reach = 0.0
+				var trunk_h: float = floor_l + (BRANCH_CLEAR + 2.0 if reach > 0.0 else rng.randf_range(3.4, 4.6))
+				var tree := Obstacles.edge_tree(kind, trunk_h, reach, attach_h, end_h, trees + nature_seed % 7, moss)
+				tree.transform = Transform3D(Basis(Vector3.UP, atan2(-inward.z, inward.x)), Vector3(base.x, ground - 0.15, base.z))
+				c.add_child(tree)
+				if reach > 0.0 and kind != "dead":
+					_lianas(tree, reach, attach_h, end_h, floor_l, rng)
+				trees += 1
+				if reach > 0.0:
+					branches += 1
+				c.edge_items.append({"kind": "tree", "pos": tree.position, "branch": reach > 0.0,
+					"clearance": end_h - floor_l - 0.17 if reach > 0.0 else 0.0, "reach": reach,
+					"tip": tree.transform * Vector3(reach, end_h, 0.0), "floor_y": edge.y})
+			elif what == "root":
+				var protrude: float = rng.randf_range(0.6, 0.95)
+				var length_r: float = TrackKit.WALL_T + 1.0 + protrude
+				var root := Obstacles.root_obstacle(length_r, roots)
+				var start: Vector3 = edge - inward * (TrackKit.WALL_T + 1.0)
+				root.transform = Transform3D(frame_b, start)
+				c.add_child(root)
+				roots += 1
+				c.edge_items.append({"kind": "root", "pos": edge + inward * protrude, "branch": false, "clearance": 0.0})
+			else:
+				var r: float = rng.randf_range(0.55, 0.75)
+				var tint := Color(0.55, 0.52, 0.48)
+				if th.id == "volcano":
+					tint = Color(0.24, 0.18, 0.16)
+				elif th.id == "pirate":
+					tint = Color(0.68, 0.6, 0.48)
+				var rock := Obstacles.boulder(r, tint, moss)
+				rock.transform = Transform3D(frame_b, edge - inward * 0.2)
+				c.add_child(rock)
+				rocks += 1
+				c.edge_items.append({"kind": "rock", "pos": rock.position, "branch": false, "clearance": 0.0})
+			avoid.append(edge)
+			s += rng.randf_range(5.0, 7.5)
+
+## Ist die Stelle frei? (Abstand zu Abschlag, Loch, Abkuerzung, Oeffnungen, Korridoren, Gadgets, Hindernissen)
+static func _edge_free(c: Course3D, center: Vector3, edge: Vector3, avoid: Array[Vector3], min_dist: float) -> bool:
+	if center.distance_to(c.tee.origin) < 6.0 or center.distance_to(c.hole_pos) < 7.5:
+		return false
+	for p in avoid:
+		if p.distance_to(edge) < min_dist or p.distance_to(center) < min_dist:
+			return false
+	if not c.shortcut.is_empty():
+		for key in ["gate", "lane_start", "lip", "landing"]:
+			if (c.shortcut[key] as Vector3).distance_to(center) < 7.0:
+				return false
+	for cor in c.corridors:
+		var a: Vector3 = cor["a"]
+		var b: Vector3 = cor["b"]
+		var q: Vector3 = Geometry3D.get_closest_point_to_segment(center, a, b)
+		if Vector2(q.x - center.x, q.z - center.z).length() < float(cor["half"]) + 3.0:
+			return false
+	return true
+
+## Liegt der Ast (Strecke a-b in Weltkoordinaten) frei von Flug-Korridoren und der Abkuerzung?
+static func _branch_free(c: Course3D, a: Vector3, b: Vector3, avoid: Array[Vector3]) -> bool:
+	for i in 5:
+		var p: Vector3 = a.lerp(b, float(i) / 4.0)
+		for cor in c.corridors:
+			var q: Vector3 = Geometry3D.get_closest_point_to_segment(p, cor["a"], cor["b"])
+			if Vector2(q.x - p.x, q.z - p.z).length() < float(cor["half"]) + 2.5:
+				return false
+		if not c.shortcut.is_empty() and (c.shortcut["landing"] as Vector3).distance_to(p) < 8.0:
+			return false
+		for o in avoid:
+			if Vector2(o.x - p.x, o.z - p.z).length() < 3.0:
+				return false
+	return true
+
+## Lianen vom Ast herab (nur Optik, schwingen sanft; enden hoch genug ueber dem Belag).
+static func _lianas(tree: Node3D, reach: float, attach_h: float, end_h: float, floor_l: float, rng: RandomNumberGenerator) -> void:
+	for t: float in [0.45, 0.7, 0.92]:
+		var x: float = reach * t
+		var y: float = lerpf(attach_h, end_h, t) - 0.15
+		var bottom: float = floor_l + 1.3
+		var length: float = clampf(y - bottom, 0.4, 1.6) * rng.randf_range(0.75, 1.0)
+		var pivot := Motion.swinger(Vector3.RIGHT, 0.1, rng.randf_range(1.0, 1.6), rng.randf() * TAU)
+		pivot.position = Vector3(x, y, rng.randf_range(-0.15, 0.15))
+		var mi := MeshInstance3D.new()
+		mi.mesh = Flora.liana(length, int(x * 10.0))
+		mi.material_override = Flora.material(0.0, 0.6)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pivot.add_child(mi)
+		tree.add_child(pivot)
 
 ## Lianen-Bogen ueber der Bahn (rein optisch).
 static func _vines(c: Course3D, k: TrackKit, ahead: float) -> void:

@@ -249,6 +249,64 @@ static func ruin_block(variant: int = 0) -> ArrayMesh:
 	_cache[key] = out
 	return out
 
+## Randbaum (Tree-Space: Stamm bei x = 0, +X zeigt zur Bahn). Mit `reach` > 0 waechst ein dicker Ast
+## waagerecht ueber die Bahn: von (0, attach_h) bis (reach, end_h), am Ende ein Laub-Buschel.
+## kind: "broadleaf" | "dead" | "jungle". trunk_h = Stammhoehe bis zur Krone.
+static func edge_tree(kind: String, trunk_h: float, reach: float, attach_h: float, end_h: float, variant: int) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7000 + variant * 31
+	var dead: bool = kind == "dead"
+	var bark := Color(0.12, 0.09, 0.08) if dead else Color(0.32, 0.22, 0.14)
+	var parts: Array = []
+	parts.append(_part(_cyl(0.3, 0.46, trunk_h, 10), Vector3(0.0, trunk_h * 0.5, 0.0), bark, WOOD, bark.lightened(0.12)))
+	parts.append(_part(_cyl(0.46, 0.85, 0.6, 10), Vector3(0.0, 0.25, 0.0), bark.darkened(0.15), WOOD))
+	var dark := Color(0.12, 0.3, 0.11) if kind != "jungle" else Color(0.1, 0.33, 0.14)
+	var light := Color(0.34, 0.6, 0.2) if kind != "jungle" else Color(0.3, 0.62, 0.24)
+	if reach > 0.0:
+		# der grosse Ast ueber die Bahn (zweiteilig, leicht durchhaengend) + Seitenzweig
+		var a := Vector3(0.1, attach_h, 0.0)
+		var m := Vector3(reach * 0.55, lerpf(attach_h, end_h, 0.45) + 0.12, rng.randf_range(-0.2, 0.2))
+		var e := Vector3(reach, end_h, rng.randf_range(-0.25, 0.25))
+		parts.append(_branch(a, m, 0.26, 0.19, bark, 9))
+		parts.append(_branch(m, e, 0.19, 0.11, bark, 8))
+		parts.append(_branch(m, m + Vector3(0.7, 0.9, 0.5), 0.1, 0.04, bark, 6))
+		if not dead:
+			for k in 2:
+				var c: Vector3 = e + Vector3(-0.3 * float(k), 0.75 + 0.25 * float(k), (float(k) - 0.5) * 0.7)
+				parts.append(_part(_blob(0.75 - 0.15 * float(k), Vector3(1.2, 0.7, 1.0), 400 + variant * 3 + k, 0.25, 9, 6), c, dark, LEAF, light, e + Vector3(0.0, 0.8, 0.0), 1.2))
+	if dead:
+		for k in 3:
+			var ang: float = TAU * float(k) / 3.0 + 1.2
+			var from := Vector3(0.0, trunk_h * (0.6 + 0.12 * float(k)), 0.0)
+			parts.append(_branch(from, from + Vector3(cos(ang) * 1.2, 0.9, sin(ang) * 1.2), 0.12, 0.04, bark, 6))
+	else:
+		var crown := Vector3(-0.3, trunk_h + 0.9, 0.0)
+		for k in 4:
+			var c: Vector3
+			var r: float
+			if k == 0:
+				c = crown + Vector3(0.0, 0.4, 0.0)
+				r = 1.9
+			else:
+				var ang: float = TAU * float(k) / 3.0 + rng.randf_range(-0.3, 0.3)
+				c = crown + Vector3(cos(ang) * 1.3, rng.randf_range(-0.5, 0.4), sin(ang) * 1.3)
+				r = rng.randf_range(1.2, 1.5)
+			parts.append(_part(_blob(r, Vector3(1.0, 0.8, 1.0), 450 + variant * 7 + k, 0.22, 11, 7), c, dark, LEAF, light, crown, 2.8))
+	return _merge(parts)
+
+## Liane: duenne Ranke (nach unten, Laenge len) mit Blaettern, Aufhaengepunkt bei y = 0.
+static func liana(length: float, variant: int) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8000 + variant
+	var parts: Array = [_part(_cyl(0.03, 0.04, length, 5), Vector3(0.0, -length * 0.5, 0.0), Color(0.22, 0.32, 0.12), LEAF, Color(0.3, 0.4, 0.15))]
+	var n: int = int(length / 0.3)
+	for i in n:
+		var y: float = -0.2 - float(i) * 0.3
+		var lf := _blob(0.13, Vector3(1.4, 0.45, 0.8), 900 + variant * 11 + i, 0.2, 6, 4)
+		parts.append(_part(lf, Transform3D(Basis(Vector3.UP, rng.randf() * TAU), Vector3(rng.randf_range(-0.07, 0.07), y, rng.randf_range(-0.07, 0.07))),
+			Color(0.14, 0.38, 0.13), LEAF, Color(0.3, 0.58, 0.2)))
+	return _merge(parts)
+
 ## Architrav-Balken (liegt auf zwei Saeulen), 1.6 m lang entlang X.
 static func beam() -> ArrayMesh:
 	if _cache.has("beam"):

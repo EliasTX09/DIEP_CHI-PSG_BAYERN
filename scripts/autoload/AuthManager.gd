@@ -8,7 +8,8 @@ extends Node
 ##     (separater Passwort-Login); ihre eigene Browser-Sitzung wird nie weitergegeben.
 ##  3. Direkt im Spiel: Gast mit E-Mail/Passwort verknuepfen oder mit E-Mail/Passwort anmelden.
 ##
-## Gespeichert wird nur das Refresh-Token in user://auth.json, verschluesselt mit einem geraetebezogenen Schluessel.
+## Gespeichert wird nur das Refresh-Token in user://auth.save, verschluesselt mit einem geraetebezogenen Schluessel
+## (nie E-Mail oder Passwort).
 ## Das ist eine Verschleierung gegen Mitlesen, kein Schutz gegen jemanden mit vollem Zugriff auf das Geraet.
 
 signal auth_changed
@@ -18,8 +19,10 @@ signal account_changing
 
 const CONFIG_PATH := "res://config/backend.cfg"
 const LOCAL_CONFIG_PATH := "res://config/backend.local.cfg"
-const AUTH_PATH := "user://auth.json"
+const AUTH_PATH := "user://auth.save"
 const LEGACY_SESSION_PATH := "user://session.json"
+## Vorgaenger von auth.save (gleiches verschluesseltes Format, nur anderer Name)
+const LEGACY_AUTH_PATH := "user://auth.json"
 ## Zeichen der Spiel-Codes (ohne 0/O/1/I/L - nicht verwechselbar) und ihre Laenge.
 const CODE_CHARS := "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 const CODE_LENGTH := 8
@@ -294,6 +297,9 @@ static func load_saved_refresh_token() -> String:
 			var token: String = str((legacy as Dictionary)["rt"])
 			save_refresh_token(token)
 			return token
+	if not FileAccess.file_exists(AUTH_PATH) and FileAccess.file_exists(LEGACY_AUTH_PATH):
+		# einmalige Umbenennung auth.json -> auth.save (Inhalt bleibt verschluesselt)
+		DirAccess.rename_absolute(ProjectSettings.globalize_path(LEGACY_AUTH_PATH), ProjectSettings.globalize_path(AUTH_PATH))
 	if not FileAccess.file_exists(AUTH_PATH):
 		return ""
 	var f := FileAccess.open_encrypted_with_pass(AUTH_PATH, FileAccess.READ, _storage_key())
@@ -306,6 +312,6 @@ static func load_saved_refresh_token() -> String:
 	return ""
 
 static func clear_saved_session() -> void:
-	for p in [AUTH_PATH, LEGACY_SESSION_PATH]:
+	for p in [AUTH_PATH, LEGACY_AUTH_PATH, LEGACY_SESSION_PATH]:
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))

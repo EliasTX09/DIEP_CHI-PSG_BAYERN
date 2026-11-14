@@ -93,6 +93,8 @@ var _squash_axis: Vector3 = Vector3.UP
 var _roll: Basis = Basis.IDENTITY
 var _vis_pos: Vector3 = Vector3.INF
 var _last_fx_ms: int = 0
+## Wie oft der Ball auf dieser Bahn ueber die Abkuerzungs-Schanze geflogen ist
+var shortcut_launches: int = 0
 var _ray := PhysicsRayQueryParameters3D.new()
 
 # ================================================================ Aufbau
@@ -140,6 +142,7 @@ func setup(p_course: Course3D, p_id: String, shot_profile: Dictionary, p_skin: S
 ## Setzt den Ball auf den Abschlag (neue Bahn).
 func place_on_tee(tee: Transform3D) -> void:
 	strokes = 0
+	shortcut_launches = 0
 	sim.reset()
 	last_rest = tee.origin
 	_set_rest(tee.origin, null)
@@ -442,6 +445,7 @@ func _emit_events() -> void:
 				# Abkuerzungs-Schanze: fester Flug, kein Spin-Einfluss mehr
 				_spin = Vector2.ZERO
 				_shortcut = true
+				shortcut_launches += 1
 				SoundManager.play("boost", 1.0, 0.8, sound_gain)
 			"land":
 				SoundManager.play("pop", 1.0, 0.9, sound_gain)

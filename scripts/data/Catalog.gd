@@ -375,13 +375,13 @@ static func coins_for_rank(rank: int) -> int:
 
 # ---------------------------------------------------------------- Welten & Bahnen
 const WORLDS: Array[Dictionary] = [
-	{"id": "emerald", "name": "Emerald Valley", "courses": ["e1", "e2", "e3", "e4", "e5"],
+	{"id": "emerald", "name": "Emerald Valley", "courses": ["e1", "e2", "e3", "e4", "e5"], "unlock": 0,
 		"desc": "Grüne Hügel, Holzbrücken, Windmühlen", "color": Color(0.25, 0.75, 0.35)},
-	{"id": "volcano", "name": "Volcano Canyon", "courses": ["v1", "v2", "v3", "v4"],
+	{"id": "volcano", "name": "Volcano Canyon", "courses": ["v1", "v2", "v3", "v4"], "unlock": 150,
 		"desc": "Lava, Sprungschanzen, Speed-Booster", "color": Color(0.95, 0.4, 0.15)},
-	{"id": "neon", "name": "Cyber Neon City", "courses": ["n1", "n2", "n3"],
+	{"id": "neon", "name": "Cyber Neon City", "courses": ["n1", "n2", "n3"], "unlock": 400,
 		"desc": "Loopings, Laser, Teleporter", "color": Color(0.2, 0.9, 1.0)},
-	{"id": "pirate", "name": "Pirate Cove", "courses": ["p1", "p2", "p3"],
+	{"id": "pirate", "name": "Pirate Cove", "courses": ["p1", "p2", "p3"], "unlock": 800,
 		"desc": "Planken, Kanonen, Plattformen", "color": Color(0.95, 0.75, 0.35)},
 ]
 const ROUND_OPTIONS: Array[int] = [3, 5, 9]
@@ -392,6 +392,10 @@ static func world_ids() -> Array[String]:
 	for w in WORLDS:
 		out.append(str(w["id"]))
 	return out
+
+## Ab wie vielen (besten) Trophaeen die Arena offen ist. Arena 1 ist immer offen.
+static func world_unlock(id: String) -> int:
+	return int(world_by_id(id).get("unlock", 0))
 
 static func world_by_id(id: String) -> Dictionary:
 	for w in WORLDS:
@@ -416,10 +420,16 @@ static func all_course_ids() -> Array[String]:
 
 ## Bahnliste fuer ein Match: zuerst die Bahnen der gewaehlten Welt (gemischt per Seed),
 ## danach "Welt-Tour" durch die folgenden Welten, bis `rounds` erreicht ist.
-static func build_course_list(world_id: String, rounds: int, rng_seed: int) -> Array[String]:
+## allowed: nur diese Welten fuer die Tour (leer = alle); fehlen Bahnen, wird die Liste erneut durchlaufen.
+static func build_course_list(world_id: String, rounds: int, rng_seed: int, allowed: Array[String] = []) -> Array[String]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed
 	var order: Array[String] = world_ids()
+	if not allowed.is_empty():
+		order = []
+		for w in world_ids():
+			if allowed.has(w) or w == world_id:
+				order.append(w)
 	var start: int = maxi(0, order.find(world_id))
 	var out: Array[String] = []
 	var guard := 0

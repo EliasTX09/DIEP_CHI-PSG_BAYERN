@@ -22,6 +22,8 @@ func _ready() -> void:
 	await _stage_physics()
 	await _stage_shadow_space()
 	await _stage_bots()
+	await _stage_adaptive_bots()
+	_stage_progression()
 	await _stage_match()
 	await _stage_input()
 	await _stage_daily()
@@ -267,6 +269,7 @@ func _stage_courses() -> void:
 		await _frames(3)
 		check(c.path_points.size() > 8 and c.total_length() > 15.0, "%s: Mittellinie vorhanden" % id)
 		_check_terrain(c, id, t_build)
+		_check_edge_nature(c, id)
 		check(c.floor_body != null and c.floor_body.get_child_count() > 0, "%s: Boden-Kollision" % id)
 		check(c.par >= 1 and c.par <= 5 and c.title != "", "%s: Titel/Par" % id)
 		var space := c.get_world_3d().direct_space_state
@@ -291,6 +294,61 @@ func _stage_courses() -> void:
 		print("[SMOKE] %s '%s' Par %d, Laenge %.0f m, %d Gadgets, %d Hindernisse" % [id, c.title, c.par, c.total_length(), c.gadgets.size(), c.obstacles.size()])
 		c.queue_free()
 		await _frames(2)
+	print("[SMOKE] Rand-Natur gesamt: %d Baeume, davon %d mit Ast ueber der Bahn, %d Wurzeln, %d Felsen" % [_edge_sum["trees"], _edge_sum["branches"], _edge_sum["roots"], _edge_sum["rocks"]])
+	check(int(_edge_sum["trees"]) > 0 and float(_edge_sum["branches"]) >= 0.3 * float(_edge_sum["trees"]), "Gesamt: mind. 30 %% der Randbaeume mit Ast ueber der Bahn")
+
+## Natur am Bahnrand: genug Randbaeume, mindestens 30 % mit Ast ueber der Bahn, Aeste hoch genug fuer rollende
+## Baelle, aber im Weg fuer hohe Schlaege (echte Physik-Abfrage mit einer Ball-Kugel).
+var _edge_sum := {"trees": 0, "branches": 0, "roots": 0, "rocks": 0}
+
+func _check_edge_nature(c: Course3D, id: String) -> void:
+	var trees := 0
+	var branches := 0
+	var roots := 0
+	var rocks := 0
+	var low := 0
+	var under_hits := 0
+	var branch_hits := 0
+	var space := c.get_world_3d().direct_space_state
+	var q := PhysicsShapeQueryParameters3D.new()
+	var sph := SphereShape3D.new()
+	sph.radius = Ball3D.RADIUS
+	q.shape = sph
+	q.collision_mask = 1
+	for it: Dictionary in c.edge_items:
+		match str(it["kind"]):
+			"tree":
+				trees += 1
+				if bool(it["branch"]):
+					branches += 1
+					if float(it["clearance"]) < CourseBuilder3D.BRANCH_CLEAR - 0.01:
+						low += 1
+					var tip: Vector3 = it["tip"]
+					q.transform = Transform3D(Basis.IDENTITY, Vector3(tip.x, float(it["floor_y"]) + Ball3D.RADIUS + 0.02, tip.z))
+					for h in space.intersect_shape(q, 16):
+						if (h["collider"] as Node).name.begins_with("EdgeTree"):
+							under_hits += 1
+					q.transform = Transform3D(Basis.IDENTITY, tip)
+					for h in space.intersect_shape(q, 16):
+						if (h["collider"] as Node).name.begins_with("EdgeTree"):
+							branch_hits += 1
+							break
+			"root":
+				roots += 1
+			"rock":
+				rocks += 1
+	_edge_sum["trees"] += trees
+	_edge_sum["branches"] += branches
+	_edge_sum["roots"] += roots
+	_edge_sum["rocks"] += rocks
+	if id == "daily" or Catalog.world_of_course(id) == "neon":
+		check(c.edge_items.is_empty(), "%s: keine Rand-Natur (Stadt bzw. Golden Shot)" % id)
+		return
+	check(trees >= 2, "%s: Randbaeume vorhanden (%d)" % [id, trees])
+	check(float(branches) >= 0.3 * float(trees), "%s: mind. 30 %% der Randbaeume mit Ast ueber der Bahn (%d/%d)" % [id, branches, trees])
+	check(low == 0 and under_hits == 0, "%s: rollender Ball passt unter allen Aesten durch" % id)
+	check(branch_hits == branches, "%s: Aeste haben Kollision (%d/%d)" % [id, branch_hits, branches])
+	print("[SMOKE] %s Rand-Natur: %d Baeume (%d mit Ast), %d Wurzeln, %d Felsen" % [id, trees, branches, roots, rocks])
 
 ## Gelaende-Tal: liegt ueberall unter dem Belag, Schluchten unter Spruengen/Fluegen, Aus-Grenze greift neben der Bahn.
 func _check_terrain(c: Course3D, id: String, build_usec: int) -> void:
@@ -591,7 +649,7 @@ func _process_frames(n: int) -> void:
 		await get_tree().process_frame
 
 ## Laesst einen Bot die Bahn spielen. Rueckgabe: {holed, strokes, time, ...}; schreibt pro Schlag eine Diagnosezeile.
-func _bot_playthrough(id: String, verbose: bool) -> Dictionary:
+func _bot_playthrough(id: String, verbose: bool, skill: float = 0.92, course_trophies: int = -1) -> Dictionary:
 	var c: Course3D = CourseBuilder3D.build(id, 4242, false)
 	add_child(c)
 	await _frames(3)
@@ -599,7 +657,9 @@ func _bot_playthrough(id: String, verbose: bool) -> Dictionary:
 	ball.place_on_tee(c.tee)
 	await _frames(3)
 	ball.unfreeze()
-	var brain := BotBrain.new(ball, c, 0.92, 777)
+	var brain := BotBrain.new(ball, c, skill, 777)
+	if course_trophies >= 0:
+		SmartBotController.configure(brain, course_trophies)
 	var t := 0.0
 	var space := c.get_world_3d().direct_space_state
 	var seen_shots := 0
@@ -635,7 +695,8 @@ func _bot_playthrough(id: String, verbose: bool) -> Dictionary:
 	if pending and verbose:
 		_log_bot_shot(id, c, ball, brain, shot_from, strokes_before)
 	var out := {"holed": ball.state == Ball3D.State.HOLED, "strokes": ball.strokes, "time": t, "par": c.par,
-		"progress": c.progress_at(ball.global_position), "length": c.total_length()}
+		"progress": c.progress_at(ball.global_position), "length": c.total_length(),
+		"launches": ball.shortcut_launches, "choices": brain.shortcut_choices, "has_shortcut": not c.shortcut.is_empty()}
 	c.queue_free()
 	await _frames(2)
 	return out
@@ -665,6 +726,71 @@ func _stage_bots() -> void:
 			failed.append(id)
 	print("[SMOKE] Bots: %d von 15 Bahnen eingelocht; offen: %s" % [holed, ", ".join(failed)])
 	check(holed == 15, "Bot locht auf allen 15 Bahnen ein (offen: %s)" % ", ".join(failed))
+
+## Adaptive Bots: ohne Bahn-Trophaeen nehmen Bots nie die Abkuerzung (und kommen trotzdem ins Ziel),
+## mit vielen Bahn-Trophaeen nutzen sie sie.
+func _stage_adaptive_bots() -> void:
+	print("[SMOKE] Stage: Adaptive Bots (SmartBotController)")
+	check(SmartBotController.shortcut_chance(0) == 0.0 and SmartBotController.shortcut_chance(500) == 1.0
+		and SmartBotController.shortcut_chance(90) > 0.0 and SmartBotController.shortcut_chance(90) < 1.0, "Abkuerzungs-Chance steigt mit den Bahn-Trophaeen")
+	check(SmartBotController.skill_bonus(0) == 0.0 and SmartBotController.skill_bonus(300) > 0.1, "Koennens-Bonus steigt mit den Bahn-Trophaeen")
+	BotBrain.time_budget_usec = 400000
+	var holed := 0
+	var launched := PackedStringArray()
+	var open_ids := PackedStringArray()
+	var total_strokes := 0
+	for id in Catalog.all_course_ids():
+		var r: Dictionary = await _bot_playthrough(id, false, 0.7, 0)
+		total_strokes += int(r["strokes"])
+		if bool(r["holed"]):
+			holed += 1
+		else:
+			open_ids.append(id)
+		if int(r["launches"]) > 0 or int(r["choices"]) > 0:
+			launched.append(id)
+		print("[SMOKE] Einsteiger-Bot (0 Bahn-Trophaeen) auf %s: %s nach %d Schlaegen, Schanze %d x" % [id,
+			"EINGELOCHT" if bool(r["holed"]) else "NICHT eingelocht", int(r["strokes"]), int(r["launches"])])
+	check(launched.is_empty(), "Ohne Bahn-Trophaeen nimmt kein Bot die Abkuerzung (genommen auf: %s)" % ", ".join(launched))
+	print("[SMOKE] Bots ohne Abkuerzung: %d von 15 eingelocht, %d Schlaege gesamt; offen: %s" % [holed, total_strokes, ", ".join(open_ids)])
+	check(holed >= 12, "Bots ohne Abkuerzung (Koennen 0.7) lochen auf mind. 12 von 15 Bahnen ein (%d, offen: %s)" % [holed, ", ".join(open_ids)])
+	# Profi-Stufe: viele Bahn-Trophaeen -> Bots nutzen die Abkuerzung, wo sie sich lohnt
+	var pro_used := PackedStringArray()
+	for id in ["e2", "v3", "p1"]:
+		var r2: Dictionary = await _bot_playthrough(id, false, 0.85, 400)
+		if int(r2["launches"]) > 0:
+			pro_used.append(id)
+		print("[SMOKE] Profi-Bot (400 Bahn-Trophaeen) auf %s: %d Schlaege, Schanze %d x" % [id, int(r2["strokes"]), int(r2["launches"])])
+	check(pro_used.size() >= 1, "Profi-Bots nutzen die Abkuerzung (auf: %s)" % ", ".join(pro_used))
+
+## Trophaeen pro Bahn und Arena-Freischaltung
+func _stage_progression() -> void:
+	print("[SMOKE] Stage: Trophaeen pro Bahn + Arenen")
+	GameManager.reset_progress()
+	check(GameManager.unlocked_worlds() == ["emerald"], "Neuer Spieler: nur Arena 1 offen (%s)" % str(GameManager.unlocked_worlds()))
+	var split: Dictionary = GameManager.split_course_trophies(30, [{"course": "e1", "rank": 1}, {"course": "e2", "rank": 3}, {"course": "e3", "rank": 2}], 3)
+	var sum := 0
+	for v in split.values():
+		sum += int(v)
+	check(sum == 30 and int(split["e1"]) > int(split["e3"]) and int(split["e3"]) > int(split["e2"]), "Gewinn: beste Bahn bekommt am meisten (%s)" % str(split))
+	var loss: Dictionary = GameManager.split_course_trophies(-16, [{"course": "e1", "rank": 1}, {"course": "e2", "rank": 3}], 3)
+	check(int(loss["e1"]) + int(loss["e2"]) == -16 and int(loss["e2"]) < int(loss["e1"]), "Verlust: schlechteste Bahn verliert am meisten (%s)" % str(loss))
+	GameManager.match_config = {"mode": "quick"}
+	var rw: Dictionary = GameManager.finish_match({"rank": 1, "players": 3, "style_points": 0, "holes_in_one": 0, "strokes": 6, "holes": 2,
+		"course_ranks": [{"course": "e2", "rank": 1}, {"course": "e4", "rank": 2}]})
+	check(int(rw.get("trophies", 0)) > 0 and GameManager.course_trophies("e2") > 0 and GameManager.course_trophies("e2") + GameManager.course_trophies("e4") == GameManager.trophies(),
+		"Match verbucht Trophaeen pro Bahn (e2=%d, e4=%d, gesamt %d)" % [GameManager.course_trophies("e2"), GameManager.course_trophies("e4"), GameManager.trophies()])
+	GameManager.add_trophies(500)
+	check(GameManager.world_unlocked("volcano") and GameManager.world_unlocked("neon") and not GameManager.world_unlocked("pirate"), "Arenen oeffnen mit Trophaeen")
+	GameManager.add_trophies(-500)
+	check(GameManager.world_unlocked("neon"), "Arena bleibt offen, auch wenn Trophaeen wieder sinken")
+	var cfg: Dictionary = GameManager.make_bot_match("emerald", 9, 0)
+	var only_open := true
+	for cid in (cfg["courses"] as Array):
+		if not GameManager.world_unlocked(Catalog.world_of_course(str(cid))):
+			only_open = false
+	check(only_open and (cfg["courses"] as Array).size() == 9 and (cfg["players"] as Array).size() == 1 + GameManager.auto_bot_count(),
+		"Welttour nur durch offene Arenen, Bot-Anzahl automatisch (%s)" % str(cfg["courses"]))
+	GameManager.reset_progress()
 
 # ---------------------------------------------------------------- Komplette Partie (Match3D + HUD + Bots)
 
@@ -840,19 +966,24 @@ func _stage_input() -> void:
 	check(BallTag.hide_names and tag_count > 0 and tag_alpha < 0.2, "Namensschilder blenden beim Zielen aus (Deckkraft %.2f)" % tag_alpha)
 	# Spin live: Seiten-Effet waehrend des Zielens verschiebt die Punkt-Kette
 	await _process_frames(4)
-	var dmm: MultiMesh = m._dots.multimesh
-	var end_before: Vector3 = dmm.get_instance_transform(maxi(0, dmm.visible_instance_count - 1)).origin
+	var end_before: Vector3 = m._preview_end
 	m.hud._spin_pad.set_value(Vector2(1.0, 0.0))
-	await _process_frames(8)
-	var end_after: Vector3 = dmm.get_instance_transform(maxi(0, dmm.visible_instance_count - 1)).origin
-	check(end_before.distance_to(end_after) > 0.05, "Spin live: Seiten-Effet verschiebt die Punkt-Kette (%.2f m)" % end_before.distance_to(end_after))
+	# Die Vorschau rechnet hoechstens alle 35 ms Echtzeit neu (headless laufen Frames schneller) -> warten,
+	# bis sie mit dem neuen Spin gerechnet hat
+	for i in 240:
+		await _process_frames(1)
+		if m._preview_spin == m.hud.spin:
+			break
+	await _process_frames(2)
+	var end_after: Vector3 = m._preview_end
+	check(end_before != Vector3.INF and end_after != Vector3.INF and end_before.distance_to(end_after) > 0.05, "Spin live: Seiten-Effet verschiebt die Punkt-Kette (%.2f m)" % end_before.distance_to(end_after))
 	check(m._target_ring.visible or (m._dots.material_override as StandardMaterial3D).albedo_color.g < 0.5, "Zielkreis am Ende der Punkt-Kette (oder rote Kette = Aus)")
 	var knob: Node3D = m._arrow.get_node("Knob")
 	check(knob.position.z > 0.5 and (m._arrow.get_node("StrandL2") as Node3D).visible, "Gummiband gespannt (Knauf %.2f m hinter dem Ball, Straenge mit Knick)" % knob.position.z)
 	m.hud._spin_pad.set_value(Vector2.ZERO)
 	await _process_frames(6)
 	_touch(0, screen + Vector2(0.0, 320.0), false)
-	await _process_frames(1)
+	await _process_frames(2)
 	var sq: float = ball.squash_factor()
 	var mesh_scale: Vector3 = ball._mesh.transform.basis.get_scale()
 	check(sq > 1.05 and maxf(mesh_scale.x, maxf(mesh_scale.y, mesh_scale.z)) > 1.04, "Squash & Stretch: Ball streckt sich beim Abschlag (%.2f)" % sq)
@@ -1038,6 +1169,11 @@ func _stage_menu() -> void:
 		check(play.get_global_rect().end.y <= chests.get_global_rect().position.y, "SPIELEN ueber den Truhen")
 		check(chests.get_global_rect().end.y <= nav.get_global_rect().position.y, "Truhen ueber der Tab-Leiste")
 		check(play.get_global_rect().position.y > vp_rect.size.y * 0.5, "SPIELEN in der unteren Haelfte (Daumen)")
+		var acc := menu.ui.find_child("AccountButton", true, false) as Control
+		check(acc != null and acc.is_visible_in_tree() and vp_rect.grow(1.0).encloses(acc.get_global_rect())
+			and acc.get_global_rect().position.y >= arena.get_global_rect().end.y - 0.5
+			and acc.get_global_rect().end.y <= menu._showcase_slot.get_global_rect().position.y + 0.5,
+			"Account-Knopf auf dem Startbildschirm (unter dem Arena-Banner, ohne Ueberlappung)")
 		check(nav.get_global_rect().end.y >= vp_rect.size.y - 60.0, "Tab-Leiste am unteren Rand")
 	check(menu.showcase.visible, "Vitrine auf der Startseite sichtbar")
 	# Einladungs-Leiste
@@ -1245,21 +1381,27 @@ func _stage_auth_offline() -> void:
 	# Lokale Speicherung: verschluesselt, Migration der alten session.json, kaputte Datei = keine Session
 	AuthManager.clear_saved_session()
 	AuthManager.save_refresh_token("tok-123")
-	check(AuthManager.load_saved_refresh_token() == "tok-123", "auth.json: Token wird gespeichert und gelesen")
+	check(AuthManager.load_saved_refresh_token() == "tok-123", "auth.save: Token wird gespeichert und gelesen")
 	var raw: String = FileAccess.get_file_as_bytes(AuthManager.AUTH_PATH).get_string_from_ascii()
-	check(not raw.contains("tok-123"), "auth.json enthaelt das Token nicht im Klartext")
+	check(not raw.contains("tok-123"), "auth.save enthaelt das Token nicht im Klartext")
 	# (Godot meldet beim Lesen der absichtlich kaputten Datei einen ERROR "magic" - das ist erwartet)
 	var f := FileAccess.open(AuthManager.AUTH_PATH, FileAccess.WRITE)
 	f.store_string("kaputt")
 	f.close()
-	check(AuthManager.load_saved_refresh_token() == "", "Unlesbare auth.json = keine Session")
+	check(AuthManager.load_saved_refresh_token() == "", "Unlesbare auth.save = keine Session")
 	var lf := FileAccess.open(AuthManager.LEGACY_SESSION_PATH, FileAccess.WRITE)
 	lf.store_string(JSON.stringify({"rt": "legacy-rt"}))
 	lf.close()
 	check(AuthManager.load_saved_refresh_token() == "legacy-rt" and not FileAccess.file_exists(AuthManager.LEGACY_SESSION_PATH), "Alte session.json wird uebernommen und geloescht")
-	check(AuthManager.load_saved_refresh_token() == "legacy-rt", "Uebernommenes Token liegt danach in auth.json")
+	check(AuthManager.load_saved_refresh_token() == "legacy-rt", "Uebernommenes Token liegt danach in auth.save")
 	AuthManager.clear_saved_session()
-	check(not FileAccess.file_exists(AuthManager.AUTH_PATH), "Abmelden loescht auth.json")
+	check(not FileAccess.file_exists(AuthManager.AUTH_PATH), "Abmelden loescht auth.save")
+	# Altes auth.json (gleiches Format) wird beim Lesen zu auth.save umbenannt
+	AuthManager.save_refresh_token("old-name-rt")
+	DirAccess.rename_absolute(ProjectSettings.globalize_path(AuthManager.AUTH_PATH), ProjectSettings.globalize_path(AuthManager.LEGACY_AUTH_PATH))
+	check(AuthManager.load_saved_refresh_token() == "old-name-rt" and FileAccess.file_exists(AuthManager.AUTH_PATH)
+		and not FileAccess.file_exists(AuthManager.LEGACY_AUTH_PATH), "auth.json wird zu auth.save migriert")
+	AuthManager.clear_saved_session()
 	# Profilbild: nur gueltige Pfade, Bild-Dekodierung robust
 	var uid := "22222222-2222-4222-8222-222222222222"
 	check(ProfileManager.is_valid_path(uid + "/avatar-17.png", uid), "Gueltiger Avatar-Pfad")
@@ -1352,6 +1494,24 @@ func _check_online_pages() -> void:
 	lroot = pg.modal["root"] as Control
 	check(lroot.find_child("RoomCode", true, false) != null and _count_avatars(lroot) >= 2, "Lobby online: Raum mit Spielern")
 	check(_min_width(lroot) <= 700.0, "Lobby-Raum (Host) passt auf 720 px (%.0f)" % _min_width(lroot))
+	# Mehrere Freunde gleichzeitig einladen: ankreuzen -> ein Knopf fuer alle
+	var more: Array = friends_data.duplicate(true)
+	more.append({"row_id": 4, "id": "f4", "name": "Neu1", "trophies": 5, "frame": "bronze", "color": 1, "online": true, "state": "accepted"})
+	more.append({"row_id": 5, "id": "f5", "name": "Neu2", "trophies": 6, "frame": "bronze", "color": 2, "online": false, "state": "accepted"})
+	NetworkManager.friends = more
+	pg.refresh()
+	lroot = pg.modal["root"] as Control
+	var c4 := lroot.find_child("InviteCheck_f4", true, false) as CheckBox
+	var c5 := lroot.find_child("InviteCheck_f5", true, false) as CheckBox
+	check(c4 != null and c5 != null and lroot.find_child("InviteCheck_f1", true, false) == null, "Lobby: Freunde ankreuzbar (wer schon im Raum ist, nicht)")
+	if c4 != null and c5 != null:
+		c4.button_pressed = true
+		c5.button_pressed = true
+		var ib := lroot.find_child("InviteSelected", true, false) as Button
+		check(pg._invite_sel.size() == 2 and ib != null and ib.text.contains("(2)") and not ib.disabled, "Lobby: zwei Freunde auf einmal einladen (%s)" % (ib.text if ib != null else "-"))
+	check(_min_width(lroot) <= 700.0, "Lobby-Raum mit Mehrfach-Einladung passt auf 720 px (%.0f)" % _min_width(lroot))
+	pg._invite_sel.clear()
+	NetworkManager.friends = friends_data.duplicate(true)
 	NetworkManager.lobby["host_id"] = "f1"
 	pg.refresh()
 	check(_min_width(pg.modal["root"] as Control) <= 700.0, "Lobby-Raum (Gast) passt auf 720 px")

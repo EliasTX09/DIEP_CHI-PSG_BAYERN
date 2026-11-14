@@ -18,6 +18,11 @@ const TIME_OFFSETS: Array[float] = [0.9, 1.8, 2.7, 3.6, 4.8]
 var ball: Ball3D
 var course: Course3D
 var skill: float = 0.6
+## Wahrscheinlichkeit, dass der Bot bei einem Schlag die Abkuerzungs-Schanze in Betracht zieht (SmartBotController).
+var shortcut_chance: float = 1.0
+var _allow_shortcut: bool = true
+## Wie oft der Bot sich fuer einen Schlag ueber die Schanze entschieden hat
+var shortcut_choices: int = 0
 var phase: int = Phase.WAIT
 ## Wird gesetzt, sobald der Bot geschossen hat (fuer Emotes o.ae.).
 var shots_taken: int = 0
@@ -133,7 +138,8 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 				_best_score = sc
 				_best = _candidates[_index]
 				_best_pred = {"pred_end": _sim.result["end_pos"], "pred_holed": bool(_sim.result["holed"]),
-					"pred_out": bool(_sim.result["out"]), "pred_stopped": bool(_sim.result["stopped"])}
+					"pred_out": bool(_sim.result["out"]), "pred_stopped": bool(_sim.result["stopped"]),
+					"pred_launched": bool(_sim.result.get("launched", false))}
 			_sim = null
 			_index += 1
 		if Time.get_ticks_usec() - t_start > time_budget_usec:
@@ -182,6 +188,9 @@ func _add_timing_candidates() -> void:
 			_candidates.append(c)
 
 func _build_candidates(replan: bool = false) -> void:
+	if not replan:
+		# pro Schlag neu wuerfeln, ob die Abkuerzung in Frage kommt
+		_allow_shortcut = shortcut_chance >= 1.0 or _rng.randf() < shortcut_chance
 	_candidates.clear()
 	_index = 0
 	_sim = null
@@ -265,6 +274,9 @@ func _failure_penalty(cand: Dictionary) -> float:
 
 func _score(res: Dictionary, cand: Dictionary) -> float:
 	var penalty: float = _failure_penalty(cand)
+	# Abkuerzung fuer diesen Schlag nicht erlaubt -> wie ein Fehlschlag werten
+	if not _allow_shortcut and bool(res.get("launched", false)):
+		return -480.0 - penalty
 	if bool(res.get("holed", false)):
 		return 100000.0 - float(res.get("time", 0.0)) - penalty * 200.0
 	if bool(res.get("out", false)):
@@ -301,3 +313,5 @@ func _shoot() -> void:
 	_shot_progress = course.progress_at(_shot_from)
 	if ball.shoot(dir, power, bool(_best["chip"]), Vector2.ZERO):
 		shots_taken += 1
+		if bool(_best_pred.get("pred_launched", false)):
+			shortcut_choices += 1

@@ -85,6 +85,8 @@ var _band_knob: Vector3 = Vector3.INF
 var _band_knob_v: Vector3 = Vector3.ZERO
 var _band_release: float = 0.0
 var _preview_spin: Vector2 = Vector2.ZERO
+## Letzter Boden-Punkt der Kette (Zielkreis; auch fuer Tests - der Renderer wird dafuer nicht ausgelesen)
+var _preview_end: Vector3 = Vector3.INF
 var _preview_chip: bool = false
 var _slowmo: bool = false
 var _slowmo_used: bool = false
@@ -227,6 +229,8 @@ func _start_hole(index: int) -> void:
 			rec.ball.impacted.connect(_on_ball_impact.bind(rec))
 			if rec.kind == "bot":
 				rec.brain = BotBrain.new(rec.ball, course, float(rec.entry.get("skill", 0.5)), _rng.randi())
+				# Adaptiv: je mehr Trophaeen der Spieler auf DIESER Bahn hat, desto genauer und abkuerzungsfreudiger
+				SmartBotController.configure(rec.brain, GameManager.course_trophies(course.course_id))
 		rec.tag = BallTag.new(rec.name, rec.color, rec == local)
 		rec.tag.target = rec.node()
 		course.add_child(rec.tag)
@@ -631,6 +635,7 @@ func _update_preview() -> void:
 	var air_mm: MultiMesh = _air_dots.multimesh
 	var n_ground := 0
 	var n_air := 0
+	var last_ground := Transform3D()
 	var spacing: float = 0.6
 	var acc: float = spacing * 0.6
 	var ray := PhysicsRayQueryParameters3D.new()
@@ -656,6 +661,7 @@ func _update_preview() -> void:
 			else:
 				var s: float = 1.0 - 0.45 * float(n_ground + n_air) / float(max_dots)
 				ground_mm.set_instance_transform(n_ground, Transform3D(b2.scaled(Vector3(s, 1.0, s)), gp + gn * 0.035))
+				last_ground = Transform3D(b2, gp + gn * 0.035)
 				n_ground += 1
 		acc -= seg
 		if n_ground + n_air >= max_dots:
@@ -668,8 +674,9 @@ func _update_preview() -> void:
 	(_dots.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35, 0.3, 0.95) if out else Color(1.0, 1.0, 1.0, 0.95)
 	# Zielkreis am Ende der Kette (dort, wo die Vorhersage den Ball liegen sieht)
 	_target_ring.visible = n_ground > 0 and not out
+	_preview_end = last_ground.origin if n_ground > 0 else Vector3.INF
 	if _target_ring.visible:
-		var last: Transform3D = ground_mm.get_instance_transform(n_ground - 1)
+		var last: Transform3D = last_ground
 		_target_ring.global_transform = Transform3D(last.basis.orthonormalized().scaled(Vector3(1.0 + 0.6 * float(prof.get("scatter_deg", 1.0)) / 3.0, 1.0,
 			1.0 + 0.6 * float(prof.get("scatter_deg", 1.0)) / 3.0)), last.origin + Vector3(0.0, 0.01, 0.0))
 	# Landering: Aufsetzpunkt eines Chips; Groesse = moegliche Streuung des Schlaegers
@@ -898,8 +905,16 @@ func _end_hole() -> void:
 	rig.set_top(true)
 	hud.set_top_view(true)
 	_strokes_in_match += local.strokes if local != null else 0
+	# Platz des Spielers auf dieser Bahn (fuer die Bahn-Trophaeen); Gleichstand = bester gemeinsamer Platz
+	if local != null:
+		var better := 0
+		for rec in players:
+			if rec != local and rec.strokes < local.strokes:
+				better += 1
+		_course_ranks.append({"course": course.course_id, "rank": better + 1})
 
 var _strokes_in_match: int = 0
+var _course_ranks: Array = []
 
 static func _rank_less(a: Dictionary, b: Dictionary) -> bool:
 	if int(a["total"]) != int(b["total"]):
@@ -935,7 +950,7 @@ func _finish_match() -> void:
 	var summary := {
 		"rank": rank, "players": players.size(), "style_points": local.style if local != null else 0,
 		"holes_in_one": local.holes_in_one if local != null else 0, "strokes": local.total if local != null else 0,
-		"holes": (config.get("courses", []) as Array).size(),
+		"holes": (config.get("courses", []) as Array).size(), "course_ranks": _course_ranks,
 	}
 	result_rewards = GameManager.finish_match(summary)
 	if online:

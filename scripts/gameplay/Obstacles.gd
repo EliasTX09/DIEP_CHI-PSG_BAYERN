@@ -114,6 +114,79 @@ static func boulder(radius: float, tint: Color = Color(0.55, 0.52, 0.48), moss: 
 	b.add_child(mi)
 	return b
 
+## Randbaum neben der Bahn (Ursprung = Stammfuss, +X zeigt zur Bahn). Kollision: Stamm (Zylinder) und - wenn
+## reach > 0 - der dicke Ast ueber der Bahn (zwei Kapseln). Laub und Lianen sind nur Optik.
+static func edge_tree(kind: String, trunk_h: float, reach: float, attach_h: float, end_h: float, variant: int, moss: float = 0.0) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.name = "EdgeTree"
+	b.collision_layer = 1
+	b.collision_mask = 0
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.0
+	pm.bounce = 0.4
+	b.physics_material_override = pm
+	var cs := CollisionShape3D.new()
+	var trunk := CylinderShape3D.new()
+	trunk.radius = 0.42
+	trunk.height = trunk_h
+	cs.shape = trunk
+	cs.position = Vector3(0.0, trunk_h * 0.5, 0.0)
+	b.add_child(cs)
+	if reach > 0.0:
+		# gleiche Mittellinie wie im Mesh (Flora.edge_tree), ohne die kleine seitliche Zufalls-Abweichung
+		var a := Vector3(0.1, attach_h, 0.0)
+		var m := Vector3(reach * 0.55, lerpf(attach_h, end_h, 0.45) + 0.12, 0.0)
+		var e := Vector3(reach, end_h, 0.0)
+		for seg: Array in [[a, m, 0.24], [m, e, 0.17]]:
+			var p0: Vector3 = seg[0]
+			var p1: Vector3 = seg[1]
+			var r: float = seg[2]
+			var cap := CapsuleShape3D.new()
+			cap.radius = r
+			cap.height = p0.distance_to(p1) + 2.0 * r
+			var c2 := CollisionShape3D.new()
+			c2.name = "Branch"
+			c2.shape = cap
+			var up: Vector3 = (p1 - p0).normalized()
+			var side: Vector3 = up.cross(Vector3.BACK).normalized()
+			c2.transform = Transform3D(Basis(side, up, side.cross(up)), (p0 + p1) * 0.5)
+			b.add_child(c2)
+	var mi := MeshInstance3D.new()
+	mi.name = "TreeMesh"
+	mi.mesh = Flora.edge_tree(kind, trunk_h, reach, attach_h, end_h, variant)
+	mi.material_override = Flora.material(moss, 0.35)
+	b.add_child(mi)
+	return b
+
+## Knorrige Wurzel, die unter der Bande hervor in die Bahn ragt. Ursprung = Wurzelansatz ausserhalb der Bahn,
+## +X zeigt in die Bahn, `length` = Gesamtlaenge. Kollision: flache Kapseln (Ball huepft drueber oder prallt ab).
+static func root_obstacle(length: float, variant: int) -> StaticBody3D:
+	var b := StaticBody3D.new()
+	b.name = "Root"
+	b.collision_layer = 1
+	b.collision_mask = 0
+	var pm := PhysicsMaterial.new()
+	pm.friction = 0.0
+	pm.bounce = 0.3
+	b.physics_material_override = pm
+	var sc: float = length / 2.75
+	var mi := MeshInstance3D.new()
+	mi.mesh = Flora.root(variant)
+	mi.material_override = Flora.material(0.0, 0.0)
+	mi.scale = Vector3(sc, 1.0, 1.0)
+	b.add_child(mi)
+	# Kollision fuer die innere Haelfte (der Teil auf dem Belag)
+	var from := Vector3(length * 0.45, 0.08, 0.0)
+	var to := Vector3(length - 0.12, 0.05, 0.0)
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.13
+	cap.height = from.distance_to(to) + 0.26
+	var c2 := CollisionShape3D.new()
+	c2.shape = cap
+	c2.transform = Transform3D(Basis(Vector3.BACK, PI * 0.5), (from + to) * 0.5)
+	b.add_child(c2)
+	return b
+
 # ================================================================ Windmuehle
 
 ## Windmuehle ueber der Bahn: Turm mit Durchfahrt, vier Fluegel drehen sich quer durch die Durchfahrt.
