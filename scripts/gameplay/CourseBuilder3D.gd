@@ -193,15 +193,15 @@ static func _near_samples(grid: Dictionary, a: Vector2, b: Vector2, margin: floa
 				out.append_array(grid[key])
 	return out
 
-## Landepunkt auf dem Gruen: 4.5 m vor dem Loch, von der Abkuerzung aus gesehen; mit Abstand zu den Banden.
-## (Nicht direkt ans Loch: die Abkuerzung spart Schlaege, ein Putt bleibt meist noetig.)
+## Landepunkt auf dem Gruen: 2.2 m vor dem Loch, von der Abkuerzung aus gesehen; mit Abstand zu den Banden.
+## Die Landezone bremst stark ab - meist bleibt ein kurzer Putt.
 static func _landing_point(k: TrackKit, hole: Vector3, from: Vector3) -> Vector3:
 	var inv: Transform3D = k.green_xf.affine_inverse()
 	var gl: Vector3 = inv * from
 	var hl: Vector3 = inv * hole
 	var dl := Vector2(gl.x - hl.x, gl.z - hl.z)
 	dl = dl.normalized() if dl.length() > 0.01 else Vector2(0.0, 1.0)
-	var ll := Vector2(hl.x, hl.z) + dl * 4.5
+	var ll := Vector2(hl.x, hl.z) + dl * 2.2
 	ll.x = clampf(ll.x, -k.green_size.x * 0.5 + 2.0, k.green_size.x * 0.5 - 2.0)
 	ll.y = clampf(ll.y, -k.green_size.y + 2.0, -2.0)
 	return k.green_xf * Vector3(ll.x, 0.0, ll.y)
@@ -265,7 +265,7 @@ static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transfor
 	# Flug: niedrigster Abschusswinkel, der ueber alles hinweg reicht
 	var inv: Transform3D = rect_xf.affine_inverse()
 	var near_flight: PackedInt32Array = _near_samples(grid, lip2, land2, 3.6)
-	for elev: float in [38.0, 46.0, 54.0, 62.0, 70.0]:
+	for elev: float in [38.0, 46.0, 54.0, 62.0]:
 		var tn: float = tan(deg_to_rad(elev))
 		if fly * tn < dh + 1.0:
 			continue

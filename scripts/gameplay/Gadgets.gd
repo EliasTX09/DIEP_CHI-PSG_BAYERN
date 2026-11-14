@@ -467,7 +467,7 @@ class Launcher extends Gadget:
 	var min_speed: float
 	var catcher: Gadget = null
 	## Seitliche Ablage am Ziel je Meter Versatz auf dem Steg
-	const SPREAD := 3.0
+	const SPREAD := 1.6
 	## Ideal-Tempo am Pad (m/s); Abweichung verlaengert/verkuerzt den Flug
 	const IDEAL_SPEED := 6.5
 
@@ -505,7 +505,7 @@ class Launcher extends Gadget:
 		var flight := Vector3(target.x - st.pos.x, 0.0, target.z - st.pos.z)
 		var fdir: Vector3 = flight.normalized() if flight.length() > 0.01 else dir
 		var fright: Vector3 = fdir.cross(Vector3.UP)
-		var aim: Vector3 = target + fright * (l.x * SPREAD) + fdir * clampf((along - IDEAL_SPEED) * 0.35, -3.5, 3.5)
+		var aim: Vector3 = target + fright * (l.x * SPREAD) + fdir * clampf((along - IDEAL_SPEED) * 0.2, -2.5, 2.5)
 		var v: Vector3 = Gadgets.ballistic_velocity(st.pos, aim + Vector3.UP * BALL_R, elevation)
 		# Luftwiderstand ausgleichen (Ball3D/ShotSim daempfen im Flug um AIR_DAMP pro Sekunde)
 		var hs: float = Vector2(v.x, v.z).length()
@@ -538,7 +538,7 @@ class LandingZone extends Gadget:
 		var l := to_local_point(st.pos)
 		if l.x * l.x + l.z * l.z > radius * radius or l.y > 0.75 or l.y < -0.6 or st.vel.y > 0.0:
 			return
-		st.vel = Vector3(st.vel.x * 0.28, minf(st.vel.y, 0.0) * 0.2, st.vel.z * 0.28)
+		st.vel = Vector3(st.vel.x * 0.18, minf(st.vel.y, 0.0) * 0.2, st.vel.z * 0.18)
 		st.cooldowns.erase(get_instance_id())
 		st.events.append("land")
 
