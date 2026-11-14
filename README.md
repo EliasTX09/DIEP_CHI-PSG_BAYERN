@@ -16,6 +16,8 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 > Berg-Tälern, eine riskante Abkürzung pro Bahn, Hindernisse auf der Bahn, Randbäume mit Ästen über der Bahn,
 > Wurzeln und Felsen, neue Bäume (Stamm + Kronen-Cluster), Ruinen, Golfball mit Dellen, Squash & Stretch,
 > federndes Gummiband, Trophäen pro Bahn, Arena-Sperren, adaptive Bots und Mehrfach-Einladungen sind fertig.
+> Neu: Ziel-Kamera mit Tiefenunschärfe und Feder-Führung, Rasen-Schachbrett mit Glanz, Neon-Gummiband,
+> leuchtende Punkt-Kette entlang des Flugbogens, Kontaktschatten unter den Bällen, schmale obere Leiste.
 > Noch offen: Flyover-Vorschau, Eis-Welt, Clans.
 
 ---
@@ -224,6 +226,8 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Trophäen pro Bahn, Arena-Sperren | in CI geprüft (Aufteilung summiert exakt, Freischaltung nach bester Trophäenzahl, sperrt nicht wieder zu, Welttour nur durch offene Arenen) |
 | Adaptive Bots (SmartBotController) | in CI geprüft: ohne Bahn-Trophäen plant kein Bot die Abkürzung (rollt er durch einen Zielfehler doch auf die Schanze, wird das nur protokolliert – kam auf n2 vor). Bots mit Können 0,7 ohne Abkürzung: 12 von 15 Bahnen im Schlaglimit (e5, v3, v4 nicht). Echte Einsteiger-Bots (Können 0,35, wie für neue Spieler) in Arena 1: 4 von 5 (e5 nicht) – im Match gilt das als „nicht beendet“. Profi-Bots mit vielen Bahn-Trophäen nutzen die Schanze. Die Bot-Tests laufen mit festem Zufalls-Seed für die Abschlag-Streuung |
 | Squash & Stretch, federndes Gummiband, Spin live in der Vorschau, Zielkreis | in CI geprüft (Logik); wie es sich anfühlt, nur auf dem Gerät beurteilbar |
+| Ziel-Kamera, Tiefenunschärfe, Feder-Kamera | in CI geprüft: beim Berühren des Balls fährt die Kamera heran (Abstand × 0,74, 50° statt 62°), Unschärfe nur beim Zielen, scharf bis hinter das Ende der Punkt-Kette, nach dem Schlag wieder aus; Feder ohne Überschwingen. Per Screenshot angesehen: Ball, Band und Punkte scharf, Hintergrund weich. **Voraussetzung:** Kantenglättung SMAA statt MSAA – mit MSAA verwischt Godot 4.5 im Mobile-Renderer das ganze Bild |
+| Neon-Gummiband, leuchtende Punkt-Kette, Kontaktschatten, kompakte Leiste | in CI geprüft (Band gebaut und orange/rot, keine Punkte auf dem Ball, Schatten unter dem Ball, Leiste ≤ 120 px mit Chips in einer Zeile, Knöpfe ≥ 48 px, Namen beim Zielen sofort aus); Aussehen per Screenshot |
 | Vorschaubilder in Tasche, Shop und Pass | Bälle, Schläger und Trails als echte 3D-Vorschau, Rahmen als Avatar; **Loch-Explosionen** haben in der Liste weiter ein Symbol (Vorschau über den Augen-Knopf live in 3D) |
 | Golfball-Dellen, Bäume, Ruinen, Rasen-, Wasser-, Flora-Shader | Shader kompilieren im CI-Rendering; Aussehen per Screenshot angesehen (Software-Rendering, nicht Handy-GPU) |
 | SSAO, volumetrischer Nebel | **nicht vorhanden** – der Mobile-Renderer unterstützt beides nicht (nur Forward+); Ersatz: eingebackene Schatten, Kontaktschatten, Tiefen-/Höhennebel |
