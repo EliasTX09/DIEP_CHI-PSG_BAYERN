@@ -120,7 +120,7 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
 
 | Geste | Wirkung |
 |---|---|
-| Am Ball ziehen und loslassen | Schlag: nach hinten ziehen wie ein Gummiband (das Band federt und schwingt nach, beim Loslassen schnellt es zurück), loslassen schießt nach vorn. Vorn zeigt eine Punkt-Kette auf dem Boden, wo der Ball aufkommt, abprallt und ausrollt (echte Simulation, Spin wird live eingerechnet), am Ende ein Zielkreis. Länge der Kette = Guide-Wert des Schlägers, Größe des Landerings = Accuracy |
+| Am Ball ziehen und loslassen | Schlag: nach hinten ziehen wie ein Gummiband (leuchtender Neon-Kern mit weißem Rand; es federt, schwingt nach und schnellt beim Loslassen zurück), loslassen schießt nach vorn. Sobald du den Ball berührst, verschwinden alle Namen, die Kamera fährt näher heran und der Hintergrund verschwimmt. Vorn zeigt eine leuchtende Punkt-Kette den Flugbogen, wo der Ball aufkommt, abprallt und ausrollt (echte Simulation, Spin wird live eingerechnet), am Ende ein pulsierender Zielkreis. Länge der Kette = Guide-Wert des Schlägers, Größe des Landerings = Accuracy |
 | Ein Finger irgendwo sonst | Kamera 360° drehen und neigen |
 | Zwei Finger | Pinch-Zoom |
 | Auge-Button | Vogelperspektive |
@@ -147,7 +147,8 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
   ragen in die Bahn (echte Kollision, der Ball hüpft drüber oder prallt ab). Laub, Lianen, Grasbüschel und lose Steine
   sind nur Optik.
 - **Grafik:** Bäume aus dickem Stamm mit Rinden-Struktur und 3–5 Kronen-Clustern (Wind, Durchscheinen),
-  bemooste Felsen und Säulen-Ruinen, Rasen mit Mäh-Streifen und Kontaktschatten an den Banden, Wasser mit
+  bemooste Felsen und Säulen-Ruinen, satter Rasen mit dunkel-/hellgrünem Schachbrett, feinem Glanz und
+  Kontaktschatten an den Banden, weicher Kontaktschatten unter jedem Ball, Tiefenunschärfe beim Zielen, Wasser mit
   Gerstner-Wellen, Golfball mit ~330 Dellen und Klarlack, Squash & Stretch, Staubwolke + Kamerawackeln bei harten
   Abprallern, weiche Schatten („Soft High“), 4× MSAA. SSAO und volumetrischer Nebel gibt es im Mobile-Renderer
   nicht (siehe Ehrlicher Status).
@@ -181,8 +182,9 @@ config/backend.cfg                Supabase-URL + anon-Key + Web-Portal-Adresse (
 .github/workflows/pages.yml           Web-Portal auf GitHub Pages veröffentlichen (manuell)
 webapp/                           Web-Portal: index.html, app.js, style.css, config.js
 scenes/                           MainMenuView.tscn, Game.tscn, GameHUD.tscn
-shaders/                          19 eigene Shader (Gelände, Rasen grass_fairway, Flora, Sand, Wasser water_realistic, Lava,
-                                  Himmel, Neon, Portal, Golfball golfball_dimples, Ball-Skins …)
+shaders/                          22 eigene Shader (Gelände, Rasen grass_fairway, Flora, Sand, Wasser water_realistic, Lava,
+                                  Himmel, Neon, Portal, Golfball golfball_dimples, Ball-Skins, Gummiband aim_band,
+                                  Punkte/Ringe aim_marker, Kontaktschatten contact_shadow …)
 scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen, Ligen),
                                   AuthManager (Login, Session, Web-Code), ProfileManager (Profilbild),
                                   NetworkManager (Profil-Sync, Freunde, Lobbys, Realtime), SoundManager (Synthesizer)

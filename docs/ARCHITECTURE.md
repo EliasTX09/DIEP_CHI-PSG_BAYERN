@@ -95,7 +95,12 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   ohne Tangenten, Wind (Wiegen + Flattern), Durchscheinen des Laubs, Moos auf Stein-Oberseiten.
 - **Renderer-Grenzen:** Der Mobile-Renderer unterstützt laut Godot-Doku **kein SSAO und keinen volumetrischen Nebel**
   (nur Forward+). Ersatz: eingebackener Kronen-Schatten (Flora), Kontaktschatten an den Banden (`grass_fairway`,
-  UV2 aus `TrackKit`), Dellen-AO im Ball-Shader, Tiefen- und Höhennebel des Environments.
+  UV2 aus `TrackKit`) und unter den Bällen (`contact_shadow`), Dellen-AO im Ball-Shader, Tiefen- und Höhennebel des
+  Environments. Tiefenunschärfe dagegen gibt es im Mobile-Renderer (nur beim Zielen eingeschaltet).
+- **Rasen** (`grass_fairway.gdshader`): Schachbrett aus dunkel- und hellgrünen Feldern (Länge `stripe_length`, Breite
+  `checker_width`, Kanten mit `fwidth` geglättet, in der Ferne zum Mittelwert ausgeblendet), Halm-Glanz je nach
+  Blickrichtung, glattere helle Felder spiegeln den Himmel (an streifenden Winkeln gedämpft, damit es nicht milchig
+  wird), Halm-Körnung als Bump-Map, Putt-Ringe ums Loch.
 
 ## Hauptmenü
 - `MainMenuView` (`scenes/MainMenuView.tscn`, `scripts/ui/MainMenu.gd`) – Hochformat, einhändig bedienbar:
@@ -121,17 +126,34 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   entlang der Normale) und Rollen der Optik; nur das Mesh wird verformt, die Kollisionskugel nie.
 - Harter Aufprall (> 5,5 m/s) → Signal `impacted` → `BallFX.impact_dust` (Staubwolke) + kurzes Kamerawackeln beim
   eigenen Ball.
+- Kontaktschatten (`BallFX.make_contact_shadow` / `place_contact_shadow`, Shader `contact_shadow.gdshader`): weicher
+  dunkler Fleck direkt unter jedem Ball (auch Online-Gegner), per Strahl auf den Boden gelegt, mit der Flughöhe
+  größer und blasser, aus bei Aus/Respawn/eingelocht.
 
 ## Zielen
-- Am Ball ziehen = Gummiband: ein Keil mit zwei Strängen spannt sich vom Ball **nach hinten** Richtung Finger,
-  Länge und Farbe zeigen die Kraft. Loslassen schießt in die Gegenrichtung. Der Knauf hängt an einer gedämpften Feder
-  (`Match3D._update_band`, jedes Bild): er schwingt nach, die Stränge knicken durch, solange das Band nicht ganz
-  gespannt ist, und beim Loslassen schnellt das Band zurück. Ändert sich Spin oder Schlagart während des Zielens,
-  wird die Vorschau sofort neu gerechnet; am Ende der Kette sitzt ein Zielkreis.
-- Nach vorn eine **Punkt-Kette auf dem Boden** aus der echten Simulation (`ShotSim`, inkl. Banden, Rampen, Gadgets):
-  Rollen und Aufsetzen als helle Punkte, der Flugabschnitt als Schatten-Punkte senkrecht darunter. Die Länge der Kette
-  kommt vom **Guide**-Wert des Schlägers, die Größe des Landerings von der **Accuracy** (mögliche Streuung).
-  Endet der Schlag im Aus, wird die Kette rot.
+- Am Ball ziehen = Gummiband: ein Band spannt sich vom Ball **nach hinten** Richtung Finger (max. 2,4 m), Länge und
+  Farbe zeigen die Kraft. Loslassen schießt in die Gegenrichtung. Das Band ist ein `ImmediateMesh`-Streifen entlang
+  einer Bezier-Kurve (`Match3D._build_band`, jedes Bild neu), Shader `aim_band.gdshader`: leuchtender Neon-Kern
+  (Gold → Orange → Rot, `GameHUD.power_color`, dieselbe Farbe wie der Kraftbalken), heiße helle Mittellinie,
+  scharfer weißer Rand, Energie-Wellen laufen zum Ball. Der Griff hängt an einer gedämpften Feder
+  (`Match3D._update_band`): er schwingt nach, das Band biegt sich mit, wird gespannt schmaler und locker breiter, beim
+  Loslassen schnellt es zurück. Ändert sich Spin oder Schlagart während des Zielens, wird die Vorschau sofort neu
+  gerechnet.
+- Nach vorn eine **Punkt-Kette** aus der echten Simulation (`ShotSim`, inkl. Banden, Rampen, Gadgets), Shader
+  `aim_marker.gdshader` (Form aus den UVs, Kanten mit `fwidth` geglättet, leicht über 1.0 für feinen Bloom):
+  Rollen und Aufsetzen als weiß-gelbe Punkte am Boden, der Flugabschnitt als Punkte **genau auf dem Flugbogen**
+  (Billboards in einem MultiMesh) plus dunkle Schatten-Punkte senkrecht darunter. Am Ende ein dezent pulsierender
+  Zielkreis. Die Länge der Kette kommt vom **Guide**-Wert des Schlägers, die Größe des Landerings von der
+  **Accuracy** (mögliche Streuung). Endet der Schlag im Aus, wird die Kette rot.
+- Kamera beim Zielen (`CameraManager3D.set_aiming`, gesetzt beim Berühren des Balls, wie das Ausblenden aller
+  Namensschilder): Abstand × 0,74 und Blickwinkel 62° → 50°, weich überblendet; die Kamera dreht sich dabei nie
+  (sonst würde die Zielrichtung unter dem Finger wandern). Dazu Tiefenunschärfe (`CameraAttributesPractical`,
+  nur Fern-Unschärfe, im Mobile-Renderer unterstützt): scharf bis zum weitesten Punkt der Vorschau + 3,5 m, dahinter
+  verschwimmt die Umgebung. Außerhalb des Zielens und in der Vogelperspektive ist die Unschärfe aus.
+- Kamera-Führung: kritisch gedämpfte Federn (`CameraManager3D.spring_step`, feste 1/120-s-Schritte) für Blickpunkt,
+  Kameraposition und Blickziel – weicher Start beim Schuss, sauberer Nachlauf, kein Nachschwingen; bei ruhendem Ball
+  straffer, damit Drehen mit dem Finger direkt reagiert. Keine Kollisions-Verkürzung (die Äste über der Bahn würden
+  die Kamera springen lassen).
 
 ## Trophäen, Arenen, adaptive Bots
 - Gesamt-Trophäen (Ligen, Cloud-Profil) bleiben eine Zahl. `GameManager.split_course_trophies` teilt das Match-Delta
