@@ -98,7 +98,8 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   UV2 aus `TrackKit`) und unter den Bällen (`contact_shadow`), Dellen-AO im Ball-Shader, Tiefen- und Höhennebel des
   Environments. Tiefenunschärfe dagegen gibt es im Mobile-Renderer (nur beim Zielen eingeschaltet).
 - **Rasen** (`grass_fairway.gdshader`): Schachbrett aus dunkel- und hellgrünen Feldern (Länge `stripe_length`, Breite
-  `checker_width`, Kanten mit `fwidth` geglättet, in der Ferne zum Mittelwert ausgeblendet), Halm-Glanz je nach
+  `checker_width`, Kanten mit `fwidth` auf genau ein Pixel geglättet, in der Ferne zum Mittelwert ausgeblendet),
+  Sättigung nach Körnung und Flecken angehoben (`saturation`, Vulkan zurückhaltender), leichter Halm-Glanz je nach
   Blickrichtung, glattere helle Felder spiegeln den Himmel (an streifenden Winkeln gedämpft, damit es nicht milchig
   wird), Halm-Körnung als Bump-Map, Putt-Ringe ums Loch.
 
@@ -131,13 +132,20 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   größer und blasser, aus bei Aus/Respawn/eingelocht.
 
 ## Zielen
-- Am Ball ziehen = Gummiband: ein Band spannt sich vom Ball **nach hinten** Richtung Finger (max. 2,4 m), Länge und
-  Farbe zeigen die Kraft. Loslassen schießt in die Gegenrichtung. Das Band ist ein `ImmediateMesh`-Streifen entlang
-  einer Bezier-Kurve (`Match3D._build_band`, jedes Bild neu), Shader `aim_band.gdshader`: leuchtender Neon-Kern
-  (Gold → Orange → Rot, `GameHUD.power_color`, dieselbe Farbe wie der Kraftbalken), heiße helle Mittellinie,
-  scharfer weißer Rand, Energie-Wellen laufen zum Ball. Der Griff hängt an einer gedämpften Feder
-  (`Match3D._update_band`): er schwingt nach, das Band biegt sich mit, wird gespannt schmaler und locker breiter, beim
-  Loslassen schnellt es zurück. Ändert sich Spin oder Schlagart während des Zielens, wird die Vorschau sofort neu
+- Am Ball ziehen = Zug-Pfeil: ein dünner Neon-Pfeil spannt sich vom Ball **nach hinten** Richtung Finger
+  (Griff 0,95–1,7 m hinter der Ballmitte), die Spitze sitzt knapp hinter der Kugel und zeigt in Schussrichtung
+  (`ARROW_HEAD_AT_BALL`, umschaltbar). Länge und Farbe zeigen die Kraft. Loslassen schießt in die Gegenrichtung.
+  Der Pfeil ist **ein** `ImmediateMesh`-Streifen entlang einer Bezier-Kurve (`Match3D._build_band`, jedes Bild neu):
+  Spitze (Breite 0 → 0,46 m), Schulter, Schaft (0,17 → 0,09 m). UV.x = seitlicher Abstand in Metern (an der Spitze
+  sauber interpoliert), UV2 = halbe Breite und Abstand zur Spitze. Shader `aim_band.gdshader`: leuchtender
+  Neon-Kern (Gold → Orange → Rot, `GameHUD.power_color`), heiße helle Mittellinie, scharfer weißer Rand auch an den
+  Schultern, Energie-Pulse laufen zur Spitze. Der Griff hängt an einer gedämpften Feder (`Match3D._update_band`): er
+  schwingt nach, der Schaft biegt sich mit, wird gespannt schmaler und locker breiter, beim Loslassen schnellt er
+  zurück.
+- Kraft in Prozent: kleine Pille (`GameHUD._power_chip`, Blitz + Zahl, Rand in der Pfeil-Farbe) schräg über dem Ball
+  (`Ball3D.indicator_anchor`), auf der Seite, auf der weder Pfeil noch Punkt-Kette liegen; `Match3D._place_power_chip`
+  setzt sie jedes Bild (die Kamera fährt beim Zielen), `GameHUD.place_power` hält sie ganz im Bild. Fängt keine
+  Berührung ab. Einen Kraftbalken am unteren Rand gibt es nicht mehr. Ändert sich Spin oder Schlagart während des Zielens, wird die Vorschau sofort neu
   gerechnet.
 - Nach vorn eine **Punkt-Kette** aus der echten Simulation (`ShotSim`, inkl. Banden, Rampen, Gadgets), Shader
   `aim_marker.gdshader` (Form aus den UVs, Kanten mit `fwidth` geglättet, leicht über 1.0 für feinen Bloom):
@@ -146,12 +154,18 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Zielkreis. Die Länge der Kette kommt vom **Guide**-Wert des Schlägers, die Größe des Landerings von der
   **Accuracy** (mögliche Streuung). Endet der Schlag im Aus, wird die Kette rot.
 - Kamera beim Zielen (`CameraManager3D.set_aiming`, gesetzt beim Berühren des Balls, wie das Ausblenden aller
-  Namensschilder): Abstand × 0,74 und Blickwinkel 62° → 50°, weich überblendet; die Kamera dreht sich dabei nie
-  (sonst würde die Zielrichtung unter dem Finger wandern). Dazu Tiefenunschärfe (`CameraAttributesPractical`,
+  Namensschilder): Abstand × 0,78 und Blickwinkel 62° → 52°, Blickpunkt rückt näher an den Ball (der Pfeil bleibt
+  über der Bedienleiste), weich überblendet; die Kamera dreht sich dabei nie seitlich (sonst würde die Zielrichtung
+  unter dem Finger wandern). Dazu Tiefenunschärfe (`CameraAttributesPractical`,
   nur Fern-Unschärfe, im Mobile-Renderer unterstützt): scharf bis zum weitesten Punkt der Vorschau + 3,5 m, dahinter
   verschwimmt die Umgebung. Außerhalb des Zielens und in der Vogelperspektive ist die Unschärfe aus.
   Kantenglättung deshalb per **SMAA statt MSAA**: Mit MSAA rendert der Mobile-Renderer (Godot 4.5) in einen eigenen
   Mehrfach-Tiefenpuffer und reicht der Unschärfe nur einen leeren Tiefenpuffer weiter – sie verwischte das ganze Bild.
+- Standard-Blick (`CameraManager3D.DEFAULT_PITCH` 0,95 rad ≈ 54°, `DEFAULT_DISTANCE` 10 m, `default_pose`): steil von
+  oben hinter dem Ball, Blickpunkt `LOOK_AHEAD` × Abstand vor dem Ball → der Ball steht bei rund zwei Dritteln der
+  Bildhöhe, das Schachbrett füllt das Bild, kein Horizont. Die Kamera-Position hängt nur von Ball, Neigung und
+  Abstand ab (Folge-Test und Schussrichtung bleiben gleich), verschoben wird nur der Blickpunkt. Der Spieler kann
+  per Wischen weiter neigen. Abschlag-Screenshots bauen ihre Kamera mit `default_pose`.
 - Kamera-Führung: kritisch gedämpfte Federn (`CameraManager3D.spring_step`, feste 1/120-s-Schritte) für Blickpunkt,
   Kameraposition und Blickziel – weicher Start beim Schuss, sauberer Nachlauf, kein Nachschwingen; bei ruhendem Ball
   straffer, damit Drehen mit dem Finger direkt reagiert. Keine Kollisions-Verkürzung (die Äste über der Bahn würden

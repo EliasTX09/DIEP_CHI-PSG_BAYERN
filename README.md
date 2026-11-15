@@ -16,8 +16,11 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 > Berg-Tälern, eine riskante Abkürzung pro Bahn, Hindernisse auf der Bahn, Randbäume mit Ästen über der Bahn,
 > Wurzeln und Felsen, neue Bäume (Stamm + Kronen-Cluster), Ruinen, Golfball mit Dellen, Squash & Stretch,
 > federndes Gummiband, Trophäen pro Bahn, Arena-Sperren, adaptive Bots und Mehrfach-Einladungen sind fertig.
-> Neu: Ziel-Kamera mit Tiefenunschärfe und Feder-Führung, Rasen-Schachbrett mit Glanz, Neon-Gummiband,
-> leuchtende Punkt-Kette entlang des Flugbogens, Kontaktschatten unter den Bällen, schmale obere Leiste.
+> Ziel-Kamera mit Tiefenunschärfe und Feder-Führung, leuchtende Punkt-Kette entlang des Flugbogens und
+> Kontaktschatten unter den Bällen sind ebenfalls fertig.
+> Neu: steiler Top-Down-Blick (Ball im unteren Drittel, Rasen füllt das Bild), knalligeres Schachbrett mit
+> pixelscharfen Kanten, dünner Neon-Zug-Pfeil hinter dem Ball mit Kraft in Prozent direkt am Ball (kein Kraftbalken
+> mehr unten), flache obere Leiste auf abgedunkeltem Verlauf.
 > Noch offen: Flyover-Vorschau, Eis-Welt, Clans.
 
 ---
@@ -122,7 +125,7 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
 
 | Geste | Wirkung |
 |---|---|
-| Am Ball ziehen und loslassen | Schlag: nach hinten ziehen wie ein Gummiband (leuchtender Neon-Kern mit weißem Rand; es federt, schwingt nach und schnellt beim Loslassen zurück), loslassen schießt nach vorn. Sobald du den Ball berührst, verschwinden alle Namen, die Kamera fährt näher heran und der Hintergrund verschwimmt. Vorn zeigt eine leuchtende Punkt-Kette den Flugbogen, wo der Ball aufkommt, abprallt und ausrollt (echte Simulation, Spin wird live eingerechnet), am Ende ein pulsierender Zielkreis. Länge der Kette = Guide-Wert des Schlägers, Größe des Landerings = Accuracy |
+| Am Ball ziehen und loslassen | Schlag: nach hinten ziehen – ein dünner Neon-Pfeil spannt sich hinter dem Ball (Spitze zeigt in Schussrichtung, weißer Rand; er federt, schwingt nach und schnellt beim Loslassen zurück), die Kraft steht in Prozent als kleine Anzeige direkt neben dem Ball, loslassen schießt nach vorn. Sobald du den Ball berührst, verschwinden alle Namen, die Kamera fährt näher heran und der Hintergrund verschwimmt. Vorn zeigt eine leuchtende Punkt-Kette den Flugbogen, wo der Ball aufkommt, abprallt und ausrollt (echte Simulation, Spin wird live eingerechnet), am Ende ein pulsierender Zielkreis. Länge der Kette = Guide-Wert des Schlägers, Größe des Landerings = Accuracy |
 | Ein Finger irgendwo sonst | Kamera 360° drehen und neigen |
 | Zwei Finger | Pinch-Zoom |
 | Auge-Button | Vogelperspektive |
@@ -149,7 +152,8 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
   ragen in die Bahn (echte Kollision, der Ball hüpft drüber oder prallt ab). Laub, Lianen, Grasbüschel und lose Steine
   sind nur Optik.
 - **Grafik:** Bäume aus dickem Stamm mit Rinden-Struktur und 3–5 Kronen-Clustern (Wind, Durchscheinen),
-  bemooste Felsen und Säulen-Ruinen, satter Rasen mit dunkel-/hellgrünem Schachbrett, feinem Glanz und
+  bemooste Felsen und Säulen-Ruinen, satter Rasen mit kräftigem dunkel-/hellgrünem Schachbrett (pixelscharfe Kanten),
+  feinem Glanz und
   Kontaktschatten an den Banden, weicher Kontaktschatten unter jedem Ball, Tiefenunschärfe beim Zielen, Wasser mit
   Gerstner-Wellen, Golfball mit ~330 Dellen und Klarlack, Squash & Stretch, Staubwolke + Kamerawackeln bei harten
   Abprallern, weiche Schatten („Soft High“), Kantenglättung SMAA. SSAO und volumetrischer Nebel gibt es im Mobile-Renderer
@@ -185,7 +189,7 @@ config/backend.cfg                Supabase-URL + anon-Key + Web-Portal-Adresse (
 webapp/                           Web-Portal: index.html, app.js, style.css, config.js
 scenes/                           MainMenuView.tscn, Game.tscn, GameHUD.tscn
 shaders/                          22 eigene Shader (Gelände, Rasen grass_fairway, Flora, Sand, Wasser water_realistic, Lava,
-                                  Himmel, Neon, Portal, Golfball golfball_dimples, Ball-Skins, Gummiband aim_band,
+                                  Himmel, Neon, Portal, Golfball golfball_dimples, Ball-Skins, Zug-Pfeil aim_band,
                                   Punkte/Ringe aim_marker, Kontaktschatten contact_shadow …)
 scripts/autoload/                 GameManager (Speicherstand, Wirtschaft, Truhen, Ligen),
                                   AuthManager (Login, Session, Web-Code), ProfileManager (Profilbild),
@@ -225,9 +229,10 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Randbäume mit Ästen über der Bahn, Wurzeln, Randfelsen | in CI geprüft (Platzierung hängt nur von der Bahn ab – im Match identisch): 36 Randbäume, davon 20 mit Ast über der Bahn, 9 Wurzeln, 10 Felsen; Äste auf 10 der 12 Natur-Bahnen (v4 und p1 haben keine Randbäume: zu viele Steilstücke bzw. Planken ohne Bande). Unter jeder Astspitze liegt nachweislich Bahnbelag, eine Ball-Kugel passt rollend darunter durch, die Äste haben Kollision. Abkürzungen weiter 14/14, Bots weiter 15/15. Auf Par-4-Bahnen nur Bäume (keine Wurzeln/Felsen auf der Bahn) |
 | Trophäen pro Bahn, Arena-Sperren | in CI geprüft (Aufteilung summiert exakt, Freischaltung nach bester Trophäenzahl, sperrt nicht wieder zu, Welttour nur durch offene Arenen) |
 | Adaptive Bots (SmartBotController) | in CI geprüft: ohne Bahn-Trophäen plant kein Bot die Abkürzung (rollt er durch einen Zielfehler doch auf die Schanze, wird das nur protokolliert – kam auf n2 vor). Bots mit Können 0,7 ohne Abkürzung: 12 von 15 Bahnen im Schlaglimit (e5, v3, v4 nicht). Echte Einsteiger-Bots (Können 0,35, wie für neue Spieler) in Arena 1: 4 von 5 (e5 nicht) – im Match gilt das als „nicht beendet“. Profi-Bots mit vielen Bahn-Trophäen nutzen die Schanze. Die Bot-Tests laufen mit festem Zufalls-Seed für die Abschlag-Streuung |
-| Squash & Stretch, federndes Gummiband, Spin live in der Vorschau, Zielkreis | in CI geprüft (Logik); wie es sich anfühlt, nur auf dem Gerät beurteilbar |
-| Ziel-Kamera, Tiefenunschärfe, Feder-Kamera | in CI geprüft: beim Berühren des Balls fährt die Kamera heran (Abstand × 0,74, 50° statt 62°), Unschärfe nur beim Zielen, scharf bis hinter das Ende der Punkt-Kette, nach dem Schlag wieder aus; Feder ohne Überschwingen. Per Screenshot angesehen: Ball, Band und Punkte scharf, Hintergrund weich. **Voraussetzung:** Kantenglättung SMAA statt MSAA – mit MSAA verwischt Godot 4.5 im Mobile-Renderer das ganze Bild |
-| Neon-Gummiband, leuchtende Punkt-Kette, Kontaktschatten, kompakte Leiste | in CI geprüft (Band gebaut und orange/rot, keine Punkte auf dem Ball, Schatten unter dem Ball, Leiste ≤ 120 px mit Chips in einer Zeile, Knöpfe ≥ 48 px, Namen beim Zielen sofort aus); Aussehen per Screenshot |
+| Squash & Stretch, federnder Zug-Pfeil, Spin live in der Vorschau, Zielkreis | in CI geprüft (Logik); wie es sich anfühlt, nur auf dem Gerät beurteilbar |
+| Top-Down-Kamera | in CI geprüft: Blick mindestens 35° nach unten, Ball im unteren Bildteil (Smoke-Test und echtes Hochformat 720 × 1280); Abschlag-Screenshots nutzen dieselbe Kamera-Pose. Ob Äste oder Tore den Ball aus der steilen Sicht verdecken, meldet der Screenshot-Lauf als Hinweis |
+| Ziel-Kamera, Tiefenunschärfe, Feder-Kamera | in CI geprüft: beim Berühren des Balls fährt die Kamera heran (Abstand × 0,78, 52° statt 62°), Unschärfe nur beim Zielen, scharf bis hinter das Ende der Punkt-Kette, nach dem Schlag wieder aus; Feder ohne Überschwingen. Per Screenshot angesehen: Ball, Band und Punkte scharf, Hintergrund weich. **Voraussetzung:** Kantenglättung SMAA statt MSAA – mit MSAA verwischt Godot 4.5 im Mobile-Renderer das ganze Bild |
+| Neon-Zug-Pfeil, Kraft am Ball, leuchtende Punkt-Kette, Kontaktschatten, flache Leiste | in CI geprüft (Pfeil gebaut und orange/rot, Griff bei voller Kraft im Hochformat über der Bedienleiste, Kraft-Anzeige am Ball und ganz im Bild, kein Kraftbalken unten, keine Punkte auf dem Ball, Schatten unter dem Ball, Leiste ≤ 120 px mit Chips in einer Zeile, Verlauf dahinter, Knöpfe ≥ 48 px, Namen beim Zielen sofort aus); Aussehen per Screenshot |
 | Vorschaubilder in Tasche, Shop und Pass | Bälle, Schläger und Trails als echte 3D-Vorschau, Rahmen als Avatar; **Loch-Explosionen** haben in der Liste weiter ein Symbol (Vorschau über den Augen-Knopf live in 3D) |
 | Golfball-Dellen, Bäume, Ruinen, Rasen-, Wasser-, Flora-Shader | Shader kompilieren im CI-Rendering; Aussehen per Screenshot angesehen (Software-Rendering, nicht Handy-GPU) |
 | SSAO, volumetrischer Nebel | **nicht vorhanden** – der Mobile-Renderer unterstützt beides nicht (nur Forward+); Ersatz: eingebackene Schatten, Kontaktschatten, Tiefen-/Höhennebel |

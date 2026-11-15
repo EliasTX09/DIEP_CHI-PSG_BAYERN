@@ -1,9 +1,12 @@
 class_name GameHUD
 extends CanvasLayer
 ## Spiel-HUD im Hochformat (Safe-Area-bewusst, einhaendig):
-## - oben, schmal und schatten-hinterlegt: Bahn-Info + Timer + Vogelperspektive/Verlassen in einer Zeile, darunter
-##   die Live-Rangliste als kompakte Chips (bis 4 nebeneinander), darunter die Status-Pille (Warten / Replay).
-## - unten (Daumenzone): Emote-Knopf links, Hinweis + glaenzende Kraftanzeige in der Mitte, Schlagart + Spin rechts.
+## - oben, minimal und flach auf einem abgedunkelten Verlauf (bis in die Notch): Bahn-Info + Timer +
+##   Vogelperspektive/Verlassen in einer Zeile, darunter die Live-Rangliste als flache Chips (bis 4 nebeneinander),
+##   darunter die Status-Pille (Warten / Replay).
+## - beim Zielen: Kraft in Prozent als kleine Anzeige direkt neben dem Ball (place_power, Position von Match3D) -
+##   kein Kraftbalken am unteren Rand.
+## - unten (Daumenzone): Emote-Knopf links, Hinweis in der Mitte, Schlagart + Spin rechts.
 ## - Banner/Style-Popups in der Bildmitte, Bahn- und Match-Ergebnis als Fenster.
 ## Die Touch-Steuerung der 3D-Ansicht (Zielen, Kamera) liegt in Match3D; das HUD faengt nur seine eigenen Widgets ab.
 
@@ -32,9 +35,13 @@ var _top_btn: Button
 var _mode_btn: Button
 var _mode_icon: UIIcon
 var _spin_pad: SpinPad
-var _power_panel: PanelContainer
-var _power_bar: ProgressBar
+## Kleine Kraft-Anzeige neben dem Ball (schwebt, faengt keine Beruehrung ab)
+var _power_chip: PanelContainer
 var _power_label: Label
+var _power_box: StyleBoxFlat
+var _power_shown: bool = false
+## Abgedunkelter Verlauf hinter der oberen Leiste
+var _top_scrim: TextureRect
 var _hint: Label
 var _banner: Label
 var _banner_sub: Label
@@ -46,26 +53,21 @@ var _top_on: bool = false
 var _banner_tween: Tween = null
 ## Aktuelle Meldung (immer nur eine, direkt unter der oberen Leiste - nie ueber Rangliste oder Kraftanzeige)
 var _toast: PanelContainer = null
-## Fuellung der Kraftanzeige (Farbe + Leuchten folgen der Kraft)
-var _power_fill: StyleBoxFlat = null
 ## Breite, fuer die die Ranglisten-Chips zuletzt ausgelegt wurden
 var _board_w: float = -1.0
 ## Rangliste: hoechstens so viele Chips nebeneinander
 const BOARD_COLUMNS := 4
 const BOARD_GAP := 4
 
-## Farbe der Schlagkraft (Gummiband und Kraftanzeige): Neon-Gold -> Orange -> Rot.
+## Farbe der Schlagkraft (Zug-Pfeil und Kraft-Anzeige): Neon-Gold -> Orange -> Rot.
 static func power_color(power: float) -> Color:
 	var p: float = clampf(power, 0.0, 1.0)
 	return Color(1.0, 0.78, 0.16).lerp(Color(1.0, 0.45, 0.06), clampf(p * 2.0, 0.0, 1.0)).lerp(Color(1.0, 0.13, 0.1), clampf(p * 2.0 - 1.0, 0.0, 1.0))
 
-## Dunkler, halbtransparenter Hintergrund mit weichem Schlagschatten (fuegt sich ruhig ueber der 3D-Szene ein).
-static func _shadow_panel(color: Color, radius: int) -> PanelContainer:
+## Flaches Feld ohne Schatten und Rand (obere Leiste).
+static func _flat_panel(color: Color, radius: int) -> PanelContainer:
 	var p := PanelContainer.new()
 	var sb := UIKit.box(color, radius)
-	sb.shadow_color = Color(0.0, 0.0, 0.0, 0.42)
-	sb.shadow_size = 7
-	sb.shadow_offset = Vector2(0.0, 2.0)
 	sb.content_margin_left = 0.0
 	sb.content_margin_right = 0.0
 	sb.content_margin_top = 0.0
@@ -73,6 +75,22 @@ static func _shadow_panel(color: Color, radius: int) -> PanelContainer:
 	p.add_theme_stylebox_override("panel", sb)
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return p
+
+## Flacher, runder Icon-Knopf: dunkel-transparent, feiner heller Rand, kein 3D-Wulst. Mindestens 50 px (Daumen).
+static func _style_flat_button(b: Button, bg: Color) -> void:
+	var n := UIKit.box(bg, 25, Color(1.0, 1.0, 1.0, 0.18), 1)
+	var pr := UIKit.box(bg.lightened(0.25), 25, Color(1.0, 1.0, 1.0, 0.35), 1)
+	for sb: StyleBoxFlat in [n, pr]:
+		sb.content_margin_left = 0.0
+		sb.content_margin_right = 0.0
+		sb.content_margin_top = 0.0
+		sb.content_margin_bottom = 0.0
+	for st in ["normal", "hover", "disabled"]:
+		b.add_theme_stylebox_override(st, n)
+	b.add_theme_stylebox_override("pressed", pr)
+	var ic := b.get_node_or_null("Icon") as Control
+	if ic != null:
+		ic.position = (b.custom_minimum_size - ic.size) * 0.5
 
 # ================================================================ Spin-Selector
 
@@ -148,9 +166,31 @@ func _ready() -> void:
 	_build_top(area)
 	_build_bottom(area)
 	_build_center(area)
+	_build_power_chip()
 
 ## Obere Spalte: Info-Zeile, Rangliste, Status.
 func _build_top(area: Control) -> void:
+	# Abgedunkelter Verlauf hinter der ganzen Leiste (oben kraeftig, nach unten weich auslaufend), reicht bis in die
+	# Notch. Hoehe folgt der Leiste (_process). Faengt keine Beruehrung ab.
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.62, 1.0])
+	grad.colors = PackedColorArray([Color(0.01, 0.02, 0.05, 0.74), Color(0.01, 0.02, 0.05, 0.5), Color(0.01, 0.02, 0.05, 0.0)])
+	var gt := GradientTexture2D.new()
+	gt.gradient = grad
+	gt.width = 4
+	gt.height = 64
+	gt.fill_from = Vector2(0.0, 0.0)
+	gt.fill_to = Vector2(0.0, 1.0)
+	_top_scrim = TextureRect.new()
+	_top_scrim.name = "TopScrim"
+	_top_scrim.texture = gt
+	_top_scrim.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_top_scrim.stretch_mode = TextureRect.STRETCH_SCALE
+	_top_scrim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_top_scrim)
+	_root.move_child(_top_scrim, 0)
+	_top_scrim.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_top_scrim.offset_bottom = 120.0
 	_top_box = UIKit.vbox(4)
 	_top_box.name = "TopBox"
 	_top_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -159,8 +199,8 @@ func _build_top(area: Control) -> void:
 	var row := UIKit.hbox(6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_top_box.add_child(row)
-	# Schmale Info-Leiste: Bahn + Par/Schlag links, Timer rechts
-	var p := _shadow_panel(Color(0.03, 0.05, 0.11, 0.68), 12)
+	# Flache Info-Zeile direkt auf dem Verlauf: Bahn + Par/Schlag links, Timer rechts
+	var p := _flat_panel(Color(0.0, 0.0, 0.0, 0.0), 0)
 	p.name = "InfoPanel"
 	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(p)
@@ -184,11 +224,13 @@ func _build_top(area: Control) -> void:
 	h.add_child(_timer)
 	_top_btn = UIKit.icon_button("eye", UIKit.PURPLE, _on_top_pressed, 50.0)
 	_top_btn.name = "TopViewButton"
+	_style_flat_button(_top_btn, Color(0.0, 0.0, 0.0, 0.36))
 	row.add_child(_top_btn)
-	_exit_btn = UIKit.icon_button("exit", UIKit.RED, confirm_exit, 50.0)
+	_exit_btn = UIKit.icon_button("exit", UIKit.RED, confirm_exit, 50.0, Color(1.0, 0.55, 0.5))
 	_exit_btn.name = "ExitButton"
+	_style_flat_button(_exit_btn, Color(0.0, 0.0, 0.0, 0.36))
 	row.add_child(_exit_btn)
-	# Live-Rangliste: kompakte Chips, bis zu 4 nebeneinander (Breite aus dem Container, siehe _layout_board)
+	# Live-Rangliste: flache Chips, bis zu 4 nebeneinander (Breite aus dem Container, siehe _layout_board)
 	_board = HFlowContainer.new()
 	_board.name = "Board"
 	_board.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -221,47 +263,12 @@ func _build_bottom(area: Control) -> void:
 	_emote_btn = UIKit.icon_button("emote", UIKit.GOLD.darkened(0.15), _toggle_emotes, 72.0)
 	_emote_btn.name = "EmoteButton"
 	left.add_child(_emote_btn)
-	# Mitte: Hinweis + Kraftanzeige
+	# Mitte: Hinweis (die Kraft steht beim Zielen direkt am Ball, siehe _build_power_chip)
 	var mid := UIKit.vbox(6)
 	mid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.alignment = BoxContainer.ALIGNMENT_END
 	_bottom_box.add_child(mid)
-	_power_panel = _shadow_panel(Color(0.03, 0.05, 0.11, 0.72), 14)
-	_power_panel.name = "PowerPanel"
-	_power_panel.visible = false
-	var ph := UIKit.hbox(8)
-	_power_panel.add_child(UIKit.margin(ph, 8, 5, 8, 5))
-	ph.add_child(UIIcon.new("bolt", 24.0, UIKit.GOLD))
-	# Glaenzender Kraftbalken: dunkle Roehre, leuchtende Fuellung (Farbe wie das Gummiband) mit weissem Rand,
-	# darueber ein Glanzstreifen
-	_power_bar = UIKit.bar(0.0, power_color(0.0), Vector2(0, 22))
-	_power_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_power_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var tube := UIKit.box(Color(0.01, 0.02, 0.05, 0.9), 11, Color(1, 1, 1, 0.22), 1)
-	_power_bar.add_theme_stylebox_override("background", tube)
-	_power_fill = UIKit.box(power_color(0.0), 11, Color(1.0, 1.0, 1.0, 0.9), 2)
-	_power_fill.shadow_color = Color(power_color(0.0), 0.55)
-	_power_fill.shadow_size = 7
-	_power_bar.add_theme_stylebox_override("fill", _power_fill)
-	var gloss := Panel.new()
-	gloss.name = "Gloss"
-	gloss.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var gs := UIKit.box(Color(1.0, 1.0, 1.0, 0.24), 8)
-	gs.corner_radius_bottom_left = 2
-	gs.corner_radius_bottom_right = 2
-	gloss.add_theme_stylebox_override("panel", gs)
-	gloss.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	gloss.offset_left = 5.0
-	gloss.offset_right = -5.0
-	gloss.offset_top = 3.0
-	gloss.offset_bottom = 9.0
-	_power_bar.add_child(gloss)
-	ph.add_child(_power_bar)
-	_power_label = UIKit.label("0%", 22, UIKit.TEXT)
-	_power_label.custom_minimum_size = Vector2(58, 0)
-	ph.add_child(_power_label)
-	mid.add_child(_power_panel)
 	_hint = UIKit.wrap_label("", 19, UIKit.TEXT, true)
 	_hint.add_theme_constant_override("outline_size", 6)
 	_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
@@ -333,6 +340,32 @@ func _build_center(area: Control) -> void:
 	_banner_sub.modulate.a = 0.0
 	v.add_child(_banner_sub)
 
+## Kleine Kraft-Anzeige: dunkle Pille mit Blitz + Prozent, Rand und Zahl in der Farbe des Zug-Pfeils.
+## Liegt direkt im Root (Bildschirm-Koordinaten), Position kommt jedes Bild von Match3D (place_power).
+func _build_power_chip() -> void:
+	_power_chip = PanelContainer.new()
+	_power_chip.name = "PowerChip"
+	_power_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_power_chip.visible = false
+	_power_box = UIKit.box(Color(0.02, 0.03, 0.07, 0.7), 11, power_color(0.0), 2)
+	_power_box.content_margin_left = 6.0
+	_power_box.content_margin_right = 8.0
+	_power_box.content_margin_top = 1.0
+	_power_box.content_margin_bottom = 1.0
+	_power_box.shadow_color = Color(power_color(0.0), 0.35)
+	_power_box.shadow_size = 5
+	_power_chip.add_theme_stylebox_override("panel", _power_box)
+	var h := UIKit.hbox(3)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_power_chip.add_child(h)
+	var bolt := UIIcon.new("bolt", 15.0, UIKit.GOLD)
+	bolt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(bolt)
+	_power_label = UIKit.label("0%", 18, power_color(0.0))
+	_power_label.custom_minimum_size = Vector2(40, 0)
+	h.add_child(_power_label)
+	_root.add_child(_power_chip)
+
 # ================================================================ Aktionen der Widgets
 
 func _on_top_pressed() -> void:
@@ -342,7 +375,7 @@ func _on_top_pressed() -> void:
 ## Zustand des Vogelperspektive-Buttons setzen (ohne Signal).
 func set_top_view(on: bool) -> void:
 	_top_on = on
-	UIKit.set_button_color(_top_btn, UIKit.GOLD.darkened(0.1) if on else UIKit.PURPLE)
+	_style_flat_button(_top_btn, Color(UIKit.GOLD.darkened(0.1), 0.9) if on else Color(0.0, 0.0, 0.0, 0.36))
 
 func _on_mode_pressed() -> void:
 	set_chip_mode(not chip_mode)
@@ -396,7 +429,7 @@ func set_leaderboard(rows: Array) -> void:
 		_board.remove_child(last)
 		last.queue_free()
 	while _board.get_child_count() < rows.size():
-		var chip := _shadow_panel(Color(0.03, 0.05, 0.11, 0.62), 10)
+		var chip := _flat_panel(Color(1.0, 1.0, 1.0, 0.08), 6)
 		var h := UIKit.hbox(5)
 		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		chip.add_child(UIKit.margin(h, 5, 0, 7, 0))
@@ -444,15 +477,32 @@ func _layout_board() -> void:
 	for c in _board.get_children():
 		(c as Control).custom_minimum_size = Vector2(maxf(90.0, w), 0.0)
 
+## Kraft beim Zielen (0..1). Sichtbar wird die Anzeige erst, wenn Match3D sie neben den Ball setzt (place_power).
 func set_power(power: float, shown: bool) -> void:
-	_power_panel.visible = shown
+	_power_shown = shown
 	if not shown:
+		_power_chip.visible = false
 		return
-	_power_bar.value = power
 	_power_label.text = "%d%%" % int(round(power * 100.0))
 	var col: Color = power_color(power)
-	_power_fill.bg_color = col
-	_power_fill.shadow_color = Color(col, 0.35 + 0.35 * power)
+	_power_label.add_theme_color_override("font_color", col.lightened(0.25))
+	_power_box.border_color = col
+	_power_box.shadow_color = Color(col, 0.3 + 0.35 * power)
+
+## Setzt die Kraft-Anzeige neben den Ball: `anchor` = Bildschirmpunkt schraeg ueber dem Ball (INF = Ball nicht im
+## Bild), side > 0 -> Anzeige rechts davon, sonst links. Bleibt immer ganz im Bild.
+func place_power(anchor: Vector2, side: float) -> void:
+	if not _power_shown or anchor == Vector2.INF:
+		_power_chip.visible = false
+		return
+	var sz: Vector2 = _power_chip.get_combined_minimum_size()
+	_power_chip.size = sz
+	var vp: Vector2 = _root.size if _root.size.x > 1.0 else get_viewport().get_visible_rect().size
+	var pos := Vector2(anchor.x if side > 0.0 else anchor.x - sz.x, anchor.y - sz.y)
+	pos.x = clampf(pos.x, 6.0, maxf(6.0, vp.x - sz.x - 6.0))
+	pos.y = clampf(pos.y, 6.0, maxf(6.0, vp.y - sz.y - 6.0))
+	_power_chip.position = pos
+	_power_chip.visible = true
 
 func set_hint(text: String) -> void:
 	_hint.text = text
@@ -522,6 +572,9 @@ func _place_toast() -> void:
 	_toast.position = Vector2(maxf(0.0, (w - sz.x) * 0.5), _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 8.0)
 
 func _process(_delta: float) -> void:
+	# Verlauf reicht bis knapp unter die Leiste (die waechst mit der Rangliste)
+	if _top_scrim != null and _top_box.size.y > 1.0:
+		_top_scrim.offset_bottom = _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 26.0
 	# Die obere Leiste waechst, wenn Spieler dazukommen -> Meldung bleibt darunter
 	if _toast != null and is_instance_valid(_toast):
 		_place_toast()

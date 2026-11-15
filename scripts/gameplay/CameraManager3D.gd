@@ -1,9 +1,11 @@
 class_name CameraManager3D
 extends Node3D
 ## 3D-Kamera fuer das Spiel (Hochformat):
-##  - FOLLOW: Orbit um den Ball (ein Finger dreht 360 Grad + neigt, Pinch zoomt). Die Kamera haengt an einer
-##    kritisch gedaempften Feder (Spring-Arm): Beim Schuss beschleunigt sie weich, gleitet dem Ball mit sauberem
-##    Abstand hinterher und bremst ohne Nachschwingen.
+##  - FOLLOW: Orbit um den Ball (ein Finger dreht 360 Grad + neigt, Pinch zoomt). Standard ist ein steiler
+##    Top-Down-Arcade-Blick: hoch hinter dem Ball, Blickpunkt etwas VOR dem Ball -> der Ball steht im unteren
+##    Drittel, das Rasen-Schachbrett fuellt das Bild bis weit nach vorn, kein flacher Horizont.
+##    Die Kamera haengt an einer kritisch gedaempften Feder (Spring-Arm): Beim Schuss beschleunigt sie weich,
+##    gleitet dem Ball mit sauberem Abstand hinterher und bremst ohne Nachschwingen.
 ##  - Zielen (set_aiming): Kamera faehrt naeher an den Ball und verengt den Blickwinkel, damit Ball, Gummiband und
 ##    Punkt-Kette das Bild beherrschen. Dazu echte Tiefenunschaerfe (Depth of Field): alles bis zum Ende der
 ##    Punkt-Kette bleibt scharf, der Hintergrund verschwimmt weich. Ausserhalb des Zielens ist die Unschaerfe aus.
@@ -18,9 +20,17 @@ const PITCH_MIN := 0.1
 const PITCH_MAX := 1.4
 const DIST_MIN := 3.5
 const DIST_MAX := 60.0
+## Standard-Blick: Neigung (rad, ueber der Waagerechten) und Abstand zum Ball. 0.95 rad = 54 Grad -> steil von oben.
+const DEFAULT_PITCH := 0.95
+const DEFAULT_DISTANCE := 10.0
+const BASE_FOV := 62.0
+## Blickpunkt liegt um Abstand x LOOK_AHEAD vor dem Ball (Ball im unteren Drittel). Beim Zielen naeher am Ball
+## (LOOK_AHEAD_AIM), damit der Zug-Pfeil hinter dem Ball ueber der Bedienleiste bleibt.
+const LOOK_AHEAD := 0.3
+const LOOK_AHEAD_AIM := 0.12
 ## Beim Zielen: Abstand x AIM_DIST, Blickwinkel AIM_FOV Grad
-const AIM_DIST := 0.74
-const AIM_FOV := 50.0
+const AIM_DIST := 0.78
+const AIM_FOV := 52.0
 ## Wie schnell der Ziel-Zoom ein- und ausfaehrt (1/s)
 const AIM_EASE := 7.0
 ## Staerke der Hintergrund-Unschaerfe beim Zielen und die Zone hinter dem scharfen Bereich, in der sie einsetzt (m)
@@ -39,8 +49,8 @@ var camera: Camera3D
 var mode: int = Mode.FOLLOW
 var target: Node3D = null
 var yaw: float = 0.0
-var pitch: float = 0.5
-var distance: float = 11.0
+var pitch: float = DEFAULT_PITCH
+var distance: float = DEFAULT_DISTANCE
 var sensitivity: float = 1.0
 ## Sekunden seit der letzten manuellen Drehung (fuer automatisches Ausrichten).
 var idle_time: float = 99.0
@@ -67,8 +77,8 @@ var _replay_angle: float = 0.0
 var _snap: bool = true
 ## Bahn mit Gelaende: die Kamera bleibt immer ueber den Hangen (nie in einem Berg).
 var course: Course3D = null
-var _base_fov: float = 62.0
-var _want_fov: float = 62.0
+var _base_fov: float = BASE_FOV
+var _want_fov: float = BASE_FOV
 var _aiming: bool = false
 ## 0 = normal, 1 = voll im Ziel-Zoom (weich ueberblendet)
 var _aim_t: float = 0.0
@@ -133,6 +143,23 @@ func set_aim_focus(point: Vector3) -> void:
 ## Aktueller Abstand des Balls zur Kamera (wirksam, inkl. Ziel-Zoom).
 func effective_distance() -> float:
 	return distance * lerpf(1.0, AIM_DIST, _aim_t)
+
+## Kamera-Pose des Standard-Blicks (ohne Feder, ohne Ziel-Zoom) fuer einen Ball bei `ball`, Spielrichtung `forward`.
+## Liefert {"pos", "look", "fov"}. Dieselbe Rechnung wie FOLLOW (Tests und Screenshots bauen damit die Spielersicht).
+static func default_pose(ball: Vector3, forward: Vector3, dist: float = DEFAULT_DISTANCE, pitch_rad: float = DEFAULT_PITCH) -> Dictionary:
+	var f := Vector3(forward.x, 0.0, forward.z)
+	f = f.normalized() if f.length() > 0.01 else Vector3.FORWARD
+	return {"pos": ball - f * (cos(pitch_rad) * dist) + Vector3.UP * (sin(pitch_rad) * dist),
+		"look": _look_point(ball, f, dist * LOOK_AHEAD), "fov": BASE_FOV}
+
+## Blickpunkt: `ahead` Meter vor dem Ball (waagerecht), knapp ueber dem Boden.
+static func _look_point(ball: Vector3, forward_flat: Vector3, ahead: float) -> Vector3:
+	return ball + forward_flat * ahead + Vector3.UP * 0.2
+
+## Neigung des Blicks unter die Waagerechte (Grad) - fuer Tests: Top-Down = deutlich ueber 30 Grad.
+func view_depression_deg() -> float:
+	var f: Vector3 = -camera.global_basis.z
+	return rad_to_deg(asin(clampf(-f.y, -1.0, 1.0)))
 
 ## Ein-Finger-Wischen: dreht/neigt (FOLLOW) bzw. verschiebt (TOP).
 func orbit(drag: Vector2) -> void:
@@ -284,7 +311,9 @@ func _process(delta: float) -> void:
 			var dist: float = effective_distance()
 			var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
 			want_pos = _focus + dir * dist
-			want_look = _focus + Vector3.UP * 0.5
+			# Blick voraus (Spielrichtung = von der Kamera weg): Ball im unteren Drittel, beim Zielen etwas hoeher
+			var fwd_flat := Vector3(-sin(yaw), 0.0, -cos(yaw))
+			want_look = _look_point(_focus, fwd_flat, dist * lerpf(LOOK_AHEAD, LOOK_AHEAD_AIM, _aim_t))
 		Mode.TOP:
 			var c: Vector3 = _top_center + _top_pan
 			want_pos = c + Vector3.UP * _top_height - _top_forward * 0.5

@@ -1,7 +1,7 @@
 // Fairway und Gruen aus sattem, frisch gemaehtem Rasen:
-// - kontrastreiches Schachbrett aus dunkel- und hellgruenen Feldern (Maeh-Bahnen laengs und quer), Kanten mit
-//   fwidth geglaettet; die Felder wirken zusaetzlich je nach Blickrichtung heller oder dunkler (Halme liegen
-//   abwechselnd mit und gegen die Spielrichtung)
+// - knalliges, kontrastreiches Schachbrett aus dunkel- und hellgruenen Feldern (Maeh-Bahnen laengs und quer),
+//   gestochen scharfe Kanten (genau ein Pixel geglaettet), Saettigung angehoben; die Felder wirken je nach
+//   Blickrichtung leicht heller oder dunkler (Halme liegen abwechselnd mit und gegen die Spielrichtung)
 // - feiner Glanz: die hellen Felder spiegeln das Himmelslicht (niedrigere Rauheit), an streifenden Winkeln gedaempft,
 //   damit der Rasen nie milchig wird
 // - grossflaechige Farbverlaeufe, trockene Flecken, Halm-Koernung als Bump-Map (faengt das Streiflicht)
@@ -20,6 +20,8 @@ uniform float checker_width = 1.25;
 // 0 = nur Laengsstreifen, 1 = volles Schachbrett
 uniform float checker = 1.0;
 uniform float contrast = 1.0;
+// > 1 = sattere Farben (nach Koernung und Flecken angewendet, damit nichts verwaescht)
+uniform float saturation = 1.18;
 uniform float half_width = 2.5;
 uniform float grass_detail = 1.0;
 uniform float sheen = 0.22;
@@ -42,10 +44,11 @@ float noise(vec2 p) {
 	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
-// Rechteck-Welle 0/1 mit geglaetteten Kanten (Kanten bei ganzen Zahlen). fw = Pixelbreite in denselben Einheiten.
+// Rechteck-Welle 0/1 mit geglaetteten Kanten (Kanten bei ganzen Zahlen). fw = Pixelbreite in denselben Einheiten;
+// der Uebergang ist genau ein Pixel breit -> scharf, aber ohne Treppen.
 float square_aa(float x, float fw) {
 	float tri = abs(fract((x + 0.5) * 0.5) * 2.0 - 1.0);
-	return smoothstep(0.5 - fw, 0.5 + fw, tri);
+	return smoothstep(0.5 - 0.5 * fw, 0.5 + 0.5 * fw, tri);
 }
 
 void vertex() {
@@ -62,22 +65,25 @@ void fragment() {
 	// XOR mit weichen Werten; checker = 0 -> nur Laengsstreifen
 	float board = mix(sy, sx + sy - 2.0 * sx * sy, checker);
 	// in der Ferne (Felder kleiner als ein paar Pixel) sanft zum Mittelwert -> kein Flimmern
-	float far_fade = 1.0 - smoothstep(0.25, 0.6, max(fw.x, fw.y));
+	float far_fade = 1.0 - smoothstep(0.3, 0.7, max(fw.x, fw.y));
 	float lane = (board * 2.0 - 1.0) * far_fade;
 	// Blickrichtungs-Glanz: Felder mit den Halmen zur Kamera wirken heller
 	vec3 dir = dFdx(wpos) * dFdx(UV.y) + dFdy(wpos) * dFdy(UV.y);
 	vec3 view_w = normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz);
 	float along = dot(normalize(dir.xz + vec2(1e-5)), normalize(view_w.xz + vec2(1e-5)));
-	float light_cell = clamp(0.5 + 0.5 * lane * contrast * (0.78 + 0.22 * along), 0.0, 1.0);
+	float light_cell = clamp(0.5 + 0.5 * lane * contrast * (0.9 + 0.1 * along), 0.0, 1.0);
 	vec3 col = mix(color_a, color_b, light_cell);
 	// --- grossflaechige Verlaeufe: sattes Gruen, trockene Flecken ---
 	float big = noise(wpos.xz * 0.08) * 0.55 + noise(wpos.xz * 0.27) * 0.45;
-	float dry = smoothstep(0.66, 0.88, noise(wpos.xz * 0.05 + 7.3)) * 0.25;
-	col *= mix(1.0, 0.9 + 0.2 * big, grass_detail);
+	float dry = smoothstep(0.7, 0.9, noise(wpos.xz * 0.05 + 7.3)) * 0.14;
+	col *= mix(1.0, 0.94 + 0.12 * big, grass_detail);
 	col = mix(col, dry_color * (0.85 + 0.3 * big), dry * grass_detail);
 	// --- Halm-Koernung: helle Spitzen, dunkler Grund ---
 	float blades = hash(floor(wpos.xz * 26.0)) * 0.55 + noise(wpos.xz * 9.0) * 0.45;
-	col *= mix(1.0, 0.92 + 0.16 * blades, grass_detail);
+	col *= mix(1.0, 0.95 + 0.1 * blades, grass_detail);
+	// Saettigung anheben (gegen den Grauschleier von Koernung, Flecken und Tonemapping)
+	float luma = dot(col, vec3(0.299, 0.587, 0.114));
+	col = max(mix(vec3(luma), col, saturation), vec3(0.0));
 	// Bump aus der Koernung (Streiflicht), blendet mit der Entfernung aus
 	float near = (1.0 - smoothstep(8.0, 30.0, cam_dist)) * grass_detail;
 	float h = (blades * 0.6 + noise(wpos.xz * 3.0) * 0.4) * 0.012 * near;
@@ -102,6 +108,6 @@ void fragment() {
 	AO_LIGHT_AFFECT = 0.6;
 	// --- Glanz: helle Felder glatter (spiegeln den Himmel), an streifenden Winkeln gedaempft (kein Milchschleier) ---
 	float facing = smoothstep(0.08, 0.55, clamp(dot(NORMAL, VIEW), 0.0, 1.0));
-	ROUGHNESS = mix(0.8, 0.58, light_cell * sheen / 0.22);
+	ROUGHNESS = mix(0.82, 0.52, light_cell * sheen / 0.22);
 	SPECULAR = (0.2 + sheen * 1.1 * light_cell) * mix(0.35, 1.0, facing) * ao;
 }

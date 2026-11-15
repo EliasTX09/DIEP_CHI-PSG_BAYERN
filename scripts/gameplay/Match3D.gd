@@ -69,7 +69,7 @@ var _aim_dir: Vector3 = Vector3.FORWARD
 var _pinch_dist: float = 0.0
 var _preview_dirty: bool = false
 var _preview_cool: float = 0.0
-## Gummiband: Wurzel-Knoten (am Ball, +z zeigt nach hinten), leuchtendes Band (jedes Bild neu gebaut) + Griff
+## Zug-Pfeil: Wurzel-Knoten (am Ball, +z zeigt nach hinten), duenner Neon-Pfeil (jedes Bild neu gebaut) + Griff
 var _arrow: Node3D
 var _band_mesh: MeshInstance3D
 var _band_im: ImmediateMesh
@@ -87,12 +87,14 @@ var _drawn_cam: Vector3 = Vector3.ZERO
 var _landing: MeshInstance3D
 ## Zielkreis am vorhergesagten Ende des Schlags
 var _target_ring: MeshInstance3D
-## Gummiband als gedaempfte Feder: Knauf folgt dem Finger mit Nachschwingen, beim Loslassen schnellt er zurueck
+## Zug-Pfeil als gedaempfte Feder: Griff folgt dem Finger mit Nachschwingen, beim Loslassen schnellt er zurueck
 const BAND_K := 230.0
 const BAND_DAMP := 17.0
 var _band_knob: Vector3 = Vector3.INF
 var _band_knob_v: Vector3 = Vector3.ZERO
 var _band_release: float = 0.0
+## Seite (Bildschirm: +1 rechts, -1 links), auf der die Kraft-Anzeige neben dem Ball schwebt
+var _power_side: float = 1.0
 var _preview_spin: Vector2 = Vector2.ZERO
 ## Letzter Boden-Punkt der Kette (Zielkreis; auch fuer Tests - der Renderer wird dafuer nicht ausgelesen)
 var _preview_end: Vector3 = Vector3.INF
@@ -248,8 +250,8 @@ func _start_hole(index: int) -> void:
 		_local_brain = BotBrain.new(local.ball, course, 0.8, _rng.randi())
 	var fwd: Vector3 = -course.tee.basis.z
 	rig.set_overview(course.bounds, fwd)
-	rig.distance = 11.0
-	rig.pitch = 0.45
+	rig.distance = CameraManager3D.DEFAULT_DISTANCE
+	rig.pitch = CameraManager3D.DEFAULT_PITCH
 	rig.follow(local.node(), true)
 	rig.aim_at(fwd, true)
 	rig.set_top(true)
@@ -417,6 +419,7 @@ func _touch_down(index: int, pos: Vector2) -> void:
 			_aim_start = pos
 			_aim_drag = Vector2.ZERO
 			_aim_power = 0.0
+			_power_side = 1.0
 			# Sobald der Ball beruehrt wird: alle Namen sofort aus, Kamera faehrt naeher heran (Hintergrund unscharf)
 			BallTag.hide_names = true
 			rig.set_aiming(true)
@@ -437,7 +440,7 @@ func _touch_move(index: int, pos: Vector2, relative: Vector2) -> void:
 		_aim_power = 0.0 if length < vh * 0.035 else clampf((length - vh * 0.035) / (vh * 0.32), 0.0, 1.0)
 		_aim_dir = rig.aim_direction(_aim_drag)
 		_preview_dirty = true
-		hud.set_power(_aim_power, true)
+		hud.set_power(_aim_power, _aim_power >= 0.02)
 	elif _touches.size() >= 2:
 		var keys: Array = _touches.keys()
 		var dist: float = (_touches[keys[0]] as Vector2).distance_to(_touches[keys[1]])
@@ -483,10 +486,11 @@ func _cancel_aim() -> void:
 		if phase == Phase.PLAY and not auto_play:
 			hud.set_hint("Ziehe am Ball, um zu zielen" if _can_aim() else "")
 
-## Ziel-Optik: leuchtendes Gummiband HINTER dem Ball (spannt sich Richtung Finger) und eine Punkt-Kette VOR dem Ball,
-## die der Kruemmung der Flugbahn folgt (Punkte im Bogen + deren Schatten am Boden, Rollen als Punkte am Boden).
+## Ziel-Optik: duenner Neon-Zug-Pfeil HINTER dem Ball (spannt sich Richtung Finger, Spitze zeigt in Schussrichtung),
+## Kraft in Prozent als kleine Anzeige neben dem Ball (HUD) und eine Punkt-Kette VOR dem Ball, die der Kruemmung der
+## Flugbahn folgt (Punkte im Bogen + deren Schatten am Boden, Rollen als Punkte am Boden).
 func _build_aim_visuals() -> void:
-	# --- Gummiband: Band (Neon-Kern, weisser Rand) + Griff am Fingerende ---
+	# --- Zug-Pfeil: Neon-Kern, weisser Rand, Spitze am Ball + kleiner Griff am Fingerende ---
 	_arrow = Node3D.new()
 	_arrow.name = "AimBand"
 	_arrow.visible = false
@@ -503,9 +507,9 @@ func _build_aim_visuals() -> void:
 	_band_mesh.custom_aabb = AABB(Vector3(-6.0, -2.0, -6.0), Vector3(12.0, 4.0, 12.0))
 	_arrow.add_child(_band_mesh)
 	_knob_mat = Mat.shader("aim_marker", {"core_color": GameHUD.power_color(0.0), "rim_color": Color(1.0, 1.0, 1.0),
-		"rim_width": 0.34, "glow": 1.6})
+		"rim_width": 0.38, "glow": 1.7})
 	_knob_mat.render_priority = 5
-	var knob := _marker_quad(0.5, _knob_mat)
+	var knob := _marker_quad(0.28, _knob_mat)
 	knob.name = "Knob"
 	_arrow.add_child(knob)
 	# --- Punkt-Kette: Boden-Punkte (weiss-gelb), Bogen-Punkte (Billboards im Flug), Bodenschatten des Bogens ---
@@ -575,17 +579,25 @@ func _set_dots_out(out: bool) -> void:
 		m.set_shader_parameter("core_color", core)
 		m.set_shader_parameter("rim_color", rim)
 
-## Breite des Bands am Ball und am Griff (m) und Zahl der Abschnitte
-const BAND_W_BALL := 0.58
-const BAND_W_KNOB := 0.2
-const BAND_SEGMENTS := 18
-## Laenge des Bands bei voller Kraft (m): kurz genug, dass der Griff auch im Ziel-Zoom ueber der Bedienleiste bleibt
-const BAND_MAX := 2.4
+## Zug-Pfeil (m): Breite und Laenge der Spitze, Schaftbreite an der Spitze und am Griff
+const ARROW_HEAD_W := 0.46
+const ARROW_HEAD_LEN := 0.34
+const ARROW_SHAFT_W := 0.17
+const ARROW_TAIL_W := 0.09
+## Abstand der Pfeilspitze von der Ballmitte (m): knapp hinter der Kugel (naeher waere sie unter dem Ball versteckt)
+const ARROW_GAP := 0.36
+## Abstand Ballmitte -> Griff bei Kraft 0 und bei voller Kraft (m): kurz genug, dass der Griff im Ziel-Zoom ueber der
+## Bedienleiste bleibt (ShotRunner prueft das im echten Hochformat)
+const ARROW_MIN := 0.95
+const BAND_MAX := 1.7
+## true: Spitze am Ball, zeigt in Schussrichtung. false: Spitze am Griff, zeigt zum Finger (Griff-Punkt entfaellt).
+const ARROW_HEAD_AT_BALL := true
+const BAND_SEGMENTS := 16
 
-## Gummiband + Punkt-Kette (echte Simulation inkl. Abprallern, Rampen und Gadgets).
+## Zug-Pfeil + Punkt-Kette (echte Simulation inkl. Abprallern, Rampen und Gadgets).
 ## Laenge der Kette = Guide-Wert des Schlaegers, Groesse des Landerings = Streuung (Accuracy).
-## Gummiband hinter dem Ball, jedes Bild neu: Der Griff haengt an einer gedaempften Feder (schwingt nach, wenn der
-## Finger die Richtung wechselt). Das Band biegt sich mit dem Nachschwingen, wird gespannt schmaler und locker
+## Zug-Pfeil hinter dem Ball, jedes Bild neu: Der Griff haengt an einer gedaempften Feder (schwingt nach, wenn der
+## Finger die Richtung wechselt). Der Schaft biegt sich mit dem Nachschwingen, wird gespannt schmaler und locker
 ## breiter. Nach dem Loslassen schnellt der Griff zum Ball zurueck.
 func _update_band(dt: float) -> void:
 	if local == null or local.ball == null or _arrow == null:
@@ -605,10 +617,10 @@ func _update_band(dt: float) -> void:
 	elif power < 0.02:
 		_arrow.visible = false
 		return
-	var want_len: float = 0.0 if _band_release > 0.0 else 0.55 + (BAND_MAX - 0.55) * power
+	var want_len: float = 0.0 if _band_release > 0.0 else ARROW_MIN + (BAND_MAX - ARROW_MIN) * power
 	var want: Vector3 = origin + back * want_len
 	if _band_knob == Vector3.INF:
-		_band_knob = origin + back * 0.3
+		_band_knob = origin + back * (ARROW_GAP + 0.25)
 		_band_knob_v = Vector3.ZERO
 	var left: float = minf(dt, 0.1)
 	var k: float = BAND_K * (4.0 if _band_release > 0.0 else 1.0)
@@ -626,41 +638,78 @@ func _update_band(dt: float) -> void:
 	_arrow.visible = true
 	_arrow.global_position = origin
 	_arrow.global_basis = Basis.looking_at(-back, Vector3.UP)
-	# Griff im Band-Rahmen (z = nach hinten), Nachschwingen quer zum Band
+	# Griff im Pfeil-Rahmen (z = nach hinten), Nachschwingen quer zum Pfeil
 	var tip: Vector3 = _arrow.global_transform.affine_inverse() * _band_knob
 	var side_v: float = (_arrow.global_basis.inverse() * _band_knob_v).x
 	var slack: float = clampf(1.0 - tip.length() / maxf(0.3, want_len), 0.0, 1.0) if want_len > 0.0 else 0.0
 	_build_band(tip, clampf(-side_v * 0.05, -0.6, 0.6), slack)
-	(_arrow.get_node("Knob") as Node3D).position = tip + Vector3(0.0, 0.004, 0.0)
+	var knob := _arrow.get_node("Knob") as Node3D
+	knob.position = tip + Vector3(0.0, 0.004, 0.0)
+	knob.visible = ARROW_HEAD_AT_BALL and _band_mesh.visible
+	if _aiming:
+		_place_power_chip()
 
-## Baut das Band als Streifen entlang einer Bezier-Kurve vom Ball zum Griff.
-## bend = seitliche Auslenkung der Mitte (Nachschwingen), slack = wie locker das Band noch ist (0 = gespannt).
-func _build_band(tip: Vector3, bend: float, slack: float) -> void:
+## Baut den Pfeil als einen Streifen entlang einer Bezier-Kurve von knapp hinter dem Ball bis zum Griff:
+## Spitze (Dreieck, Breite 0 -> ARROW_HEAD_W), Schulter, Schaft (ARROW_SHAFT_W -> ARROW_TAIL_W).
+## bend = seitliche Auslenkung der Mitte (Nachschwingen), slack = wie locker der Pfeil noch ist (0 = gespannt).
+func _build_band(tail: Vector3, bend: float, slack: float) -> void:
 	_band_im.clear_surfaces()
-	var length: float = tip.length()
-	if length < 0.06:
+	var flat := Vector3(tail.x, 0.0, tail.z)
+	var length: float = flat.length()
+	var span: float = length - ARROW_GAP
+	if span < 0.12:
 		_band_mesh.visible = false
 		return
 	_band_mesh.visible = true
-	var dir: Vector3 = tip / length
+	var dir: Vector3 = flat / length
 	var lateral: Vector3 = Vector3.UP.cross(dir).normalized()
-	var p0 := Vector3.ZERO
-	var p1: Vector3 = tip * 0.5 + lateral * bend
-	# gespannt = schmaler (das Gummi wird duenn), locker = breiter
-	var stretch: float = clampf(length / BAND_MAX, 0.0, 1.0)
-	var width_mul: float = lerpf(1.12, 0.78, stretch) * (1.0 + 0.25 * slack)
+	var p0: Vector3 = dir * ARROW_GAP + Vector3(0.0, tail.y, 0.0)
+	var p2: Vector3 = tail
+	var p1: Vector3 = (p0 + p2) * 0.5 + lateral * bend
+	# kurzer Pfeil (Loslassen) -> Spitze schrumpft mit
+	var head_len: float = minf(ARROW_HEAD_LEN, span * 0.42)
+	var head_w: float = ARROW_HEAD_W * head_len / ARROW_HEAD_LEN
+	var u_head: float = head_len / span
+	# gespannt = schmaler Schaft, locker = breiter
+	var stretch: float = clampf(span / (BAND_MAX - ARROW_GAP), 0.0, 1.0)
+	var width_mul: float = lerpf(1.08, 0.86, stretch) * (1.0 + 0.2 * slack)
+	var shaft_w: float = ARROW_SHAFT_W * width_mul
+	_band_mat.set_shader_parameter("head_len", head_len)
+	_band_mat.set_shader_parameter("shaft_half", shaft_w * 0.5)
+	_band_mat.set_shader_parameter("arrow_length", span)
+	# Zeilen: u = 0 an der Pfeilspitze, 1 am anderen Ende; [u, volle Breite]
+	var rows: Array = [[0.0, 0.0], [u_head, head_w], [u_head, shaft_w]]
+	for i in range(1, BAND_SEGMENTS + 1):
+		var f: float = float(i) / float(BAND_SEGMENTS)
+		rows.append([lerpf(u_head, 1.0, f), lerpf(shaft_w, ARROW_TAIL_W * width_mul, sqrt(f))])
 	_band_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-	for i in BAND_SEGMENTS + 1:
-		var t: float = float(i) / float(BAND_SEGMENTS)
-		var c: Vector3 = p0.lerp(p1, t).lerp(p1.lerp(tip, t), t)
-		var tangent: Vector3 = (p1 - p0) * (2.0 * (1.0 - t)) + (tip - p1) * (2.0 * t)
+	for row: Array in rows:
+		var u: float = row[0]
+		var t: float = u if ARROW_HEAD_AT_BALL else 1.0 - u
+		var c: Vector3 = p0.lerp(p1, t).lerp(p1.lerp(p2, t), t)
+		var tangent: Vector3 = (p1 - p0) * (2.0 * (1.0 - t)) + (p2 - p1) * (2.0 * t)
 		var side: Vector3 = Vector3.UP.cross(tangent.normalized()) if tangent.length() > 0.0001 else lateral
-		var w: float = lerpf(BAND_W_BALL, BAND_W_KNOB, sqrt(t)) * width_mul * 0.5
-		_band_im.surface_set_uv(Vector2(0.0, t))
-		_band_im.surface_add_vertex(c - side * w)
-		_band_im.surface_set_uv(Vector2(1.0, t))
-		_band_im.surface_add_vertex(c + side * w)
+		var hw: float = float(row[1]) * 0.5
+		# UV.x = seitlicher Abstand zur Mittellinie (m, mit Vorzeichen): auch an der Spitze (beide Ecken im selben
+		# Punkt) sauber interpoliert
+		_band_im.surface_set_uv(Vector2(-hw, u))
+		_band_im.surface_set_uv2(Vector2(hw, u * span))
+		_band_im.surface_add_vertex(c - side * hw)
+		_band_im.surface_set_uv(Vector2(hw, u))
+		_band_im.surface_set_uv2(Vector2(hw, u * span))
+		_band_im.surface_add_vertex(c + side * hw)
 	_band_im.surface_end()
+
+## Kraft in Prozent schwebt seitlich ueber dem Ball - auf der Seite, auf der weder Pfeil noch Punkt-Kette liegen
+## (Finger rechts -> Schuss nach links oben -> Anzeige rechts oben). Jedes Bild neu, weil die Kamera beim Zielen faehrt.
+func _place_power_chip() -> void:
+	if absf(_aim_drag.x) > 24.0:
+		_power_side = signf(_aim_drag.x)
+	var cam: Camera3D = rig.camera
+	var right: Vector3 = cam.global_basis.x
+	right = Vector3(right.x, 0.0, right.z).normalized()
+	var anchor: Vector3 = local.ball.indicator_anchor(right * _power_side)
+	hud.place_power(Vector2.INF if cam.is_position_behind(anchor) else cam.unproject_position(anchor), _power_side)
 
 func _update_preview() -> void:
 	if local == null or local.ball == null or not _aiming:

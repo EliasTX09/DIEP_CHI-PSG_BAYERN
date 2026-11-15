@@ -597,6 +597,11 @@ func _update_shadow() -> void:
 func has_contact_shadow() -> bool:
 	return _shadow != null and _shadow.visible
 
+## Punkt, an dem die kleine Kraft-Anzeige beim Zielen schwebt: schraeg ueber dem Ball, zur Seite `side`
+## (waagerechte Welt-Richtung, Laenge 1). Das HUD setzt die Anzeige mit ihrer unteren Ecke auf diesen Punkt.
+func indicator_anchor(side: Vector3) -> Vector3:
+	return global_position + side * (RADIUS * 1.25) + Vector3.UP * (RADIUS * 1.15)
+
 ## Rollen + Squash & Stretch der sichtbaren Kugel. Die Kollisionsform bleibt immer eine exakte Kugel.
 func _update_visual(delta: float) -> void:
 	var p: Vector3 = global_position

@@ -58,6 +58,12 @@ func _shot_game() -> void:
 	else:
 		print("[SHOTS] HUD-Layout geprueft: oben ", topr, " unten ", botr)
 	var screen: Vector2 = m.rig.target_screen_pos()
+	# Top-Down-Blick im echten Hochformat: steil von oben, Ball im unteren Teil des Bildes
+	var depression: float = m.rig.view_depression_deg()
+	if screen == Vector2.INF or screen.y < hvp.size.y * 0.55 or depression < 35.0:
+		print("[SHOTS][FAIL] Kamera: Ball bei %s, Blick %.0f Grad nach unten (erwartet: unteres Bild, >= 35 Grad)" % [screen, depression])
+	else:
+		print("[SHOTS] Kamera: Ball bei %.0f %% der Bildhoehe, Blick %.0f Grad nach unten" % [screen.y / hvp.size.y * 100.0, depression])
 	if screen != Vector2.INF:
 		m._touch_down(0, screen)
 		m._touch_move(0, screen + Vector2(40.0, 260.0), Vector2(40.0, 260.0))
@@ -65,6 +71,7 @@ func _shot_game() -> void:
 		for i in 40:
 			await get_tree().process_frame
 		await _capture("game_aim")
+		_check_aim_layout(m, hvp)
 		# Chip: Punkte entlang des Flugbogens (Billboards) + Schatten am Boden + Aufsetz-Ring
 		m.hud.set_chip_mode(true)
 		for i in 30:
@@ -94,6 +101,26 @@ func _shot_game() -> void:
 	m.queue_free()
 	await get_tree().process_frame
 
+## Beim Zielen im echten Hochformat: Griff des Zug-Pfeils bei VOLLER Kraft im Bild und ueber der Bedienleiste,
+## Kraft-Anzeige sichtbar, ganz im Bild und direkt am Ball, kein Kraftbalken am unteren Rand.
+func _check_aim_layout(m: Match3D, hvp: Rect2) -> void:
+	var cam: Camera3D = m.rig.camera
+	var ball_pos: Vector3 = m.local.ball.global_position
+	var back := Vector3(-m._aim_dir.x, 0.0, -m._aim_dir.z).normalized()
+	var tail: Vector3 = ball_pos + Vector3(0.0, -Ball3D.RADIUS + 0.05, 0.0) + back * Match3D.BAND_MAX
+	var tail_s: Vector2 = cam.unproject_position(tail)
+	var hint_top: float = m.hud._hint.get_global_rect().position.y if m.hud._hint.text != "" else hvp.size.y
+	var ok_tail: bool = not cam.is_position_behind(tail) and hvp.grow(-4.0).has_point(tail_s) and tail_s.y < hint_top
+	var chip: Rect2 = m.hud._power_chip.get_global_rect()
+	var ball_s: Vector2 = cam.unproject_position(ball_pos)
+	var ok_chip: bool = m.hud._power_chip.visible and hvp.encloses(chip) and chip.get_center().distance_to(ball_s) < hvp.size.y * 0.12
+	var no_bar: bool = m.hud._root.find_child("PowerPanel", true, false) == null
+	if ok_tail and ok_chip and no_bar:
+		print("[SHOTS] Zielen: Pfeil-Griff (volle Kraft) bei %s ueber dem Hinweis (%.0f), Kraft-Anzeige %s am Ball %s" % [tail_s, hint_top, chip, ball_s])
+	else:
+		print("[SHOTS][FAIL] Zielen: Pfeil-Griff %s (Hinweis ab %.0f), Kraft-Anzeige %s sichtbar=%s, Ball %s, Kraftbalken weg=%s" % [tail_s, hint_top,
+			chip, m.hud._power_chip.visible, ball_s, no_bar])
+
 func _course_camera(c: Course3D) -> Camera3D:
 	var cam := Camera3D.new()
 	cam.fov = 50.0
@@ -115,16 +142,22 @@ func _shot_course(id: String) -> void:
 	for i in 14:
 		await get_tree().process_frame
 	await _capture("course_" + id)
-	# Spielersicht vom Abschlag: Tal, Berge, Wald
+	# Spielersicht vom Abschlag: genau der Standard-Blick der Spielkamera (steil von oben, Blick voraus)
 	var tee: Transform3D = c.tee
-	var back: Vector3 = tee.basis.z
-	var eye: Vector3 = tee.origin + back * 9.0 + Vector3.UP * 4.5
-	eye.y = maxf(eye.y, c.ground_height(eye.x, eye.z) + 2.5)
+	var ball_p: Vector3 = tee.origin + Vector3.UP * Ball3D.RADIUS
+	var pose: Dictionary = CameraManager3D.default_pose(ball_p, -tee.basis.z)
+	var eye: Vector3 = pose["pos"]
+	eye.y = maxf(eye.y, c.ground_height(eye.x, eye.z) + 2.2)
 	cam.global_position = eye
-	cam.look_at(tee.origin - back * 14.0 + Vector3.UP * 1.0, Vector3.UP)
-	cam.fov = 62.0
+	cam.look_at(pose["look"], Vector3.UP)
+	cam.fov = float(pose["fov"])
 	for i in 6:
 		await get_tree().process_frame
+	# Verdeckt etwas (Ast, Tor, Fels) den Ball aus der steilen Sicht? (nur Hinweis, kein Fehler)
+	var ray := PhysicsRayQueryParameters3D.create(eye, ball_p)
+	var hit: Dictionary = c.get_world_3d().direct_space_state.intersect_ray(ray)
+	if not hit.is_empty() and (hit["position"] as Vector3).distance_to(ball_p) > Ball3D.RADIUS * 2.5:
+		print("[SHOTS] Hinweis: Abschlag %s - Sicht auf den Ball verdeckt bei %s" % [id, hit["position"]])
 	await _capture("tee_" + id)
 	# Abkuerzung: vom Tor ueber den Steg Richtung Gruen
 	if not c.shortcut.is_empty():

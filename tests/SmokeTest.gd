@@ -876,15 +876,26 @@ func _stage_match() -> void:
 	m.hud.toast("Test")
 	m.hud.set_status("REPLAY")
 	m.hud.set_power(0.7, true)
+	m.hud.place_power(Vector2(hvp.size.x * 0.5, hvp.size.y * 0.6), 1.0)
+	check(m.hud._power_chip.visible and m.hud._power_label.text == "70%" and hvp.encloses(m.hud._power_chip.get_global_rect()),
+		"Kraft-Anzeige schwebt als kleine Pille (70 %)")
+	m.hud.place_power(Vector2(hvp.size.x - 2.0, 3.0), 1.0)
+	check(hvp.encloses(m.hud._power_chip.get_global_rect()), "Kraft-Anzeige bleibt am Bildrand ganz im Bild")
+	m.hud.set_power(0.0, false)
+	check(not m.hud._power_chip.visible, "Kraft-Anzeige verschwindet nach dem Zielen")
+	check(m.hud._root.find_child("PowerPanel", true, false) == null, "Kein Kraftbalken mehr am unteren Rand")
+	var scrim: Control = m.hud._top_scrim
+	check(scrim != null and scrim.mouse_filter == Control.MOUSE_FILTER_IGNORE and scrim.get_global_rect().end.y >= topr.end.y,
+		"Abgedunkelter Verlauf hinter der ganzen oberen Leiste (faengt keine Beruehrung ab)")
 	m.hud.set_chip_mode(true)
 	m.hud.show_banner("BIRDIE!", "2 Schlaege")
 	m.hud.hide_overlay()
 	m.hud.toast("Abkürzung: durchs Felsentor auf die Schanze – spart Schläge, daneben ist Aus!")
 	await _process_frames(3)
 	var toast_r: Rect2 = m.hud._toast.get_global_rect()
-	check(not toast_r.intersects(m.hud._board.get_global_rect()) and not toast_r.intersects(m.hud._power_panel.get_global_rect())
+	check(not toast_r.intersects(m.hud._board.get_global_rect())
 		and toast_r.position.y >= m.hud._top_box.get_global_rect().end.y and hvp.grow(1.0).encloses(toast_r),
-		"Meldung liegt unter der Rangliste, nicht ueber Kraftanzeige (%s)" % toast_r)
+		"Meldung liegt unter der Rangliste (%s)" % toast_r)
 	m.hud.toast("Zweite Meldung")
 	await _process_frames(2)
 	check(m.hud._root.find_children("Toast*", "PanelContainer", true, false).size() == 1, "Neue Meldung ersetzt die alte (keine Stapel)")
@@ -966,6 +977,11 @@ func _stage_input() -> void:
 	var ball: Ball3D = m.local.ball
 	var screen: Vector2 = m.rig.target_screen_pos()
 	check(screen != Vector2.INF, "Ball ist im Bild")
+	# Top-Down-Blick: steil von oben, Blick voraus -> Ball im unteren Bildteil (Blickwinkel ist vertikal fest,
+	# daher auch im quadratischen Testfenster gueltig)
+	var vh0: float = m.get_viewport().get_visible_rect().size.y
+	check(m.rig.view_depression_deg() > 35.0 and screen.y > vh0 * 0.55,
+		"Top-Down-Kamera: steil von oben (%.0f Grad), Ball im unteren Bildteil (%.0f %%)" % [m.rig.view_depression_deg(), screen.y / vh0 * 100.0])
 	# 1) Kamera drehen: Finger weit weg vom Ball ziehen
 	var yaw_before: float = m.rig.yaw
 	var far: Vector2 = Vector2(120.0, 360.0)
@@ -1004,6 +1020,12 @@ func _stage_input() -> void:
 		_drag(0, screen + Vector2(0.0, 40.0 * float(i + 1)), Vector2(0.0, 40.0))
 		await _process_frames(1)
 	check(m._aiming and m._aim_power > 0.3, "Ziehen am Ball spannt den Schlag (Kraft %.2f)" % m._aim_power)
+	var chip_r: Rect2 = m.hud._power_chip.get_global_rect()
+	var vp_r := Rect2(Vector2.ZERO, m.get_viewport().get_visible_rect().size)
+	var ball_now: Vector2 = m.rig.camera.unproject_position(ball.global_position)
+	check(m.hud._power_chip.visible and vp_r.encloses(chip_r) and chip_r.get_center().distance_to(ball_now) < vp_r.size.y * 0.15
+		and m.hud._power_label.text == "%d%%" % int(round(m._aim_power * 100.0)),
+		"Kraft in Prozent schwebt direkt am Ball (%s, Ball %s)" % [m.hud._power_label.text, ball_now])
 	check(m._dots.visible and m._arrow.visible, "Kraftpfeil und Flugbahn-Vorschau sichtbar")
 	var tag_alpha: float = 0.0
 	var tag_count := 0
