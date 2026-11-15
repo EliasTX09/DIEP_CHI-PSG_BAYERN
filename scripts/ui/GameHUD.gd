@@ -497,7 +497,7 @@ func place_power(anchor: Vector2, side: float) -> void:
 		return
 	var sz: Vector2 = _power_chip.get_combined_minimum_size()
 	_power_chip.size = sz
-	var vp: Vector2 = _root.size if _root.size.x > 1.0 else get_viewport().get_visible_rect().size
+	var vp: Vector2 = get_viewport().get_visible_rect().size
 	var pos := Vector2(anchor.x if side > 0.0 else anchor.x - sz.x, anchor.y - sz.y)
 	pos.x = clampf(pos.x, 6.0, maxf(6.0, vp.x - sz.x - 6.0))
 	pos.y = clampf(pos.y, 6.0, maxf(6.0, vp.y - sz.y - 6.0))

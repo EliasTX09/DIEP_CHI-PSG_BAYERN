@@ -1025,7 +1025,9 @@ func _stage_input() -> void:
 	var ball_now: Vector2 = m.rig.camera.unproject_position(ball.global_position)
 	check(m.hud._power_chip.visible and vp_r.encloses(chip_r) and chip_r.get_center().distance_to(ball_now) < vp_r.size.y * 0.15
 		and m.hud._power_label.text == "%d%%" % int(round(m._aim_power * 100.0)),
-		"Kraft in Prozent schwebt direkt am Ball (%s, Ball %s)" % [m.hud._power_label.text, ball_now])
+		"Kraft in Prozent schwebt direkt am Ball (%s, erwartet %d%%, sichtbar=%s, gezeigt=%s, Pille %s, Ball %s, Root %s)" % [
+			m.hud._power_label.text, int(round(m._aim_power * 100.0)), m.hud._power_chip.visible, m.hud._power_shown, chip_r,
+			ball_now, m.hud._root.size])
 	check(m._dots.visible and m._arrow.visible, "Kraftpfeil und Flugbahn-Vorschau sichtbar")
 	var tag_alpha: float = 0.0
 	var tag_count := 0
