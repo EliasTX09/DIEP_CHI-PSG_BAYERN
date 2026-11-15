@@ -701,15 +701,40 @@ func _build_band(tail: Vector3, bend: float, slack: float) -> void:
 	_band_im.surface_end()
 
 ## Kraft in Prozent schwebt seitlich ueber dem Ball - auf der Seite, auf der weder Pfeil noch Punkt-Kette liegen
-## (Finger rechts -> Schuss nach links oben -> Anzeige rechts oben). Jedes Bild neu, weil die Kamera beim Zielen faehrt.
+## (Finger rechts -> Schuss nach links oben -> Anzeige rechts oben). Liegt dort ein anderer Ball (Abschlag), weicht
+## sie auf die andere Seite aus; sind beide Seiten belegt, schwebt sie hoeher. Jedes Bild neu (die Kamera faehrt).
 func _place_power_chip() -> void:
 	if absf(_aim_drag.x) > 24.0:
 		_power_side = signf(_aim_drag.x)
 	var cam: Camera3D = rig.camera
 	var right: Vector3 = cam.global_basis.x
 	right = Vector3(right.x, 0.0, right.z).normalized()
-	var anchor: Vector3 = local.ball.indicator_anchor(right * _power_side)
-	hud.place_power(Vector2.INF if cam.is_position_behind(anchor) else cam.unproject_position(anchor), _power_side)
+	var others: PackedVector3Array = PackedVector3Array()
+	for rec in players:
+		var bn: Node3D = rec.node()
+		if rec != local and bn != null and bn.is_visible_in_tree() and not rec.holed:
+			others.append(bn.global_position)
+	var bp: Vector3 = local.ball.global_position
+	var side: float = _power_side
+	var lift: float = 0.0
+	if _side_blocked(bp, right * side, others):
+		if not _side_blocked(bp, -right * side, others):
+			side = -side
+		else:
+			lift = Ball3D.RADIUS * 2.2
+	var anchor: Vector3 = local.ball.indicator_anchor(right * side) + Vector3.UP * lift
+	hud.place_power(Vector2.INF if cam.is_position_behind(anchor) else cam.unproject_position(anchor), side)
+
+## Liegt neben dem Ball auf Seite `side_dir` (waagerecht, Laenge 1) ein anderer Ball dort, wo die Kraft-Anzeige
+## schweben wuerde? (bis gut 1 m zur Seite, knapp vor oder hinter dem Ball)
+static func _side_blocked(ball: Vector3, side_dir: Vector3, others: PackedVector3Array) -> bool:
+	var fwd: Vector3 = side_dir.cross(Vector3.UP)
+	for o in others:
+		var d: Vector3 = o - ball
+		var lat: float = d.dot(side_dir)
+		if lat > 0.0 and lat < 1.15 and absf(d.dot(fwd)) < 0.6 and absf(d.y) < 1.0:
+			return true
+	return false
 
 func _update_preview() -> void:
 	if local == null or local.ball == null or not _aiming:

@@ -1020,6 +1020,9 @@ func _stage_input() -> void:
 		_drag(0, screen + Vector2(0.0, 40.0 * float(i + 1)), Vector2(0.0, 40.0))
 		await _process_frames(1)
 	check(m._aiming and m._aim_power > 0.3, "Ziehen am Ball spannt den Schlag (Kraft %.2f)" % m._aim_power)
+	var neighbours := PackedVector3Array([Vector3(0.8, 0.0, 0.0)])
+	check(Match3D._side_blocked(Vector3.ZERO, Vector3.RIGHT, neighbours) and not Match3D._side_blocked(Vector3.ZERO, Vector3.LEFT, neighbours),
+		"Kraft-Anzeige weicht einem Nachbarball am Abschlag aus (rechts belegt, links frei)")
 	var chip_r: Rect2 = m.hud._power_chip.get_global_rect()
 	var vp_r := Rect2(Vector2.ZERO, m.get_viewport().get_visible_rect().size)
 	var ball_now: Vector2 = m.rig.camera.unproject_position(ball.global_position)
