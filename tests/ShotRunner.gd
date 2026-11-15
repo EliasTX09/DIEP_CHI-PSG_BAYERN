@@ -103,19 +103,23 @@ func _shot_game() -> void:
 			await get_tree().process_frame
 			if i > 20 and m.local.ball.state != Ball3D.State.MOVING:
 				break
-		for i in 45:
+		# Kamera prueft die Sicht nach ~0,8 s Ruhe und gleitet dann ~1 s zur freien Neigung
+		for i in 110:
 			await get_tree().process_frame
 		await _capture("game_follow")
 		var cam_p: Vector3 = m.rig.camera.global_position
 		var bp2: Vector3 = m.local.ball.global_position
-		var q := PhysicsRayQueryParameters3D.create(cam_p, bp2)
 		var ex: Array[RID] = [m.local.ball.get_rid()]
-		q.exclude = ex
+		var q := PhysicsRayQueryParameters3D.create(cam_p, bp2, CameraManager3D.VIEW_MASK, ex)
 		var hit2: Dictionary = m.get_world_3d().direct_space_state.intersect_ray(q)
 		var bs: Vector2 = m.rig.camera.unproject_position(bp2)
-		print("[SHOTS] Mitten auf der Bahn: Ball %.1f m vom Abschlag, am Bildschirm %s (%.0f %% Hoehe), Zustand %d, Strahl Kamera->Ball %s" % [
-			bp2.distance_to(m.course.tee.origin), bs, bs.y / hvp.size.y * 100.0, m.local.ball.state,
-			"frei" if hit2.is_empty() else "trifft %s bei %s" % [(hit2["collider"] as Node).name, hit2["position"]]])
+		var info: String = "Ball %.1f m vom Abschlag, am Bildschirm %s (%.0f %% Hoehe), Zustand %d, Neigung %.2f (Spieler %.2f), Strahl Kamera->Ball %s" % [
+			bp2.distance_to(m.course.tee.origin), bs, bs.y / hvp.size.y * 100.0, m.local.ball.state, m.rig.effective_pitch(), m.rig.pitch,
+			"frei" if hit2.is_empty() else "trifft %s bei %s" % [(hit2["collider"] as Node).name, hit2["position"]]]
+		if hit2.is_empty() and hvp.has_point(bs):
+			print("[SHOTS] Mitten auf der Bahn: " + info)
+		else:
+			print("[SHOTS][FAIL] Mitten auf der Bahn ist der ruhende Ball verdeckt oder nicht im Bild: " + info)
 	m.rig.set_top(true)
 	for i in 50:
 		await get_tree().process_frame

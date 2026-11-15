@@ -965,6 +965,30 @@ func _stage_input() -> void:
 		if i == 0:
 			first = sx.x
 	check(first < 0.05 and peak <= 1.0005 and sx.x > 0.99, "Spring-Arm-Kamera: weicher Start (%.3f), kein Ueberschwingen (%.4f), kommt an" % [first, peak])
+	# Freie Sicht: eine Wand (wie der Bogen eines Tors) zwischen Standard-Kamera und Ball -> andere Neigung mit freier
+	# Sicht; ohne Wand bleibt die Neigung des Spielers
+	var vball := Vector3(900.0, 300.0, 900.0)
+	var vspace: PhysicsDirectSpaceState3D = get_tree().root.get_world_3d().direct_space_state
+	var pd: float = CameraManager3D.DEFAULT_PITCH
+	var dd: float = CameraManager3D.DEFAULT_DISTANCE
+	check(is_equal_approx(CameraManager3D.clear_pitch(vspace, vball, 0.0, dd, pd), pd), "Freie Sicht: ohne Hindernis bleibt die Neigung")
+	var wall := StaticBody3D.new()
+	wall.collision_layer = 1
+	var wshape := CollisionShape3D.new()
+	var wbox := BoxShape3D.new()
+	wbox.size = Vector3(4.0, 1.2, 0.8)
+	wshape.shape = wbox
+	wall.add_child(wshape)
+	get_tree().root.add_child(wall)
+	# Mitte des Sichtstrahls aus dem Standard-Blick (Kamera hinten = +z bei yaw 0)
+	wall.global_position = vball + Vector3(0.0, sin(pd) * dd * 0.5, cos(pd) * dd * 0.5)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var blocked: bool = not CameraManager3D.view_free(vspace, vball, 0.0, dd, pd)
+	var freep: float = CameraManager3D.clear_pitch(vspace, vball, 0.0, dd, pd)
+	check(blocked and not is_equal_approx(freep, pd) and CameraManager3D.view_free(vspace, vball, 0.0, dd, freep),
+		"Freie Sicht: Wand verdeckt den Ball -> Kamera findet Neigung %.2f statt %.2f mit freier Sicht" % [freep, pd])
+	wall.queue_free()
 	var cfg: Dictionary = GameManager.make_bot_match("emerald", 3, 1)
 	cfg["courses"] = ["e1"]
 	var m: Match3D = await _run_match(cfg, false, 0.0)

@@ -6,6 +6,9 @@ extends Node3D
 ##    Drittel, das Rasen-Schachbrett fuellt das Bild bis weit nach vorn, kein flacher Horizont.
 ##    Die Kamera haengt an einer kritisch gedaempften Feder (Spring-Arm): Beim Schuss beschleunigt sie weich,
 ##    gleitet dem Ball mit sauberem Abstand hinterher und bremst ohne Nachschwingen.
+##    Freie Sicht: Kommt der Ball hinter einem Tor, Ast oder Fels zur Ruhe, sucht die Kamera EINMAL pro Ruhephase
+##    die naechste Neigung mit freier Sicht (zuerst steiler, dann flacher) und gleitet dorthin; rollt der Ball wieder,
+##    kehrt sie zum Standard-Blick zurueck. Die Neigung des Spielers (pitch) bleibt dabei unangetastet.
 ##  - Zielen (set_aiming): Kamera faehrt naeher an den Ball und verengt den Blickwinkel, damit Ball, Gummiband und
 ##    Punkt-Kette das Bild beherrschen. Dazu echte Tiefenunschaerfe (Depth of Field): alles bis zum Ende der
 ##    Punkt-Kette bleibt scharf, der Hintergrund verschwimmt weich. Ausserhalb des Zielens ist die Unschaerfe aus.
@@ -25,9 +28,15 @@ const DEFAULT_PITCH := 0.95
 const DEFAULT_DISTANCE := 10.0
 const BASE_FOV := 62.0
 ## Blickpunkt liegt um Abstand x LOOK_AHEAD vor dem Ball (Ball im unteren Drittel). Beim Zielen naeher am Ball
-## (LOOK_AHEAD_AIM), damit der Zug-Pfeil hinter dem Ball ueber der Bedienleiste bleibt.
+## (LOOK_AHEAD_AIM), damit der Griff des Zug-Pfeils im Bild und ueber dem Hinweis bleibt.
 const LOOK_AHEAD := 0.3
 const LOOK_AHEAD_AIM := 0.12
+## Freie Sicht auf den ruhenden Ball: Kollisions-Ebenen der Welt (Bahn, Tore, Aeste, Hindernisse, Plattformen - ohne
+## Baelle), Schrittweite und Grenzen der Neigungs-Suche (rad)
+const VIEW_MASK := 1 | 4 | 8
+const VIEW_STEP := 0.07
+const VIEW_PITCH_MIN := 0.25
+const VIEW_PITCH_MAX := 1.38
 ## Beim Zielen: Abstand x AIM_DIST, Blickwinkel AIM_FOV Grad
 const AIM_DIST := 0.78
 const AIM_FOV := 52.0
@@ -84,6 +93,11 @@ var _aiming: bool = false
 var _aim_t: float = 0.0
 ## Weitester Punkt, der beim Zielen scharf bleiben soll (Ende der Punkt-Kette); INF = nur der Ball
 var _aim_focus: Vector3 = Vector3.INF
+## Freie Sicht: Zusatz-Neigung (weich) und Ziel dafuer, schon entschieden fuer diese Ruhephase?, Ruhezeit des Balls
+var _view_offset: float = 0.0
+var _view_goal: float = 0.0
+var _view_checked: bool = false
+var _rest_time: float = 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -108,8 +122,13 @@ func follow(node: Node3D, snap: bool = false) -> void:
 	mode = Mode.FOLLOW
 	_want_fov = _base_fov
 	_target_prev = Vector3.INF
+	# neuer Ball / Respawn: Sicht neu pruefen, sobald er ruht
+	_view_checked = false
+	_view_goal = 0.0
+	_rest_time = 0.0
 	if snap and node != null:
 		_focus = node.global_position
+		_view_offset = 0.0
 		_snap = true
 
 ## Richtet die Kamera hinter dem Ball in Blickrichtung `dir` aus.
@@ -156,6 +175,58 @@ static func default_pose(ball: Vector3, forward: Vector3, dist: float = DEFAULT_
 static func _look_point(ball: Vector3, forward_flat: Vector3, ahead: float) -> Vector3:
 	return ball + forward_flat * ahead + Vector3.UP * 0.2
 
+## Freie Sicht auf den Ball aus Neigung `pitch_rad`? Zwei Strahlen (Ballmitte und Ball-Oberkante) von der Kamera-
+## Position, die FOLLOW dafuer haette. Baelle liegen auf einer eigenen Ebene und zaehlen nicht als Hindernis.
+static func view_free(space: PhysicsDirectSpaceState3D, ball: Vector3, yaw_rad: float, dist: float, pitch_rad: float,
+		exclude: Array[RID] = [], floor_fn: Callable = Callable()) -> bool:
+	var cam: Vector3 = ball + Vector3(sin(yaw_rad) * cos(pitch_rad), sin(pitch_rad), cos(yaw_rad) * cos(pitch_rad)) * dist
+	if floor_fn.is_valid():
+		cam.y = maxf(cam.y, float(floor_fn.call(cam.x, cam.z)) + 2.2)
+	for p: Vector3 in [ball, ball + Vector3.UP * 0.27]:
+		var q := PhysicsRayQueryParameters3D.create(cam, p, VIEW_MASK, exclude)
+		if not space.intersect_ray(q).is_empty():
+			return false
+	return true
+
+## Naechste Neigung mit freier Sicht: `start` selbst, sonst abwechselnd steiler/flacher in VIEW_STEP-Schritten
+## (steiler zuerst). Ist nirgends frei, bleibt es bei `start`.
+static func clear_pitch(space: PhysicsDirectSpaceState3D, ball: Vector3, yaw_rad: float, dist: float, start: float,
+		exclude: Array[RID] = [], floor_fn: Callable = Callable()) -> float:
+	if view_free(space, ball, yaw_rad, dist, start, exclude, floor_fn):
+		return start
+	for k in range(1, 20):
+		for sgn in [1.0, -1.0]:
+			var p: float = start + sgn * float(k) * VIEW_STEP
+			if p >= VIEW_PITCH_MIN and p <= VIEW_PITCH_MAX and view_free(space, ball, yaw_rad, dist, p, exclude, floor_fn):
+				return p
+	return start
+
+## Wirksame Neigung (Neigung des Spielers + Sicht-Korrektur) - fuer Tests.
+func effective_pitch() -> float:
+	return clampf(pitch + _view_offset, PITCH_MIN, PITCH_MAX)
+
+## Ruht der verfolgte Ball (schussbereit), wird einmal geprueft, ob er aus dem aktuellen Blick zu sehen ist.
+func _update_view_check(dt: float) -> void:
+	if target == null or not is_instance_valid(target) or not is_inside_tree():
+		return
+	if _target_speed > 0.8:
+		# rollt/fliegt wieder -> zurueck zum Standard-Blick, beim naechsten Halt neu pruefen
+		_rest_time = 0.0
+		_view_checked = false
+		_view_goal = 0.0
+		return
+	_rest_time += dt
+	var ready: bool = target.has_method("can_shoot") and bool(target.call("can_shoot"))
+	if _view_checked or not ready or _aiming or _aim_t > 0.0 or _rest_time < 0.3 or idle_time < 0.5:
+		return
+	_view_checked = true
+	var ex: Array[RID] = []
+	if target is CollisionObject3D:
+		ex.append((target as CollisionObject3D).get_rid())
+	var floor_fn: Callable = course.ground_height if course != null else Callable()
+	var p: float = clear_pitch(get_world_3d().direct_space_state, target.global_position, yaw, distance, pitch, ex, floor_fn)
+	_view_goal = p - pitch
+
 ## Neigung des Blicks unter die Waagerechte (Grad) - fuer Tests: Top-Down = deutlich ueber 30 Grad.
 func view_depression_deg() -> float:
 	var f: Vector3 = -camera.global_basis.z
@@ -171,6 +242,10 @@ func orbit(drag: Vector2) -> void:
 		_top_pan = _top_pan.limit_length(_top_height * 1.2)
 		return
 	yaw -= drag.x * 0.0065 * sensitivity
+	# Der Spieler greift die Kamera so, wie er sie gerade sieht (inkl. Sicht-Korrektur) -> kein Sprung
+	pitch = clampf(pitch + _view_offset, PITCH_MIN, PITCH_MAX)
+	_view_offset = 0.0
+	_view_goal = 0.0
 	pitch = clampf(pitch + drag.y * 0.0045 * sensitivity, PITCH_MIN, PITCH_MAX)
 
 ## Pinch/Mausrad: factor > 1 = weiter weg.
@@ -308,8 +383,11 @@ func _process(delta: float) -> void:
 					var fs: Array = spring_step(_focus, _focus_v, tp, lerpf(FOCUS_W_IDLE, FOCUS_W_MOVING, moving), dt)
 					_focus = fs[0]
 					_focus_v = fs[1]
+			_update_view_check(dt)
+			_view_offset = lerpf(_view_offset, _view_goal, 1.0 - exp(-3.5 * dt))
 			var dist: float = effective_distance()
-			var dir := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
+			var pe: float = effective_pitch()
+			var dir := Vector3(sin(yaw) * cos(pe), sin(pe), cos(yaw) * cos(pe))
 			want_pos = _focus + dir * dist
 			# Blick voraus (Spielrichtung = von der Kamera weg): Ball im unteren Drittel, beim Zielen etwas hoeher
 			var fwd_flat := Vector3(-sin(yaw), 0.0, -cos(yaw))

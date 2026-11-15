@@ -155,7 +155,8 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   **Accuracy** (mögliche Streuung). Endet der Schlag im Aus, wird die Kette rot.
 - Kamera beim Zielen (`CameraManager3D.set_aiming`, gesetzt beim Berühren des Balls, wie das Ausblenden aller
   Namensschilder): Abstand × 0,78 und Blickwinkel 62° → 52°, Blickpunkt rückt näher an den Ball (der Pfeil bleibt
-  über der Bedienleiste), weich überblendet; die Kamera dreht sich dabei nie seitlich (sonst würde die Zielrichtung
+  bei geradem Zug im Bild und über dem Hinweis – im Screenshot-Lauf gemessen, auch ±40° liegen im Bild und unter
+  keinem Knopf), weich überblendet; die Kamera dreht sich dabei nie seitlich (sonst würde die Zielrichtung
   unter dem Finger wandern). Dazu Tiefenunschärfe (`CameraAttributesPractical`,
   nur Fern-Unschärfe, im Mobile-Renderer unterstützt): scharf bis zum weitesten Punkt der Vorschau + 3,5 m, dahinter
   verschwimmt die Umgebung. Außerhalb des Zielens und in der Vogelperspektive ist die Unschärfe aus.
@@ -168,8 +169,16 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   per Wischen weiter neigen. Abschlag-Screenshots bauen ihre Kamera mit `default_pose`.
 - Kamera-Führung: kritisch gedämpfte Federn (`CameraManager3D.spring_step`, feste 1/120-s-Schritte) für Blickpunkt,
   Kameraposition und Blickziel – weicher Start beim Schuss, sauberer Nachlauf, kein Nachschwingen; bei ruhendem Ball
-  straffer, damit Drehen mit dem Finger direkt reagiert. Keine Kollisions-Verkürzung (die Äste über der Bahn würden
-  die Kamera springen lassen).
+  straffer, damit Drehen mit dem Finger direkt reagiert. Keine Kollisions-Verkürzung entlang des Arms (die Äste über
+  der Bahn würden die Kamera springen lassen; hinter einem Tor landete sie im Tor).
+- Freie Sicht auf den ruhenden Ball (`CameraManager3D._update_view_check`, `view_free`, `clear_pitch`): Der steile
+  Blick sah auf e2 nach dem Durchrollen über den Torbogen hinweg – der Ball lag dahinter verdeckt. Deshalb prüft die
+  Kamera **einmal pro Ruhephase** (Ball schussbereit, 0,3 s Ruhe, nicht beim Zielen, nicht direkt nach dem Drehen)
+  mit zwei Strahlen (Ballmitte, Oberkante; Ebenen Welt/Hindernisse/Plattformen, Bälle zählen nicht), ob der Ball
+  aus dem aktuellen Blick zu sehen ist. Wenn nicht, sucht sie die nächste freie Neigung in 0,07-rad-Schritten
+  (zuerst steiler, dann flacher, 0,25–1,38 rad) und gleitet als eigener Zusatz (`_view_offset`) dorthin; `pitch`
+  des Spielers bleibt unverändert, rollt der Ball wieder, geht es zurück zum Standard-Blick. Greift der Spieler die
+  Kamera, übernimmt er den gerade sichtbaren Winkel. Baumkronen sind reine Optik und werden nicht erkannt.
 
 ## Trophäen, Arenen, adaptive Bots
 - Gesamt-Trophäen (Ligen, Cloud-Profil) bleiben eine Zahl. `GameManager.split_course_trophies` teilt das Match-Delta
