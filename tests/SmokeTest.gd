@@ -1026,11 +1026,14 @@ func _stage_input() -> void:
 	var chip_r: Rect2 = m.hud._power_chip.get_global_rect()
 	var vp_r := Rect2(Vector2.ZERO, m.get_viewport().get_visible_rect().size)
 	var ball_now: Vector2 = m.rig.camera.unproject_position(ball.global_position)
-	check(m.hud._power_chip.visible and vp_r.encloses(chip_r) and chip_r.get_center().distance_to(ball_now) < vp_r.size.y * 0.15
+	# "direkt am Ball" relativ zur Ballgroesse auf dem Bildschirm (der Test hat vorher per Pinch herangezoomt):
+	# naechster Punkt der Pille hoechstens 2,5 Ballradien von der Ballmitte
+	var cam_right: Vector3 = m.rig.camera.global_basis.x
+	var ball_px: float = ball_now.distance_to(m.rig.camera.unproject_position(ball.global_position + cam_right * Ball3D.RADIUS))
+	var nearest := Vector2(clampf(ball_now.x, chip_r.position.x, chip_r.end.x), clampf(ball_now.y, chip_r.position.y, chip_r.end.y))
+	check(m.hud._power_chip.visible and vp_r.encloses(chip_r) and nearest.distance_to(ball_now) < ball_px * 2.5 + 6.0
 		and m.hud._power_label.text == "%d%%" % int(round(m._aim_power * 100.0)),
-		"Kraft in Prozent schwebt direkt am Ball (%s, erwartet %d%%, sichtbar=%s, gezeigt=%s, Pille %s, Ball %s, Root %s)" % [
-			m.hud._power_label.text, int(round(m._aim_power * 100.0)), m.hud._power_chip.visible, m.hud._power_shown, chip_r,
-			ball_now, m.hud._root.size])
+		"Kraft in Prozent schwebt direkt am Ball (%s, Pille %s, Ball %s mit Radius %.0f px)" % [m.hud._power_label.text, chip_r, ball_now, ball_px])
 	check(m._dots.visible and m._arrow.visible, "Kraftpfeil und Flugbahn-Vorschau sichtbar")
 	var tag_alpha: float = 0.0
 	var tag_count := 0
