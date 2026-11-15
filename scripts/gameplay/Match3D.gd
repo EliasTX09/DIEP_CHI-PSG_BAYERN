@@ -586,8 +586,9 @@ const ARROW_SHAFT_W := 0.17
 const ARROW_TAIL_W := 0.09
 ## Abstand der Pfeilspitze von der Ballmitte (m): knapp hinter der Kugel (naeher waere sie unter dem Ball versteckt)
 const ARROW_GAP := 0.36
-## Abstand Ballmitte -> Griff bei Kraft 0 und bei voller Kraft (m): kurz genug, dass der Griff im Ziel-Zoom ueber der
-## Bedienleiste bleibt (ShotRunner prueft das im echten Hochformat)
+## Abstand Ballmitte -> Griff bei Kraft 0 und bei voller Kraft (m): kurz genug, dass der Griff im Ziel-Zoom bei geradem
+## Zug im Bild und ueber dem Hinweis bleibt (ShotRunner prueft das im echten Hochformat; schraeg kann er unter den
+## Schlagart-Knopf rutschen - dort liegt ohnehin der Finger)
 const ARROW_MIN := 0.95
 const BAND_MAX := 1.7
 ## true: Spitze am Ball, zeigt in Schussrichtung. false: Spitze am Griff, zeigt zum Finger (Griff-Punkt entfaellt).

@@ -94,6 +94,28 @@ func _shot_game() -> void:
 		await _capture("ball_closeup")
 		close.queue_free()
 		m.rig.camera.current = true
+	# Mitten auf der Bahn: Ball rollt geradeaus ein Stueck (unter den ersten Aesten durch), dann die echte
+	# Spielkamera. Baumkronen sind reine Optik (kein Strahl-Test moeglich) -> Bild ansehen.
+	if m.local != null and m.local.ball != null and m._can_aim():
+		var fwd: Vector3 = -m.course.tee.basis.z
+		m.local.ball.shoot(Vector3(fwd.x, 0.0, fwd.z).normalized(), 0.55, false, Vector2.ZERO)
+		for i in 900:
+			await get_tree().process_frame
+			if i > 20 and m.local.ball.state != Ball3D.State.MOVING:
+				break
+		for i in 45:
+			await get_tree().process_frame
+		await _capture("game_follow")
+		var cam_p: Vector3 = m.rig.camera.global_position
+		var bp2: Vector3 = m.local.ball.global_position
+		var q := PhysicsRayQueryParameters3D.create(cam_p, bp2)
+		var ex: Array[RID] = [m.local.ball.get_rid()]
+		q.exclude = ex
+		var hit2: Dictionary = m.get_world_3d().direct_space_state.intersect_ray(q)
+		var bs: Vector2 = m.rig.camera.unproject_position(bp2)
+		print("[SHOTS] Mitten auf der Bahn: Ball %.1f m vom Abschlag, am Bildschirm %s (%.0f %% Hoehe), Zustand %d, Strahl Kamera->Ball %s" % [
+			bp2.distance_to(m.course.tee.origin), bs, bs.y / hvp.size.y * 100.0, m.local.ball.state,
+			"frei" if hit2.is_empty() else "trifft %s bei %s" % [(hit2["collider"] as Node).name, hit2["position"]]])
 	m.rig.set_top(true)
 	for i in 50:
 		await get_tree().process_frame
@@ -101,7 +123,7 @@ func _shot_game() -> void:
 	m.queue_free()
 	await get_tree().process_frame
 
-## Beim Zielen im echten Hochformat: Griff des Zug-Pfeils bei VOLLER Kraft im Bild und ueber der Bedienleiste,
+## Beim Zielen im echten Hochformat: Griff des Zug-Pfeils bei VOLLER Kraft (gerader Zug) im Bild und ueber dem Hinweis,
 ## Kraft-Anzeige sichtbar, ganz im Bild und direkt am Ball, kein Kraftbalken am unteren Rand.
 func _check_aim_layout(m: Match3D, hvp: Rect2) -> void:
 	var cam: Camera3D = m.rig.camera
@@ -115,6 +137,15 @@ func _check_aim_layout(m: Match3D, hvp: Rect2) -> void:
 	var ball_s: Vector2 = cam.unproject_position(ball_pos)
 	var ok_chip: bool = m.hud._power_chip.visible and hvp.encloses(chip) and chip.get_center().distance_to(ball_s) < hvp.size.y * 0.12
 	var no_bar: bool = m.hud._root.find_child("PowerPanel", true, false) == null
+	# Schraeger Zug (+-40 Grad): wo landet der Griff bei voller Kraft? (nur Hinweis - dort liegt ohnehin der Finger)
+	for ang in [-40.0, 40.0]:
+		var bd: Vector3 = back.rotated(Vector3.UP, deg_to_rad(ang))
+		var ts: Vector2 = cam.unproject_position(ball_pos + Vector3(0.0, -Ball3D.RADIUS + 0.05, 0.0) + bd * Match3D.BAND_MAX)
+		var under: Array = []
+		for c: Control in [m.hud._mode_btn, m.hud._spin_pad, m.hud._emote_btn]:
+			if c.get_global_rect().has_point(ts):
+				under.append(c.name)
+		print("[SHOTS] Zielen schraeg %+.0f Grad: Pfeil-Griff bei voller Kraft bei %s, im Bild=%s, unter %s" % [ang, ts, hvp.has_point(ts), under])
 	if ok_tail and ok_chip and no_bar:
 		print("[SHOTS] Zielen: Pfeil-Griff (volle Kraft) bei %s ueber dem Hinweis (%.0f), Kraft-Anzeige %s am Ball %s" % [tail_s, hint_top, chip, ball_s])
 	else:
