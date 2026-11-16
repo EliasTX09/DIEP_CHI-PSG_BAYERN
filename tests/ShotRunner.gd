@@ -57,6 +57,12 @@ func _shot_game() -> void:
 		print("[SHOTS][FAIL] HUD-Layout: oben ", topr, " unten ", botr, " Bild ", hvp)
 	else:
 		print("[SHOTS] HUD-Layout geprueft: oben ", topr, " unten ", botr)
+	# Rangliste: schmale Liste in der Ecke links oben, unter der Info-Zeile, weit ueber der Bedienung
+	var br: Rect2 = m.hud.board_rect()
+	if br.size.x <= 0.0 or br.position.x > 24.0 or br.end.x > hvp.size.x * 0.34 or br.position.y < topr.end.y or br.end.y > hvp.size.y * 0.3:
+		print("[SHOTS][FAIL] Rangliste nicht in der Ecke links oben: ", br, " (Leiste ", topr, ")")
+	else:
+		print("[SHOTS] Rangliste links oben: ", br, " mit ", m.hud._board.get_child_count(), " Plaetzen")
 	var screen: Vector2 = m.rig.target_screen_pos()
 	# Top-Down-Blick im echten Hochformat: steil von oben, Ball im unteren Teil des Bildes
 	var depression: float = m.rig.view_depression_deg()

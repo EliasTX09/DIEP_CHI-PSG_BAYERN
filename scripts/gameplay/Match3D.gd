@@ -114,6 +114,10 @@ var _flag_raise: float = 0.0
 var _rng := RandomNumberGenerator.new()
 var _intro_follow_done: bool = false
 var _hole_start_received: int = -1
+## true, sobald die Schlaege der laufenden Bahn in rec.total verbucht sind (zwischen Bahn-Ende und naechster Bahn)
+var _hole_scored: bool = false
+## Bahn-Zeit (phase_time), zu der der lokale Spieler fertig wurde (-1 = spielt noch)
+var _local_done_at: float = -1.0
 
 # ================================================================ Start
 
@@ -185,6 +189,8 @@ func _profile_for(rec: PlayerRec) -> Dictionary:
 func _start_hole(index: int) -> void:
 	hole_index = index
 	phase = Phase.LOADING
+	_hole_scored = false
+	_local_done_at = -1.0
 	_cancel_aim()
 	_end_slowmo()
 	_stop_replay()
@@ -373,16 +379,26 @@ func _update_flag(dt: float) -> void:
 	if is_instance_valid(flag):
 		flag.position.y = course.hole_pos.y + _flag_raise * 2.6
 
+## Rangliste (links oben): Plaetze nach Gesamtschlaegen, inklusive der Schlaege auf der laufenden Bahn.
 func _refresh_board() -> void:
+	hud.set_leaderboard(_board_rows())
+
+## Zeilen der Rangliste, nach Platz sortiert. Waehrend der Bahn zaehlen die bisherigen Schlaege der Bahn mit; ist die
+## Bahn abgerechnet (_hole_scored), stehen sie schon in rec.total. Gleichstand: waehrend der Bahn nach Name (ruhige
+## Reihenfolge), nach der Bahn nach Zeit - wie in der Endwertung.
+func _board_rows() -> Array:
 	var rows: Array = []
 	for rec in players:
-		rows.append({"name": rec.name, "color": rec.color, "strokes": rec.strokes, "total": rec.total + rec.strokes,
-			"holed": rec.holed, "done": rec.done, "local": rec == local})
-	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if int(a["total"]) != int(b["total"]):
-			return int(a["total"]) < int(b["total"])
-		return str(a["name"]) < str(b["name"]))
-	hud.set_leaderboard(rows)
+		rows.append({"id": rec.id, "name": rec.name, "color": rec.color, "total": rec.total + (0 if _hole_scored else rec.strokes),
+			"time": rec.total_time, "holed": rec.holed, "done": rec.done, "local": rec == local})
+	if _hole_scored:
+		rows.sort_custom(_rank_less)
+	else:
+		rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			if int(a["total"]) != int(b["total"]):
+				return int(a["total"]) < int(b["total"])
+			return str(a["name"]) < str(b["name"]))
+	return rows
 
 # ================================================================ Eingabe: Zielen / Kamera
 
@@ -1011,6 +1027,7 @@ func _finish_player(rec: PlayerRec, in_hole: bool) -> void:
 		if rec.ball != null:
 			rec.ball.give_up()
 	if rec == local:
+		_local_done_at = phase_time
 		_cancel_aim()
 		if not in_hole and not course.one_shot:
 			hud.show_banner("LIMIT ERREICHT", "", 1.6, UIKit.RED)
@@ -1046,6 +1063,8 @@ func _suggest_direction(from: Vector3) -> Vector3:
 func _end_hole() -> void:
 	if phase != Phase.PLAY:
 		return
+	# Hat der Spieler gerade eben eingelocht? Dann bleibt "BIRDIE!" die Ueberschrift des Bahn-Endes.
+	var just_holed: bool = local != null and local.holed and _local_done_at >= 0.0 and phase_time - _local_done_at < 2.0
 	phase = Phase.HOLE_END
 	phase_time = 0.0
 	course.clock_running = false
@@ -1072,14 +1091,23 @@ func _end_hole() -> void:
 	if mode == "daily":
 		_finish_daily()
 		return
-	var rows: Array = []
-	for rec in players:
-		var txt: String = ("%d" % rec.strokes) if rec.holed else ("%d (DNF)" % rec.strokes)
-		rows.append({"name": rec.name, "color": rec.color, "local": rec == local, "hole_text": txt, "total": rec.total, "time": rec.total_time})
-	rows.sort_custom(_rank_less)
+	# Kein Ergebnis-Fenster: Die Rangliste links oben zeigt den Stand nach dieser Bahn, dazu ein Banner mit dem
+	# eigenen Ergebnis und (offline) ein WEITER-Knopf.
+	_hole_scored = true
+	var rows: Array = _board_rows()
+	hud.set_leaderboard(rows)
+	var place := 1
+	for i in rows.size():
+		if bool(rows[i]["local"]):
+			place = i + 1
 	var courses: Array = config.get("courses", [])
 	var last: bool = hole_index >= courses.size() - 1
-	hud.show_hole_results(rows, "Bahn %d · %s" % [hole_index + 1, course.title], not online and not last and not auto_play)
+	if local != null:
+		var head: String = _score_name(local.strokes, course.par) if just_holed else "BAHN %d BEENDET" % (hole_index + 1)
+		var mine: String = ("%d Schläge" % local.strokes if local.strokes != 1 else "1 Schlag") if local.holed else "nicht eingelocht"
+		var sub: String = "%s · Platz %d von %d" % [mine, place, players.size()] if players.size() > 1 else mine
+		hud.show_banner(head, sub, (2.0 if auto_play else HOLE_END_TIME) - 0.9, UIKit.GOLD if local.holed else UIKit.RED)
+	hud.show_next(not online and not last and not auto_play)
 	rig.set_top(true)
 	hud.set_top_view(true)
 	_strokes_in_match += local.strokes if local != null else 0
@@ -1116,6 +1144,7 @@ func _finish_match() -> void:
 	phase = Phase.MATCH_END
 	phase_time = 0.0
 	hud.hide_overlay()
+	hud.show_next(false)
 	var rows: Array = []
 	for rec in players:
 		rows.append({"id": rec.id, "name": rec.name, "color": rec.color, "local": rec == local, "total": rec.total, "time": rec.total_time})

@@ -14,6 +14,13 @@ static var time_budget_usec: int = 2500
 const PLAN_LEAD := 0.8
 ## Unterhalb dieses Koennens spielt ein Bot mit Anfaenger-Fehlern (weakness() > 0); ab hier aendert sich nichts.
 const WEAK_BELOW := 0.7
+## Anfaenger-Fehler bei weakness() = 1: zusaetzliche Ziel-Streuung (Grad) und Kraft-Streuung (Anteil), fester Kraft-
+## fehler (Anteil der Maximalkraft - trifft vor allem kurze Putts), Wahrscheinlichkeit eines verhauenen Schlags.
+## (static var statt const: der Test misst damit mehrere Stufen durch)
+static var weak_aim_deg: float = 1.5
+static var weak_power: float = 0.03
+static var weak_power_abs: float = 0.015
+static var weak_blunder: float = 0.12
 ## Zusaetzlich gepruefte Abschlag-Zeitpunkte (s nach dem Planungszeitpunkt) fuer die besten Kandidaten.
 const TIME_OFFSETS: Array[float] = [0.9, 1.8, 2.7, 3.6, 4.8]
 
@@ -314,13 +321,13 @@ func _shoot() -> void:
 	# Skill-abhaengige Fehler: Zielwinkel und Kraft
 	var err: float = 1.0 - skill
 	var weak: float = weakness()
-	dir = dir.rotated(Vector3.UP, deg_to_rad(_rng.randfn(0.0, 0.25 + 3.2 * err + 3.0 * weak * weak)))
-	power = clampf(power * (1.0 + _rng.randfn(0.0, 0.015 + 0.09 * err + 0.07 * weak * weak)), 0.05, 1.0)
+	dir = dir.rotated(Vector3.UP, deg_to_rad(_rng.randfn(0.0, 0.25 + 3.2 * err + weak_aim_deg * weak * weak)))
+	power = clampf(power * (1.0 + _rng.randfn(0.0, 0.015 + 0.09 * err + weak_power * weak * weak)), 0.05, 1.0)
 	if weak > 0.0:
 		# Anfaenger: kein Gefuehl fuer kurze Putts (fester Kraftfehler, unabhaengig von der Entfernung) und ab und zu
 		# ein verhauener Schlag - meist zu kurz, manchmal weit drueber
-		power = clampf(power + _rng.randfn(0.0, 0.03 * weak), 0.05, 1.0)
-		if _rng.randf() < 0.22 * weak:
+		power = clampf(power + _rng.randfn(0.0, weak_power_abs * weak), 0.05, 1.0)
+		if _rng.randf() < weak_blunder * weak:
 			var mul: float = _rng.randf_range(0.5, 0.75) if _rng.randf() < 0.6 else _rng.randf_range(1.3, 1.6)
 			power = clampf(power * mul, 0.05, 1.0)
 			blunders += 1

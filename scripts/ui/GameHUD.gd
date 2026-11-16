@@ -2,12 +2,14 @@ class_name GameHUD
 extends CanvasLayer
 ## Spiel-HUD im Hochformat (Safe-Area-bewusst, einhaendig):
 ## - oben, minimal und flach auf einem abgedunkelten Verlauf (bis in die Notch): Bahn-Info + Timer +
-##   Vogelperspektive/Verlassen in einer Zeile, darunter die Live-Rangliste als flache Chips (bis 4 nebeneinander),
-##   darunter die Status-Pille (Warten / Replay).
+##   Vogelperspektive/Verlassen in einer Zeile, mittig darunter die Status-Pille (Warten / Zuschauen / Replay).
+## - links oben in der Ecke: die Live-Rangliste als schmale Liste - Plaetze untereinander, je Spieler nur der Name
+##   und die Gesamtschlaege. Meldungen erscheinen rechts daneben.
 ## - beim Zielen: Kraft in Prozent als kleine Anzeige direkt neben dem Ball (place_power, Position von Match3D) -
 ##   kein Kraftbalken am unteren Rand.
 ## - unten (Daumenzone): Emote-Knopf links, Hinweis in der Mitte, Schlagart + Spin rechts.
-## - Banner/Style-Popups in der Bildmitte, Bahn- und Match-Ergebnis als Fenster.
+## - Banner/Style-Popups in der Bildmitte. Nach einer Bahn: Banner + WEITER-Knopf (die Rangliste links oben zeigt den
+##   Stand), nach dem Match: Ergebnis-Fenster mit Belohnungen.
 ## Die Touch-Steuerung der 3D-Ansicht (Zielen, Kamera) liegt in Match3D; das HUD faengt nur seine eigenen Widgets ab.
 
 signal top_view_toggled(enabled: bool)
@@ -23,8 +25,13 @@ var chip_mode: bool = false
 
 var _root: Control
 var _safe: MarginContainer
-var _board: HFlowContainer
+## Rangliste: Zeilen (_board) in einem schmalen, dunklen Feld (_board_panel) links unter der Info-Zeile
+var _board: VBoxContainer
+var _board_panel: PanelContainer
 var _top_box: VBoxContainer
+var _top_row: HBoxContainer
+## WEITER nach einer Bahn (nur wenn der Spieler selbst weiterschalten darf)
+var _next_btn: Button
 var _bottom_box: HBoxContainer
 var _exit_btn: Button
 var _emote_btn: Button
@@ -53,11 +60,8 @@ var _top_on: bool = false
 var _banner_tween: Tween = null
 ## Aktuelle Meldung (immer nur eine, direkt unter der oberen Leiste - nie ueber Rangliste oder Kraftanzeige)
 var _toast: PanelContainer = null
-## Breite, fuer die die Ranglisten-Chips zuletzt ausgelegt wurden
-var _board_w: float = -1.0
-## Rangliste: hoechstens so viele Chips nebeneinander
-const BOARD_COLUMNS := 4
-const BOARD_GAP := 4
+## Rangliste: Breite des Namens (px) - laengere Namen werden mit "..." gekuerzt
+const BOARD_NAME_W := 112.0
 
 ## Farbe der Schlagkraft (Zug-Pfeil und Kraft-Anzeige): Neon-Gold -> Orange -> Rot.
 static func power_color(power: float) -> Color:
@@ -197,8 +201,10 @@ func _build_top(area: Control) -> void:
 	area.add_child(_top_box)
 	_top_box.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	var row := UIKit.hbox(6)
+	row.name = "TopRow"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_top_box.add_child(row)
+	_top_row = row
 	# Flache Info-Zeile direkt auf dem Verlauf: Bahn + Par/Schlag links, Timer rechts
 	var p := _flat_panel(Color(0.0, 0.0, 0.0, 0.0), 0)
 	p.name = "InfoPanel"
@@ -230,13 +236,18 @@ func _build_top(area: Control) -> void:
 	_exit_btn.name = "ExitButton"
 	_style_flat_button(_exit_btn, Color(0.0, 0.0, 0.0, 0.36))
 	row.add_child(_exit_btn)
-	# Live-Rangliste: flache Chips, bis zu 4 nebeneinander (Breite aus dem Container, siehe _layout_board)
-	_board = HFlowContainer.new()
+	# Live-Rangliste: schmale Liste links oben in der Ecke (unter der Info-Zeile), Plaetze untereinander.
+	# Liegt NICHT in der oberen Spalte: sie waechst mit der Spielerzahl nach unten, ohne Leiste und Verlauf aufzublaehen.
+	# Position folgt der Info-Zeile (_process). Faengt keine Beruehrung ab.
+	_board_panel = _flat_panel(Color(0.01, 0.02, 0.05, 0.5), 10)
+	_board_panel.name = "BoardPanel"
+	_board_panel.visible = false
+	area.add_child(_board_panel)
+	_board_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_board = UIKit.vbox(1)
 	_board.name = "Board"
 	_board.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_board.add_theme_constant_override("h_separation", BOARD_GAP)
-	_board.add_theme_constant_override("v_separation", BOARD_GAP)
-	_top_box.add_child(_board)
+	_board_panel.add_child(UIKit.margin(_board, 5, 4, 5, 4))
 	# Status-Pille (Warten / Replay)
 	_status_pill = UIKit.panel(Color(0.6, 0.35, 0.05, 0.9), 16, Color(1, 1, 1, 0.25), 1)
 	_status_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -269,6 +280,11 @@ func _build_bottom(area: Control) -> void:
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mid.alignment = BoxContainer.ALIGNMENT_END
 	_bottom_box.add_child(mid)
+	_next_btn = UIKit.button("WEITER", UIKit.GREEN, func() -> void: skip_pressed.emit(), Vector2(200, 62), 26)
+	_next_btn.name = "NextButton"
+	_next_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_next_btn.visible = false
+	mid.add_child(_next_btn)
 	_hint = UIKit.wrap_label("", 19, UIKit.TEXT, true)
 	_hint.add_theme_constant_override("outline_size", 6)
 	_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
@@ -401,7 +417,7 @@ func _on_emote(id: String) -> void:
 func is_over_widget(screen_pos: Vector2) -> bool:
 	if _overlay != null and is_instance_valid(_overlay):
 		return true
-	for c: Control in [_mode_btn, _spin_pad, _top_btn, _exit_btn, _emote_btn, _emote_wheel]:
+	for c: Control in [_mode_btn, _spin_pad, _top_btn, _exit_btn, _emote_btn, _emote_wheel, _next_btn]:
 		if c != null and c.is_visible_in_tree() and c.get_global_rect().grow(8.0).has_point(screen_pos):
 			return true
 	return false
@@ -412,6 +428,7 @@ func setup_hole(index: int, total: int, title: String, par: int) -> void:
 	_info_title.text = "Bahn %d/%d · %s" % [index + 1, total, title]
 	_info_sub.text = "Par %d" % par
 	hide_overlay()
+	show_next(false)
 	set_status("")
 	reset_spin()
 
@@ -422,60 +439,79 @@ func set_time(seconds: float) -> void:
 	_timer.text = UIKit.format_time(seconds)
 	_timer.add_theme_color_override("font_color", UIKit.RED if seconds < 10.0 else UIKit.GOLD)
 
-## rows: [{name, color: Color, strokes: int, total: int, holed: bool, local: bool, done: bool}]
+## Live-Rangliste links oben. rows (bereits nach Platz sortiert): [{name, color: Color, total: int, holed: bool,
+## done: bool, local: bool}]. Je Zeile: Platz, Spielerfarbe, Name, Gesamtschlaege - sonst nichts.
+## Die Zahl wird gruen, sobald der Spieler die laufende Bahn eingelocht hat, und rot, wenn er sie nicht geschafft hat.
 func set_leaderboard(rows: Array) -> void:
 	while _board.get_child_count() > rows.size():
 		var last := _board.get_child(_board.get_child_count() - 1)
 		_board.remove_child(last)
 		last.queue_free()
 	while _board.get_child_count() < rows.size():
-		var chip := _flat_panel(Color(1.0, 1.0, 1.0, 0.08), 6)
-		var h := UIKit.hbox(5)
-		h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		chip.add_child(UIKit.margin(h, 5, 0, 7, 0))
-		var dot := ColorRect.new()
-		dot.custom_minimum_size = Vector2(5, 18)
-		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		h.add_child(dot)
-		var nm := UIKit.label("", 15)
-		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		nm.clip_text = true
-		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		h.add_child(nm)
-		var st := UIKit.label("", 15, UIKit.TEXT_DIM)
-		st.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		h.add_child(st)
-		_board.add_child(chip)
-		_board_w = -1.0
+		_board.add_child(_board_row())
 	for i in rows.size():
 		var row: Dictionary = rows[i]
-		var h2 := _board.get_child(i).get_child(0).get_child(0) as HBoxContainer
-		(h2.get_child(0) as ColorRect).color = row.get("color", Color.WHITE)
-		var nm2 := h2.get_child(1) as Label
-		nm2.text = "%d. %s" % [i + 1, str(row.get("name", "?"))]
-		nm2.add_theme_color_override("font_color", UIKit.GOLD if bool(row.get("local", false)) else UIKit.TEXT)
-		var st2 := h2.get_child(2) as Label
-		if bool(row.get("done", false)) and not bool(row.get("holed", false)):
-			st2.text = "DNF (%d)" % int(row.get("total", 0))
-		else:
-			st2.text = "%d (%d)" % [int(row.get("strokes", 0)), int(row.get("total", 0))]
-		st2.add_theme_color_override("font_color", UIKit.GREEN if bool(row.get("holed", false)) else UIKit.TEXT_DIM)
-	_layout_board()
+		var p := _board.get_child(i) as PanelContainer
+		var mine: bool = bool(row.get("local", false))
+		(p.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(1.0, 0.82, 0.25, 0.2) if mine else Color(0.0, 0.0, 0.0, 0.0)
+		(p.find_child("Rank", true, false) as Label).text = str(i + 1)
+		(p.find_child("Dot", true, false) as ColorRect).color = row.get("color", Color.WHITE)
+		var nm := p.find_child("Name", true, false) as Label
+		nm.text = str(row.get("name", "?"))
+		nm.add_theme_color_override("font_color", UIKit.GOLD if mine else UIKit.TEXT)
+		var st := p.find_child("Total", true, false) as Label
+		st.text = str(int(row.get("total", 0)))
+		var col: Color = UIKit.TEXT
+		if bool(row.get("holed", false)):
+			col = UIKit.GREEN
+		elif bool(row.get("done", false)):
+			col = UIKit.RED
+		st.add_theme_color_override("font_color", col)
+	_board_panel.visible = rows.size() > 0
+	_place_board()
 
-## Chips gleich breit verteilen: bis zu BOARD_COLUMNS pro Zeile, Breite aus dem Container (Handy und Testfenster).
-func _layout_board() -> void:
-	var n: int = _board.get_child_count()
-	if n == 0:
+## Eine Zeile der Rangliste: Platz | Farbstreifen | Name (gekuerzt) | Gesamtschlaege.
+func _board_row() -> PanelContainer:
+	var p := _flat_panel(Color(0.0, 0.0, 0.0, 0.0), 5)
+	var h := UIKit.hbox(5)
+	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(UIKit.margin(h, 3, 0, 4, 0))
+	var rank := UIKit.label("", 14, UIKit.TEXT_DIM)
+	rank.name = "Rank"
+	rank.custom_minimum_size = Vector2(12, 0)
+	rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	h.add_child(rank)
+	var dot := ColorRect.new()
+	dot.name = "Dot"
+	dot.custom_minimum_size = Vector2(4, 15)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	h.add_child(dot)
+	var nm := UIKit.label("", 15)
+	nm.name = "Name"
+	nm.custom_minimum_size = Vector2(BOARD_NAME_W, 0)
+	nm.clip_text = true
+	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	h.add_child(nm)
+	var st := UIKit.label("", 16)
+	st.name = "Total"
+	st.custom_minimum_size = Vector2(24, 0)
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	h.add_child(st)
+	return p
+
+## Rangliste in die Ecke links oben, direkt unter die Info-Zeile; so gross wie ihr Inhalt.
+func _place_board() -> void:
+	if _board_panel == null or not _board_panel.visible:
 		return
-	var avail: float = _top_box.size.x if _top_box.size.x > 1.0 else (_root.size.x if _root.size.x > 1.0 else get_viewport().get_visible_rect().size.x - 24.0)
-	if is_equal_approx(avail, _board_w):
-		return
-	_board_w = avail
-	var cols: int = clampi(n, 1, BOARD_COLUMNS) if n <= BOARD_COLUMNS else ceili(float(n) / 2.0)
-	var w: float = floorf((avail - float(BOARD_GAP * (cols - 1))) / float(cols)) - 1.0
-	for c in _board.get_children():
-		(c as Control).custom_minimum_size = Vector2(maxf(90.0, w), 0.0)
+	_board_panel.reset_size()
+	_board_panel.position = Vector2(0.0, _top_row.position.y + _top_row.size.y + 6.0)
+
+## Rechteck der Rangliste auf dem Bildschirm (leer, wenn sie nicht zu sehen ist).
+func board_rect() -> Rect2:
+	if _board_panel == null or not _board_panel.is_visible_in_tree():
+		return Rect2()
+	return _board_panel.get_global_rect()
 
 ## Kraft beim Zielen (0..1). Sichtbar wird die Anzeige erst, wenn Match3D sie neben den Ball setzt (place_power).
 func set_power(power: float, shown: bool) -> void:
@@ -546,7 +582,7 @@ func toast(text: String) -> void:
 	var p := UIKit.panel(Color(0.04, 0.06, 0.14, 0.86), 14, Color(1, 1, 1, 0.16), 1)
 	p.name = "Toast"
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var avail: float = _root.size.x if _root.size.x > 1.0 else get_viewport().get_visible_rect().size.x
+	var avail: float = (_root.size.x if _root.size.x > 1.0 else get_viewport().get_visible_rect().size.x) - _toast_left()
 	var l := UIKit.wrap_label(text, 19, UIKit.TEXT, true)
 	l.custom_minimum_size.x = minf(avail - 48.0, maxf(220.0, float(text.length()) * 9.5))
 	p.add_child(UIKit.margin(l, 10, 3, 10, 3))
@@ -562,25 +598,30 @@ func toast(text: String) -> void:
 	tw.tween_property(p, "modulate:a", 0.0, 0.35)
 	tw.tween_callback(p.queue_free)
 
-## Mittig unter der oberen Leiste (explizit gerechnet, unabhaengig von Ankern und Layout-Reihenfolge).
+## Linker Rand fuer Meldungen: rechts neben der Rangliste (0, wenn keine zu sehen ist).
+func _toast_left() -> float:
+	var br: Rect2 = board_rect()
+	return br.end.x - _root.get_global_rect().position.x + 8.0 if br.size.x > 0.0 else 0.0
+
+## Unter der oberen Leiste, mittig im Platz rechts neben der Rangliste (explizit gerechnet, unabhaengig von Ankern
+## und Layout-Reihenfolge).
 func _place_toast() -> void:
 	if _toast == null or not is_instance_valid(_toast):
 		return
 	var w: float = _root.size.x if _root.size.x > 1.0 else get_viewport().get_visible_rect().size.x
+	var left: float = _toast_left()
 	var sz: Vector2 = _toast.get_combined_minimum_size().max(_toast.size)
 	_toast.size = sz
-	_toast.position = Vector2(maxf(0.0, (w - sz.x) * 0.5), _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 8.0)
+	_toast.position = Vector2(left + maxf(0.0, (w - left - sz.x) * 0.5), _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 8.0)
 
 func _process(_delta: float) -> void:
-	# Verlauf reicht bis knapp unter die Leiste (die waechst mit der Rangliste)
+	# Verlauf reicht bis knapp unter die Leiste (Info-Zeile, ggf. Status-Pille)
 	if _top_scrim != null and _top_box.size.y > 1.0:
 		_top_scrim.offset_bottom = _top_box.get_global_rect().end.y - _root.get_global_rect().position.y + 26.0
-	# Die obere Leiste waechst, wenn Spieler dazukommen -> Meldung bleibt darunter
+	# Rangliste haengt unter der Info-Zeile (Safe-Area, Drehen), Meldung bleibt rechts daneben
+	_place_board()
 	if _toast != null and is_instance_valid(_toast):
 		_place_toast()
-	# Fenstergroesse geaendert (Drehen, Safe-Area) -> Chips neu verteilen
-	if _board != null and _top_box.size.x > 1.0 and not is_equal_approx(_top_box.size.x, _board_w):
-		_layout_board()
 
 # ================================================================ Overlays
 
@@ -614,17 +655,9 @@ func _result_row(rank: int, row: Dictionary, right_text: String) -> Control:
 	h.add_child(UIKit.label(right_text, 22, UIKit.TEXT))
 	return p
 
-## Ergebnis einer Bahn. rows: [{name, color, local, hole_text, total}] (bereits sortiert).
-func show_hole_results(rows: Array, title: String, can_skip: bool) -> void:
-	var m := _open_overlay(title, Vector2(640, 120 + 56 * rows.size()))
-	var body: VBoxContainer = m["body"]
-	for i in rows.size():
-		var row: Dictionary = rows[i]
-		body.add_child(_result_row(i + 1, row, "%s   Ges. %d" % [str(row.get("hole_text", "")), int(row.get("total", 0))]))
-	if can_skip:
-		var b := UIKit.button("WEITER", UIKit.GREEN, func() -> void: skip_pressed.emit(), Vector2(200, 60))
-		b.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		body.add_child(b)
+## WEITER-Knopf nach einer Bahn ein-/ausblenden (kein Fenster: die Rangliste links oben zeigt den Stand).
+func show_next(on: bool) -> void:
+	_next_btn.visible = on
 
 ## Endergebnis. rows: [{name, color, local, total}], rewards: Ergebnis von GameManager.finish_match().
 func show_match_results(rows: Array, rewards: Dictionary, headline: String) -> void:

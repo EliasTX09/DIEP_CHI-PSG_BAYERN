@@ -744,6 +744,28 @@ func _stage_bots() -> void:
 	print("[SMOKE] Bots: %d von 15 Bahnen eingelocht; offen: %s" % [holed, ", ".join(failed)])
 	check(holed == 15, "Bot locht auf allen 15 Bahnen ein (offen: %s)" % ", ".join(failed))
 
+## Einsteiger-Bots (0 Trophaeen: schwaechster, mittlerer, staerkster) spielen die Bahnen `ids` mit jeder Zufallsfolge
+## aus `seeds`. Rueckgabe: {runs, holed, over (Schlaege ueber Par, Summe), aces, blunders, weak, planned}.
+func _newbie_series(ids: Array, seeds: Array, tag: String) -> Dictionary:
+	var out := {"runs": 0, "holed": 0, "over": 0.0, "aces": 0, "blunders": 0, "weak": 0.0, "planned": 0}
+	for id: String in ids:
+		var per := PackedStringArray()
+		for jit: float in [-1.0, 0.0, 1.0]:
+			for bseed: int in seeds:
+				var rn: Dictionary = await _bot_playthrough(id, false, GameManager.bot_skill(0.0, jit), 0, bseed)
+				out["runs"] = int(out["runs"]) + 1
+				out["over"] = float(out["over"]) + float(int(rn["strokes"]) - int(rn["par"]))
+				out["blunders"] = int(out["blunders"]) + int(rn["blunders"])
+				out["weak"] = maxf(float(out["weak"]), float(rn["weakness"]))
+				out["planned"] = int(out["planned"]) + int(rn["choices"])
+				if bool(rn["holed"]):
+					out["holed"] = int(out["holed"]) + 1
+					if int(rn["strokes"]) == 1:
+						out["aces"] = int(out["aces"]) + 1
+				per.append(str(rn["strokes"]) if bool(rn["holed"]) else "DNF")
+		print("[SMOKE] %sEinsteiger-Bots auf %s (Par %d): %s" % [tag, id, CourseBuilder3D.course_par(id), ", ".join(per)])
+	return out
+
 ## Adaptive Bots: ohne Bahn-Trophaeen nehmen Bots nie die Abkuerzung (und kommen trotzdem ins Ziel),
 ## mit vielen Bahn-Trophaeen nutzen sie sie.
 func _stage_adaptive_bots() -> void:
@@ -781,34 +803,28 @@ func _stage_adaptive_bots() -> void:
 		and GameManager.bot_skill(1.0, 0.0) >= 0.8 and GameManager.bot_skill(1.0, 1.0) <= 0.95,
 		"Bot-Koennen waechst mit den Trophaeen: Einsteiger %.2f-%.2f, ab 1500 Trophaeen %.2f-%.2f" % [GameManager.bot_skill(0.0, -1.0),
 			GameManager.bot_skill(0.0, 1.0), GameManager.bot_skill(1.0, -1.0), GameManager.bot_skill(1.0, 1.0)])
-	var newbie_runs := 0
-	var newbie_holed := 0
-	var newbie_over := 0.0
-	var newbie_aces := 0
-	var newbie_blunders := 0
-	var newbie_weak := 0.0
-	for id in ["e1", "e2", "e3", "e4", "e5"]:
-		var per := PackedStringArray()
-		for jit: float in [-1.0, 0.0, 1.0]:
-			for bseed: int in [777, 4711]:
-				var rn: Dictionary = await _bot_playthrough(id, false, GameManager.bot_skill(0.0, jit), 0, bseed)
-				newbie_runs += 1
-				newbie_over += float(int(rn["strokes"]) - int(rn["par"]))
-				newbie_blunders += int(rn["blunders"])
-				newbie_weak = maxf(newbie_weak, float(rn["weakness"]))
-				if bool(rn["holed"]):
-					newbie_holed += 1
-					if int(rn["strokes"]) == 1:
-						newbie_aces += 1
-				per.append(str(rn["strokes"]) if bool(rn["holed"]) else "DNF")
-				check(int(rn["choices"]) == 0, "Einsteiger-Bot (Koennen %.2f) plant auf %s keine Abkuerzung" % [GameManager.bot_skill(0.0, jit), id])
-		print("[SMOKE] Einsteiger-Bots auf %s (Par %d): %s" % [id, CourseBuilder3D.course_par(id), ", ".join(per)])
-	var newbie_avg: float = newbie_over / float(maxi(1, newbie_runs))
+	var nb: Dictionary = await _newbie_series(["e1", "e2", "e3", "e4", "e5"], [777, 4711], "")
+	var newbie_avg: float = float(nb["over"]) / float(maxi(1, int(nb["runs"])))
 	print("[SMOKE] Einsteiger-Bots (0 Trophaeen, Koennen %.2f-%.2f) auf Arena 1: %d von %d eingelocht, im Mittel %.1f ueber Par, %d Hole-in-One, %d verhauene Schlaege" % [
-		GameManager.bot_skill(0.0, -1.0), GameManager.bot_skill(0.0, 1.0), newbie_holed, newbie_runs, newbie_avg, newbie_aces, newbie_blunders])
-	check(newbie_weak > 0.7 and newbie_blunders > 0, "Einsteiger-Bots spielen mit Anfaenger-Fehlern (Anteil %.2f, %d verhauene Schlaege)" % [newbie_weak, newbie_blunders])
+		GameManager.bot_skill(0.0, -1.0), GameManager.bot_skill(0.0, 1.0), int(nb["holed"]), int(nb["runs"]), newbie_avg, int(nb["aces"]), int(nb["blunders"])])
+	check(int(nb["planned"]) == 0, "Einsteiger-Bots planen auf e1-e5 keine Abkuerzung")
+	check(float(nb["weak"]) > 0.7 and int(nb["blunders"]) > 0, "Einsteiger-Bots spielen mit Anfaenger-Fehlern (Anteil %.2f, %d verhauene Schlaege)" % [float(nb["weak"]), int(nb["blunders"])])
 	check(newbie_avg >= 1.5, "Einsteiger-Bots sind schlagbar: im Mittel mindestens 1,5 Schlaege ueber Par (%.1f)" % newbie_avg)
-	check(newbie_holed * 2 >= newbie_runs, "Einsteiger-Bots lochen trotzdem meist ein (%d von %d)" % [newbie_holed, newbie_runs])
+	check(int(nb["holed"]) * 2 >= int(nb["runs"]), "Einsteiger-Bots lochen trotzdem meist ein (%d von %d)" % [int(nb["holed"]), int(nb["runs"])])
+	# MESSREIHE (voruebergehend): mehrere Fehler-Stufen auf e1-e4, um die passende Staerke zu waehlen
+	var keep: Array = [BotBrain.weak_aim_deg, BotBrain.weak_power, BotBrain.weak_power_abs, BotBrain.weak_blunder]
+	for sw: Array in [[0.0, 0.0, 0.0, 0.0], [0.6, 0.01, 0.008, 0.08], [1.0, 0.02, 0.012, 0.1], [2.0, 0.045, 0.02, 0.16]]:
+		BotBrain.weak_aim_deg = sw[0]
+		BotBrain.weak_power = sw[1]
+		BotBrain.weak_power_abs = sw[2]
+		BotBrain.weak_blunder = sw[3]
+		var r_sw: Dictionary = await _newbie_series(["e1", "e2", "e3", "e4"], [777, 4711], "Stufe %s " % str(sw))
+		print("[SMOKE] MESSREIHE %s: %d von %d eingelocht, im Mittel %.1f ueber Par, %d Hole-in-One" % [str(sw), int(r_sw["holed"]), int(r_sw["runs"]),
+			float(r_sw["over"]) / float(maxi(1, int(r_sw["runs"]))), int(r_sw["aces"])])
+	BotBrain.weak_aim_deg = keep[0]
+	BotBrain.weak_power = keep[1]
+	BotBrain.weak_power_abs = keep[2]
+	BotBrain.weak_blunder = keep[3]
 	# Sichere Spieler bleiben unveraendert: ab Koennen 0.7 gibt es keine Anfaenger-Fehler
 	var c_w: Course3D = CourseBuilder3D.build("e1", 1, false)
 	add_child(c_w)
@@ -890,18 +906,39 @@ func _stage_match() -> void:
 	check(m.hud.has_overlay(), "Ergebnis-Screen wird angezeigt")
 	check(m.hud._root.find_child("ContinueButton", true, false) != null, "Ergebnis-Screen mit WEITER")
 	check(int(m.result_rewards.get("pass_xp", 0)) > 0, "Match gibt Pass-XP")
-	# HUD-Layout im Hochformat: oben Info + Rangliste, unten Bedienung, nichts ueberlappt
+	# HUD-Layout im Hochformat: oben Info-Zeile, links oben die Rangliste, unten Bedienung, nichts ueberlappt
 	var hvp := Rect2(Vector2.ZERO, m.get_viewport().get_visible_rect().size)
 	var topr: Rect2 = m.hud._top_box.get_global_rect()
 	var botr: Rect2 = m.hud._bottom_box.get_global_rect()
 	check(hvp.grow(1.0).encloses(topr) and hvp.grow(1.0).encloses(botr), "HUD-Leisten im Bild")
 	check(topr.end.y < botr.position.y, "HUD oben und unten ueberlappen nicht")
-	check(m.hud._board.get_child_count() == 3 and m.hud._board.get_global_rect().position.y >= m.hud._info_title.get_global_rect().end.y,
-		"Rangliste unter der Bahn-Info (3 Chips)")
-	var chip_ys: Array = []
+	# Rangliste: schmale Liste in der Ecke links oben, Plaetze untereinander, je Zeile nur Name + Gesamtschlaege
+	await _process_frames(2)
+	var board_r: Rect2 = m.hud.board_rect()
+	var row_rects: Array[Rect2] = []
 	for c in m.hud._board.get_children():
-		chip_ys.append(roundi((c as Control).get_global_rect().position.y))
-	check(topr.size.y <= 120.0 and chip_ys.min() == chip_ys.max(), "Obere Leiste schmal: %.0f px, 3 Chips in einer Zeile" % topr.size.y)
+		row_rects.append((c as Control).get_global_rect())
+	var stacked: bool = row_rects.size() == 3
+	for i in range(1, row_rects.size()):
+		if row_rects[i].position.y < row_rects[i - 1].end.y - 0.5 or absf(row_rects[i].position.x - row_rects[0].position.x) > 0.5:
+			stacked = false
+	check(stacked, "Rangliste: 3 Plaetze untereinander (%s)" % str(row_rects))
+	check(board_r.size.x > 0.0 and board_r.position.x <= 24.0 and board_r.end.x <= 240.0
+		and board_r.position.y >= m.hud._top_row.get_global_rect().end.y and board_r.end.y < hvp.size.y * 0.3,
+		"Rangliste in der Ecke links oben unter der Info-Zeile (%s)" % board_r)
+	check(topr.size.y <= 80.0 and not topr.intersects(board_r), "Obere Leiste bleibt schmal (%.0f px) - die Rangliste blaeht sie nicht auf" % topr.size.y)
+	var only_totals := true
+	var board_txt := PackedStringArray()
+	for i in m.hud._board.get_child_count():
+		var brow: Node = m.hud._board.get_child(i)
+		var b_name: String = (brow.find_child("Name", true, false) as Label).text
+		var b_total: String = (brow.find_child("Total", true, false) as Label).text
+		var b_rank: String = (brow.find_child("Rank", true, false) as Label).text
+		board_txt.append("%s. %s %s" % [b_rank, b_name, b_total])
+		if b_rank != str(i + 1) or b_name != str(m.final_ranking[i]["name"]) or not b_total.is_valid_int() or int(b_total) != int(m.final_ranking[i]["total"]):
+			only_totals = false
+	check(only_totals, "Rangliste zeigt je Platz nur Name und Gesamtschlaege, in der Reihenfolge der Endwertung (%s)" % ", ".join(board_txt))
+	check(m.hud._root.find_child("NextButton", true, false) != null and not m.hud._next_btn.visible, "WEITER-Knopf der Bahn ist am Match-Ende aus")
 	check(m.hud._top_btn.get_global_rect().size.y >= 48.0 and m.hud._exit_btn.get_global_rect().size.y >= 48.0, "Knoepfe oben bleiben gut tippbar (>= 48 px)")
 	check(m.hud._mode_btn.get_global_rect().position.y > hvp.size.y * 0.5 and m.hud._spin_pad.get_global_rect().position.y > hvp.size.y * 0.5,
 		"Schlagart und Spin in der Daumenzone")
@@ -927,15 +964,33 @@ func _stage_match() -> void:
 	m.hud.toast("Abkürzung: durchs Felsentor auf die Schanze – spart Schläge, daneben ist Aus!")
 	await _process_frames(3)
 	var toast_r: Rect2 = m.hud._toast.get_global_rect()
-	check(not toast_r.intersects(m.hud._board.get_global_rect())
+	var board_now: Rect2 = m.hud.board_rect()
+	check(not toast_r.intersects(board_now) and toast_r.position.x >= board_now.end.x
 		and toast_r.position.y >= m.hud._top_box.get_global_rect().end.y and hvp.grow(1.0).encloses(toast_r),
-		"Meldung liegt unter der Rangliste (%s)" % toast_r)
+		"Meldung liegt unter der Leiste und rechts neben der Rangliste (%s, Rangliste %s)" % [toast_r, board_now])
 	m.hud.toast("Zweite Meldung")
 	await _process_frames(2)
 	check(m.hud._root.find_children("Toast*", "PanelContainer", true, false).size() == 1, "Neue Meldung ersetzt die alte (keine Stapel)")
 	m.hud.confirm_exit()
 	check(m.hud.has_overlay(), "Verlassen-Dialog oeffnet")
 	m.hud.hide_overlay()
+	# Volle Runde (6 Spieler, langer Name): Liste bleibt schmal, in der Ecke und weit ueber der Bedienung
+	var six: Array = []
+	for i in 6:
+		six.append({"name": "Sehr langer Spielername %d" % i, "color": Catalog.PLAYER_COLORS[i % Catalog.PLAYER_COLORS.size()],
+			"total": 10 + i * 3, "holed": i == 0, "done": i < 2, "local": i == 2})
+	m.hud.set_leaderboard(six)
+	await _process_frames(3)
+	var six_r: Rect2 = m.hud.board_rect()
+	check(m.hud._board.get_child_count() == 6 and six_r.end.x <= 240.0 and six_r.end.y < m.hud._bottom_box.get_global_rect().position.y
+		and six_r.end.y < hvp.size.y * 0.3 and m.hud._top_box.get_global_rect().size.y <= 80.0,
+		"Rangliste mit 6 Spielern: schmal, in der Ecke, obere Leiste unveraendert (%s)" % six_r)
+	m.hud.show_next(true)
+	await _process_frames(2)
+	check(m.hud._next_btn.is_visible_in_tree() and m.hud.is_over_widget(m.hud._next_btn.get_global_rect().get_center())
+		and m.hud._next_btn.get_global_rect().position.y > hvp.size.y * 0.5 and not m.hud.has_overlay(),
+		"Nach einer Bahn: WEITER-Knopf in der Daumenzone statt Ergebnis-Fenster")
+	m.hud.show_next(false)
 	m.hud.show_daily_result(1.5, false, {"coins": 200, "gems": 4, "label": "Ganz nah dran!"})
 	await _process_frames(3)
 	m.queue_free()
