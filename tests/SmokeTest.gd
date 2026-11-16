@@ -663,7 +663,7 @@ func _process_frames(n: int) -> void:
 		await get_tree().process_frame
 
 ## Laesst einen Bot die Bahn spielen. Rueckgabe: {holed, strokes, time, ...}; schreibt pro Schlag eine Diagnosezeile.
-func _bot_playthrough(id: String, verbose: bool, skill: float = 0.92, course_trophies: int = -1) -> Dictionary:
+func _bot_playthrough(id: String, verbose: bool, skill: float = 0.92, course_trophies: int = -1, brain_seed: int = 777) -> Dictionary:
 	var c: Course3D = CourseBuilder3D.build(id, 4242, false)
 	add_child(c)
 	await _frames(3)
@@ -673,7 +673,7 @@ func _bot_playthrough(id: String, verbose: bool, skill: float = 0.92, course_tro
 	ball.unfreeze()
 	# Die Streuung beim Abschlag nutzt den globalen Zufall -> pro Bahn fest seeden (reproduzierbar)
 	seed(absi(hash(id + "|bot")))
-	var brain := BotBrain.new(ball, c, skill, 777)
+	var brain := BotBrain.new(ball, c, skill, brain_seed)
 	if course_trophies >= 0:
 		SmartBotController.configure(brain, course_trophies)
 	var t := 0.0
@@ -712,7 +712,8 @@ func _bot_playthrough(id: String, verbose: bool, skill: float = 0.92, course_tro
 		_log_bot_shot(id, c, ball, brain, shot_from, strokes_before)
 	var out := {"holed": ball.state == Ball3D.State.HOLED, "strokes": ball.strokes, "time": t, "par": c.par,
 		"progress": c.progress_at(ball.global_position), "length": c.total_length(),
-		"launches": ball.shortcut_launches, "choices": brain.shortcut_choices, "has_shortcut": not c.shortcut.is_empty()}
+		"launches": ball.shortcut_launches, "choices": brain.shortcut_choices, "has_shortcut": not c.shortcut.is_empty(),
+		"blunders": brain.blunders, "weakness": brain.weakness()}
 	c.queue_free()
 	await _frames(2)
 	return out
@@ -773,16 +774,49 @@ func _stage_adaptive_bots() -> void:
 	print("[SMOKE] Versehentlich auf die Schanze gerollt (Zielfehler, nicht geplant): %s" % (", ".join(accidental) if not accidental.is_empty() else "nirgends"))
 	print("[SMOKE] Bots ohne Abkuerzung: %d von 15 eingelocht, %d Schlaege gesamt; offen: %s" % [holed, total_strokes, ", ".join(open_ids)])
 	check(holed >= 12, "Bots ohne Abkuerzung (Koennen 0.7) lochen auf mind. 12 von 15 Bahnen ein (%d, offen: %s)" % [holed, ", ".join(open_ids)])
-	# Echte Einsteiger-Bots: so stark wie fuer einen neuen Spieler (make_bot_entry: ca. 0.35) auf den offenen Bahnen e1-e5
+	# Echte Einsteiger-Bots: genau das Koennen, das ein neuer Spieler (0 Trophaeen) als Gegner bekommt
+	# (GameManager.bot_skill - dieselbe Rechnung wie make_bot_entry), auf den offenen Bahnen e1-e5.
+	# Je Bahn 6 Durchlaeufe: schwaechster, mittlerer und staerkster Einsteiger x 2 Zufallsfolgen.
+	check(is_equal_approx(GameManager.bot_skill(0.0, 0.0), 0.22) and GameManager.bot_skill(0.0, 1.0) < 0.4 and GameManager.bot_skill(0.0, -1.0) >= 0.12
+		and GameManager.bot_skill(1.0, 0.0) >= 0.8 and GameManager.bot_skill(1.0, 1.0) <= 0.95,
+		"Bot-Koennen waechst mit den Trophaeen: Einsteiger %.2f-%.2f, ab 1500 Trophaeen %.2f-%.2f" % [GameManager.bot_skill(0.0, -1.0),
+			GameManager.bot_skill(0.0, 1.0), GameManager.bot_skill(1.0, -1.0), GameManager.bot_skill(1.0, 1.0)])
+	var newbie_runs := 0
 	var newbie_holed := 0
-	var newbie_strokes := PackedStringArray()
+	var newbie_over := 0.0
+	var newbie_aces := 0
+	var newbie_blunders := 0
+	var newbie_weak := 0.0
 	for id in ["e1", "e2", "e3", "e4", "e5"]:
-		var rn: Dictionary = await _bot_playthrough(id, false, 0.35, 0)
-		if bool(rn["holed"]):
-			newbie_holed += 1
-		newbie_strokes.append("%s=%s" % [id, str(rn["strokes"]) if bool(rn["holed"]) else "DNF"])
-		check(int(rn["choices"]) == 0, "Einsteiger-Bot (Koennen 0.35) plant auf %s keine Abkuerzung" % id)
-	print("[SMOKE] Einsteiger-Bots (Koennen 0.35, 0 Bahn-Trophaeen) auf Arena 1: %d von 5 eingelocht (%s)" % [newbie_holed, ", ".join(newbie_strokes)])
+		var per := PackedStringArray()
+		for jit: float in [-1.0, 0.0, 1.0]:
+			for bseed: int in [777, 4711]:
+				var rn: Dictionary = await _bot_playthrough(id, false, GameManager.bot_skill(0.0, jit), 0, bseed)
+				newbie_runs += 1
+				newbie_over += float(int(rn["strokes"]) - int(rn["par"]))
+				newbie_blunders += int(rn["blunders"])
+				newbie_weak = maxf(newbie_weak, float(rn["weakness"]))
+				if bool(rn["holed"]):
+					newbie_holed += 1
+					if int(rn["strokes"]) == 1:
+						newbie_aces += 1
+				per.append(str(rn["strokes"]) if bool(rn["holed"]) else "DNF")
+				check(int(rn["choices"]) == 0, "Einsteiger-Bot (Koennen %.2f) plant auf %s keine Abkuerzung" % [GameManager.bot_skill(0.0, jit), id])
+		print("[SMOKE] Einsteiger-Bots auf %s (Par %d): %s" % [id, CourseBuilder3D.course_par(id), ", ".join(per)])
+	var newbie_avg: float = newbie_over / float(maxi(1, newbie_runs))
+	print("[SMOKE] Einsteiger-Bots (0 Trophaeen, Koennen %.2f-%.2f) auf Arena 1: %d von %d eingelocht, im Mittel %.1f ueber Par, %d Hole-in-One, %d verhauene Schlaege" % [
+		GameManager.bot_skill(0.0, -1.0), GameManager.bot_skill(0.0, 1.0), newbie_holed, newbie_runs, newbie_avg, newbie_aces, newbie_blunders])
+	check(newbie_weak > 0.7 and newbie_blunders > 0, "Einsteiger-Bots spielen mit Anfaenger-Fehlern (Anteil %.2f, %d verhauene Schlaege)" % [newbie_weak, newbie_blunders])
+	check(newbie_avg >= 1.5, "Einsteiger-Bots sind schlagbar: im Mittel mindestens 1,5 Schlaege ueber Par (%.1f)" % newbie_avg)
+	check(newbie_holed * 2 >= newbie_runs, "Einsteiger-Bots lochen trotzdem meist ein (%d von %d)" % [newbie_holed, newbie_runs])
+	# Sichere Spieler bleiben unveraendert: ab Koennen 0.7 gibt es keine Anfaenger-Fehler
+	var c_w: Course3D = CourseBuilder3D.build("e1", 1, false)
+	add_child(c_w)
+	var b_w := _new_ball(c_w)
+	check(BotBrain.new(b_w, c_w, 0.7, 1).weakness() == 0.0 and BotBrain.new(b_w, c_w, 0.92, 1).weakness() == 0.0
+		and is_equal_approx(BotBrain.new(b_w, c_w, 0.2, 1).weakness(), 1.0), "Anfaenger-Fehler nur unter Koennen 0.7 (0.7 und 0.92: keine)")
+	c_w.queue_free()
+	await _frames(2)
 	# Profi-Stufe: viele Bahn-Trophaeen -> Bots nutzen die Abkuerzung, wo sie sich lohnt
 	var pro_used := PackedStringArray()
 	for id in ["e2", "v3", "p1"]:
@@ -911,6 +945,11 @@ func _stage_match() -> void:
 	var cfg2: Dictionary = GameManager.make_bot_match("pirate", 3, 4)
 	cfg2["courses"] = ["p3", "v3"]
 	cfg2["rounds"] = 2
+	# Hier geht es um das Planen unter knappem Rechenbudget, nicht um Anfaenger-Fehler: Der Test setzt 0 Trophaeen,
+	# die Gegner waeren also Einsteiger. Deshalb sichere Spieler (Koennen 0.85) einsetzen.
+	for pe: Dictionary in (cfg2["players"] as Array):
+		if str(pe.get("kind", "")) == "bot":
+			pe["skill"] = 0.85
 	var m2: Match3D = await _run_match(cfg2, true, 600.0)
 	check(m2.finished, "Partie auf p3 + v3 mit 5 Spielern laeuft bis zum Ende")
 	for rec in m2.players:
@@ -924,7 +963,7 @@ func _stage_match() -> void:
 	var best_total := 999
 	for row in m2.final_ranking:
 		best_total = mini(best_total, int(row["total"]))
-	check(best_total <= 14, "Bester Bot schafft p3 + v3 (Par 8) in hoechstens 14 Schlaegen (%d)" % best_total)
+	check(best_total <= 14, "Bester Bot (Koennen 0.85) schafft p3 + v3 (Par 8) in hoechstens 14 Schlaegen (%d)" % best_total)
 	m2.queue_free()
 	await _process_frames(3)
 	BotBrain.time_budget_usec = 400000

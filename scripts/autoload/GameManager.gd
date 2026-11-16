@@ -1086,6 +1086,12 @@ func make_bot_match(world_id: String, rounds: int, bot_count: int = 0) -> Dictio
 		cfg["rounds"] = (cfg["courses"] as Array).size()
 	return cfg
 
+## Koennen eines Bots (0..1): waechst mit den Trophaeen des Spielers. tier = Trophaeen / 1500 (0..1), jitter = Zufalls-
+## anteil je Bot (-1..1). Neue Spieler treffen auf Anfaenger (um 0.22: grosse Ziel- und Kraftfehler, verhauene Schlaege,
+## lange Bedenkzeit - siehe BotBrain.weakness()), ab etwa 1500 Trophaeen auf sichere Spieler.
+static func bot_skill(tier: float, jitter: float) -> float:
+	return clampf(0.22 + 0.63 * clampf(tier, 0.0, 1.0) + 0.1 * clampf(jitter, -1.0, 1.0), 0.12, 0.95)
+
 func make_bot_entry(id: String, bot_name: String, color_index: int, tier: float) -> Dictionary:
 	var balls: Array = Catalog.BALL_ORDER.duplicate()
 	var trails: Array = Catalog.TRAIL_ORDER.duplicate()
@@ -1099,7 +1105,7 @@ func make_bot_entry(id: String, bot_name: String, color_index: int, tier: float)
 		"trail": str(trails[_rng.randi_range(0, trails.size() - 1)]),
 		"explosion": str(fx[_rng.randi_range(0, fx.size() - 1)]),
 		"frame": str(Catalog.LEAGUES[Catalog.league_index(trophies())]["id"]),
-		"skill": clampf(0.35 + 0.5 * tier + _rng.randf_range(-0.12, 0.12), 0.15, 0.95),
+		"skill": bot_skill(tier, _rng.randf_range(-1.0, 1.0)),
 		"trophies": maxi(0, trophies() + _rng.randi_range(-80, 80)),
 	}
 

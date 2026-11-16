@@ -12,6 +12,8 @@ enum Phase { WAIT, DELAY, SEARCH, AIMED }
 static var time_budget_usec: int = 2500
 ## Vorlauf (s) zwischen Planung und geplantem Abschlag auf Bahnen mit beweglichen Teilen.
 const PLAN_LEAD := 0.8
+## Unterhalb dieses Koennens spielt ein Bot mit Anfaenger-Fehlern (weakness() > 0); ab hier aendert sich nichts.
+const WEAK_BELOW := 0.7
 ## Zusaetzlich gepruefte Abschlag-Zeitpunkte (s nach dem Planungszeitpunkt) fuer die besten Kandidaten.
 const TIME_OFFSETS: Array[float] = [0.9, 1.8, 2.7, 3.6, 4.8]
 
@@ -26,6 +28,8 @@ var shortcut_choices: int = 0
 var phase: int = Phase.WAIT
 ## Wird gesetzt, sobald der Bot geschossen hat (fuer Emotes o.ae.).
 var shots_taken: int = 0
+## Verhauene Schlaege (deutlich zu kurz oder zu lang) - nur Anfaenger-Bots
+var blunders: int = 0
 
 var _rng := RandomNumberGenerator.new()
 var _timer: float = 0.0
@@ -66,6 +70,12 @@ func _init(p_ball: Ball3D, p_course: Course3D, p_skill: float, rng_seed: int) ->
 	_rng.seed = rng_seed
 	_moving = course.has_moving_parts()
 
+## Anfaenger-Anteil: 0 = sicherer Spieler (Koennen >= WEAK_BELOW) .. 1 = blutiger Anfaenger (Koennen <= 0.2).
+## Steuert die zusaetzlichen Fehler beim Schlag und die laengere Bedenkzeit. Geplant wird weiter mit der echten
+## Flugbahn-Simulation - ein Anfaenger weiss, wohin er will, trifft es aber nicht.
+func weakness() -> float:
+	return clampf((WEAK_BELOW - skill) / 0.5, 0.0, 1.0)
+
 ## true, wenn der Bot gerade rechnen moechte (Match3D verteilt die Rechenzeit reihum).
 func wants_cpu() -> bool:
 	return phase == Phase.SEARCH
@@ -83,7 +93,7 @@ func update(delta: float) -> void:
 		Phase.WAIT:
 			_learn_from_last_shot()
 			phase = Phase.DELAY
-			_timer = lerpf(2.2, 0.8, skill) + _rng.randf_range(0.0, 1.2)
+			_timer = lerpf(2.2, 0.8, skill) + _rng.randf_range(0.0, 1.2) + 1.6 * weakness()
 		Phase.DELAY:
 			_timer -= delta
 			if _timer <= 0.0:
@@ -303,8 +313,17 @@ func _shoot() -> void:
 	var power: float = float(_best["power"])
 	# Skill-abhaengige Fehler: Zielwinkel und Kraft
 	var err: float = 1.0 - skill
-	dir = dir.rotated(Vector3.UP, deg_to_rad(_rng.randfn(0.0, 0.25 + 3.2 * err)))
-	power = clampf(power * (1.0 + _rng.randfn(0.0, 0.015 + 0.09 * err)), 0.05, 1.0)
+	var weak: float = weakness()
+	dir = dir.rotated(Vector3.UP, deg_to_rad(_rng.randfn(0.0, 0.25 + 3.2 * err + 3.0 * weak * weak)))
+	power = clampf(power * (1.0 + _rng.randfn(0.0, 0.015 + 0.09 * err + 0.07 * weak * weak)), 0.05, 1.0)
+	if weak > 0.0:
+		# Anfaenger: kein Gefuehl fuer kurze Putts (fester Kraftfehler, unabhaengig von der Entfernung) und ab und zu
+		# ein verhauener Schlag - meist zu kurz, manchmal weit drueber
+		power = clampf(power + _rng.randfn(0.0, 0.03 * weak), 0.05, 1.0)
+		if _rng.randf() < 0.22 * weak:
+			var mul: float = _rng.randf_range(0.5, 0.75) if _rng.randf() < 0.6 else _rng.randf_range(1.3, 1.6)
+			power = clampf(power * mul, 0.05, 1.0)
+			blunders += 1
 	_misses = 0
 	_lead = maxf(PLAN_LEAD, _lead * 0.85)
 	last_choice = {"dir": _best["dir"], "power": float(_best["power"]), "chip": bool(_best["chip"]), "dt": float(_best.get("dt", 0.0))}
