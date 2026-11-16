@@ -126,6 +126,22 @@ func _shot_game() -> void:
 			print("[SHOTS] Mitten auf der Bahn: " + info)
 		else:
 			print("[SHOTS][FAIL] Mitten auf der Bahn ist der ruhende Ball verdeckt oder nicht im Bild: " + info)
+	# Eigener Ball ist fertig -> Kamera in der Spielersicht des Gegners, der dem Loch am naechsten ist
+	if m.local != null and not m.local.done and m.phase == Match3D.Phase.PLAY:
+		m._finish_player(m.local, false)
+		for i in 150:
+			await get_tree().process_frame
+		await _capture("game_spectate")
+		if m.phase == Match3D.Phase.PLAY and m._spectating != null:
+			var wn: Node3D = m._spectating.node()
+			var ws: Vector2 = m.rig.camera.unproject_position(wn.global_position)
+			if m.rig.is_top() or m.rig.target != wn or not hvp.has_point(ws):
+				print("[SHOTS][FAIL] Zuschauen: Kamera nicht am Ball von %s (Vogelperspektive=%s, am Bildschirm %s)" % [m._spectating.name, m.rig.is_top(), ws])
+			else:
+				print("[SHOTS] Zuschauen: Kamera folgt %s (%.1f m vom Loch), Ball am Bildschirm %s, Status \"%s\"" % [m._spectating.name,
+					wn.global_position.distance_to(m.course.hole_pos), ws, m.hud._status_label.text])
+		else:
+			print("[SHOTS] Zuschauen: Bahn war beim Aufnehmen schon zu Ende (Phase %d, Vogelperspektive=%s)" % [m.phase, m.rig.is_top()])
 	m.rig.set_top(true)
 	for i in 50:
 		await get_tree().process_frame

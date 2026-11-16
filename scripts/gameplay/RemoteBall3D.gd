@@ -48,6 +48,10 @@ func push_position(pos: Vector3) -> void:
 func set_holed() -> void:
 	holed = true
 
+## Aktuelle (geglaettete) Geschwindigkeit in m/s - fuer die Zuschauer-Kamera.
+func speed() -> float:
+	return _speed
+
 func set_hidden(hidden: bool) -> void:
 	visible = not hidden
 

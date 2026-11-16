@@ -25,6 +25,7 @@ func _ready() -> void:
 	await _stage_adaptive_bots()
 	_stage_progression()
 	await _stage_match()
+	await _stage_spectate()
 	await _stage_input()
 	await _stage_daily()
 	_stage_battle_pass()
@@ -746,13 +747,15 @@ func _stage_bots() -> void:
 
 ## Einsteiger-Bots (0 Trophaeen: schwaechster, mittlerer, staerkster) spielen die Bahnen `ids` mit jeder Zufallsfolge
 ## aus `seeds`. Rueckgabe: {runs, holed, over (Schlaege ueber Par, Summe), aces, blunders, weak, planned}.
-func _newbie_series(ids: Array, seeds: Array, tag: String) -> Dictionary:
+func _newbie_series(ids: Array, seeds: Array, tag: String, skills: Array = []) -> Dictionary:
 	var out := {"runs": 0, "holed": 0, "over": 0.0, "aces": 0, "blunders": 0, "weak": 0.0, "planned": 0}
+	if skills.is_empty():
+		skills = [GameManager.bot_skill(0.0, -1.0), GameManager.bot_skill(0.0, 0.0), GameManager.bot_skill(0.0, 1.0)]
 	for id: String in ids:
 		var per := PackedStringArray()
-		for jit: float in [-1.0, 0.0, 1.0]:
+		for sk: float in skills:
 			for bseed: int in seeds:
-				var rn: Dictionary = await _bot_playthrough(id, false, GameManager.bot_skill(0.0, jit), 0, bseed)
+				var rn: Dictionary = await _bot_playthrough(id, false, sk, 0, bseed)
 				out["runs"] = int(out["runs"]) + 1
 				out["over"] = float(out["over"]) + float(int(rn["strokes"]) - int(rn["par"]))
 				out["blunders"] = int(out["blunders"]) + int(rn["blunders"])
@@ -811,20 +814,23 @@ func _stage_adaptive_bots() -> void:
 	check(float(nb["weak"]) > 0.7 and int(nb["blunders"]) > 0, "Einsteiger-Bots spielen mit Anfaenger-Fehlern (Anteil %.2f, %d verhauene Schlaege)" % [float(nb["weak"]), int(nb["blunders"])])
 	check(newbie_avg >= 1.5, "Einsteiger-Bots sind schlagbar: im Mittel mindestens 1,5 Schlaege ueber Par (%.1f)" % newbie_avg)
 	check(int(nb["holed"]) * 2 >= int(nb["runs"]), "Einsteiger-Bots lochen trotzdem meist ein (%d von %d)" % [int(nb["holed"]), int(nb["runs"])])
-	# MESSREIHE (voruebergehend): mehrere Fehler-Stufen auf e1-e4, um die passende Staerke zu waehlen
-	var keep: Array = [BotBrain.weak_aim_deg, BotBrain.weak_power, BotBrain.weak_power_abs, BotBrain.weak_blunder]
-	for sw: Array in [[0.0, 0.0, 0.0, 0.0], [0.6, 0.01, 0.008, 0.08], [1.0, 0.02, 0.012, 0.1], [2.0, 0.045, 0.02, 0.16]]:
+	# MESSREIHE (voruebergehend): alte Staerke als Vergleich + mehrere Stufen auf e1-e4, um die passende zu waehlen
+	var keep: Array = [BotBrain.weak_aim_deg, BotBrain.weak_power, BotBrain.weak_power_abs, BotBrain.weak_blunder, BotBrain.weak_slack]
+	for sw: Array in [[0.0, 0.0, 0.0, 0.0, 0.0, 1], [0.6, 0.01, 0.008, 0.08, 5.0, 0], [1.0, 0.02, 0.012, 0.1, 5.0, 0], [0.6, 0.01, 0.008, 0.08, 9.0, 0], [0.0, 0.0, 0.0, 0.0, 6.0, 0]]:
 		BotBrain.weak_aim_deg = sw[0]
 		BotBrain.weak_power = sw[1]
 		BotBrain.weak_power_abs = sw[2]
 		BotBrain.weak_blunder = sw[3]
-		var r_sw: Dictionary = await _newbie_series(["e1", "e2", "e3", "e4"], [777, 4711], "Stufe %s " % str(sw))
-		print("[SMOKE] MESSREIHE %s: %d von %d eingelocht, im Mittel %.1f ueber Par, %d Hole-in-One" % [str(sw), int(r_sw["holed"]), int(r_sw["runs"]),
-			float(r_sw["over"]) / float(maxi(1, int(r_sw["runs"]))), int(r_sw["aces"])])
+		BotBrain.weak_slack = sw[4]
+		var old_curve: bool = int(sw[5]) == 1
+		var r_sw: Dictionary = await _newbie_series(["e1", "e2", "e3", "e4"], [777, 4711, 31337], "Stufe %s " % str(sw), [0.23, 0.35, 0.47] if old_curve else [])
+		print("[SMOKE] MESSREIHE %s%s: %d von %d eingelocht, im Mittel %.1f ueber Par, %d Hole-in-One" % [str(sw), " (ALTE Staerke 0.23-0.47)" if old_curve else "",
+			int(r_sw["holed"]), int(r_sw["runs"]), float(r_sw["over"]) / float(maxi(1, int(r_sw["runs"]))), int(r_sw["aces"])])
 	BotBrain.weak_aim_deg = keep[0]
 	BotBrain.weak_power = keep[1]
 	BotBrain.weak_power_abs = keep[2]
 	BotBrain.weak_blunder = keep[3]
+	BotBrain.weak_slack = keep[4]
 	# Sichere Spieler bleiben unveraendert: ab Koennen 0.7 gibt es keine Anfaenger-Fehler
 	var c_w: Course3D = CourseBuilder3D.build("e1", 1, false)
 	add_child(c_w)
@@ -874,7 +880,8 @@ func _stage_progression() -> void:
 
 # ---------------------------------------------------------------- Komplette Partie (Match3D + HUD + Bots)
 
-func _run_match(config: Dictionary, auto: bool, max_seconds: float) -> Match3D:
+## watch (optional): wird in jedem Bild mit dem Match aufgerufen (Beobachtungen waehrend der Partie).
+func _run_match(config: Dictionary, auto: bool, max_seconds: float, watch: Callable = Callable()) -> Match3D:
 	GameManager.match_config = config
 	var scene: PackedScene = load("res://scenes/Game.tscn")
 	var m := scene.instantiate() as Match3D
@@ -883,6 +890,8 @@ func _run_match(config: Dictionary, auto: bool, max_seconds: float) -> Match3D:
 	var t := 0.0
 	while auto and not m.finished and t < max_seconds:
 		await get_tree().process_frame
+		if watch.is_valid():
+			watch.call(m)
 		t += 1.0 / 60.0
 	return m
 
@@ -894,8 +903,20 @@ func _stage_match() -> void:
 	cfg["rounds"] = 2
 	var trophies_before := GameManager.trophies()
 	BotBrain.time_budget_usec = 2500   # Produktions-Rechenbudget
-	var m: Match3D = await _run_match(cfg, true, 420.0)
+	# Beobachtung waehrend der Partie: Ist der eigene Ball fertig, darf nie die Vogelperspektive kommen
+	var seen := {"top": 0, "watching": 0, "wrong": 0}
+	var m: Match3D = await _run_match(cfg, true, 420.0, func(mm: Match3D) -> void:
+		if mm.local == null or not mm.local.done or (mm.phase != Match3D.Phase.PLAY and mm.phase != Match3D.Phase.HOLE_END):
+			return
+		if mm.rig.is_top():
+			seen["top"] = int(seen["top"]) + 1
+		if mm._spectate_on and mm._spectating != null:
+			seen["watching"] = int(seen["watching"]) + 1
+			if mm.rig.target != mm._spectating.node() or mm._spectating == mm.local:
+				seen["wrong"] = int(seen["wrong"]) + 1)
 	check(m.finished, "Partie ueber 2 Bahnen laeuft bis zum Ende")
+	check(int(seen["top"]) == 0 and int(seen["wrong"]) == 0, "Nach dem eigenen Einlochen keine Vogelperspektive (%d Bilder), Kamera am beobachteten Ball (%d Bilder zugeschaut, %d falsch)" % [
+		int(seen["top"]), int(seen["watching"]), int(seen["wrong"])])
 	check(m.final_ranking.size() == 3, "Endrangliste mit 3 Spielern")
 	check(m.result_rewards.has("coins") and int(m.result_rewards["coins"]) > 0, "Match-Belohnung (Coins) vergeben")
 	check(GameManager.trophies() != trophies_before or int(m.result_rewards.get("trophies", 0)) == 0, "Trophaeen verbucht")
@@ -979,12 +1000,13 @@ func _stage_match() -> void:
 	for i in 6:
 		six.append({"name": "Sehr langer Spielername %d" % i, "color": Catalog.PLAYER_COLORS[i % Catalog.PLAYER_COLORS.size()],
 			"total": 10 + i * 3, "holed": i == 0, "done": i < 2, "local": i == 2})
+	var top_h_before: float = m.hud._top_box.get_global_rect().size.y
 	m.hud.set_leaderboard(six)
 	await _process_frames(3)
 	var six_r: Rect2 = m.hud.board_rect()
 	check(m.hud._board.get_child_count() == 6 and six_r.end.x <= 240.0 and six_r.end.y < m.hud._bottom_box.get_global_rect().position.y
-		and six_r.end.y < hvp.size.y * 0.3 and m.hud._top_box.get_global_rect().size.y <= 80.0,
-		"Rangliste mit 6 Spielern: schmal, in der Ecke, obere Leiste unveraendert (%s)" % six_r)
+		and six_r.end.y < hvp.size.y * 0.3 and is_equal_approx(m.hud._top_box.get_global_rect().size.y, top_h_before),
+		"Rangliste mit 6 Spielern: schmal, in der Ecke, obere Leiste unveraendert (%s, Leiste %.0f px)" % [six_r, top_h_before])
 	m.hud.show_next(true)
 	await _process_frames(2)
 	check(m.hud._next_btn.is_visible_in_tree() and m.hud.is_over_widget(m.hud._next_btn.get_global_rect().get_center())
@@ -1022,6 +1044,118 @@ func _stage_match() -> void:
 	m2.queue_free()
 	await _process_frames(3)
 	BotBrain.time_budget_usec = 400000
+
+# ---------------------------------------------------------------- Zuschauer-Kamera
+
+## Ist der eigene Ball fertig, folgt die Kamera in der Spielersicht dem noch spielenden Ball, der dem Loch am naechsten
+## ist, und wechselt, wenn ein anderer naeher dran ist. Keine Vogelperspektive, kein Ergebnis-Fenster nach der Bahn.
+func _stage_spectate() -> void:
+	print("[SMOKE] Stage: Zuschauer-Kamera")
+	var inf: float = INF
+	check(Match3D.pick_spectate(PackedFloat32Array([inf, 12.0, 8.0]), -1, 0.0) == 2, "Zuschauen: zuerst der Ball, der dem Loch am naechsten ist")
+	check(Match3D.pick_spectate(PackedFloat32Array([inf, 12.0, 8.0]), 1, 0.4) == 1, "Zuschauen: kein Wechsel direkt nach einem Wechsel (Mindestdauer)")
+	check(Match3D.pick_spectate(PackedFloat32Array([inf, 12.0, 11.2]), 1, 5.0) == 1, "Zuschauen: kein Wechsel, wenn zwei Baelle fast gleichauf liegen")
+	check(Match3D.pick_spectate(PackedFloat32Array([inf, 12.0, 8.0]), 1, 5.0) == 2, "Zuschauen: Wechsel, sobald ein anderer deutlich naeher am Loch ist")
+	check(Match3D.pick_spectate(PackedFloat32Array([inf, inf, 30.0]), 1, 0.0) == 2, "Zuschauen: ist der Beobachtete fertig, sofort zum Naechsten")
+	check(Match3D.pick_spectate(PackedFloat32Array([inf, inf, inf]), 2, 9.0) == -1, "Zuschauen: niemand spielt mehr")
+	GameManager.reset_progress()
+	var cfg: Dictionary = GameManager.make_bot_match("emerald", 3, 2)
+	cfg["courses"] = ["e1", "e2"]
+	cfg["rounds"] = 2
+	var m: Match3D = await _run_match(cfg, false, 0.0)
+	var t := 0.0
+	while m.phase != Match3D.Phase.PLAY and t < 10.0:
+		await get_tree().process_frame
+		t += 1.0 / 60.0
+	check(m.phase == Match3D.Phase.PLAY and m.players.size() == 3, "Zuschauen: Bahn mit 2 Gegnern laeuft")
+	# Die Gegner schlagen im Test nicht selbst; zwei Baelle rollen unterschiedlich weit Richtung Loch
+	var bots: Array[Match3D.PlayerRec] = []
+	for rec in m.players:
+		if rec != m.local:
+			rec.brain = null
+			bots.append(rec)
+	var fwd: Vector3 = -m.course.tee.basis.z
+	fwd = Vector3(fwd.x, 0.0, fwd.z).normalized()
+	bots[0].ball.shoot(fwd, 0.12, false, Vector2.ZERO)
+	bots[1].ball.shoot(fwd, 0.3, false, Vector2.ZERO)
+	await _process_frames(20)
+	await _wait_ball(bots[0].ball, 16.0)
+	await _wait_ball(bots[1].ball, 16.0)
+	await _process_frames(10)
+	var near: Match3D.PlayerRec = null
+	var far: Match3D.PlayerRec = null
+	for rec in bots:
+		if rec.done:
+			continue
+		if near == null or rec.ball.global_position.distance_to(m.course.hole_pos) < near.ball.global_position.distance_to(m.course.hole_pos):
+			far = near
+			near = rec
+		else:
+			far = rec
+	check(near != null and far != null and far.ball.global_position.distance_to(m.course.hole_pos) - near.ball.global_position.distance_to(m.course.hole_pos) > Match3D.SPECTATE_MARGIN,
+		"Zuschauen: zwei Gegner liegen unterschiedlich weit vom Loch")
+	if near == null or far == null:
+		m.queue_free()
+		await _process_frames(3)
+		return
+	check(not m._spectate_on and m.rig.target == m.local.node(), "Solange man selbst spielt, bleibt die Kamera am eigenen Ball")
+	# Eigener Ball ist fertig (hier: Schlaglimit) -> Kamera wechselt in die Spielersicht des Naechsten am Loch
+	m._finish_player(m.local, false)
+	await _process_frames(3)
+	check(m._spectate_on and m._spectating == near and m.rig.target == near.node(), "Zuschauen: Kamera folgt dem Gegner, der dem Loch am naechsten ist (%s)" % (m._spectating.name if m._spectating != null else "-"))
+	check(not m.rig.is_top() and m.rig.mode == CameraManager3D.Mode.FOLLOW, "Zuschauen: Spielersicht, keine Vogelperspektive")
+	check(m.hud._status_label.text.contains(near.name) and m.hud._status_pill.visible, "Zuschauen: Anzeige, wem man zuschaut (%s)" % m.hud._status_label.text)
+	await _process_frames(120)
+	var cam_p: Vector3 = m.rig.camera.global_position
+	var ball_p: Vector3 = near.ball.global_position
+	var play_dir: Vector3 = m._suggest_direction(ball_p)
+	var to_ball := Vector3(ball_p.x - cam_p.x, 0.0, ball_p.z - cam_p.z).normalized()
+	var arm_err: float = absf(cam_p.distance_to(ball_p) - m.rig.effective_distance())
+	var scr: Vector2 = m.rig.camera.unproject_position(ball_p)
+	var vps: Vector2 = m.get_viewport().get_visible_rect().size
+	check(arm_err < 3.0 and to_ball.dot(play_dir) > 0.7 and m.rig.view_depression_deg() > 35.0 and Rect2(Vector2.ZERO, vps).has_point(scr),
+		"Zuschauen: Kamera steht hinter dem Ball des Gegners, Blick in seine Spielrichtung (Abweichung %.1f m, Richtung %.2f, %.0f Grad nach unten)" % [
+			arm_err, to_ball.dot(play_dir), m.rig.view_depression_deg()])
+	# Uebersicht von Hand eingeschaltet: beim Wechsel wird sie nicht weggenommen, das Ziel wechselt trotzdem
+	m.hud._on_top_pressed()
+	await _process_frames(3)
+	m._finish_player(near, true)
+	await _process_frames(3)
+	check(m._spectating == far and m.rig.target == far.node() and m.rig.is_top(), "Zuschauen: Beobachteter locht ein -> naechster Gegner; von Hand gewaehlte Uebersicht bleibt")
+	m.hud._on_top_pressed()
+	await _process_frames(3)
+	check(not m.rig.is_top() and m.rig.mode == CameraManager3D.Mode.FOLLOW and m.rig.target == far.node(), "Zuschauen: Uebersicht aus -> wieder Spielersicht des Gegners")
+	# Alle fertig -> Bahn-Ende ohne Fenster und ohne Vogelperspektive: Rangliste links oben, Banner, WEITER
+	m._finish_player(far, true)
+	await _process_frames(4)
+	check(m.phase == Match3D.Phase.HOLE_END and not m._spectate_on, "Alle fertig -> Bahn-Ende")
+	check(not m.rig.is_top() and m.rig.mode == CameraManager3D.Mode.REPLAY, "Bahn-Ende: keine Vogelperspektive, Kamera kreist um die Fahne")
+	check(not m.hud.has_overlay() and m.hud._next_btn.visible and m.hud._banner.text.contains("BAHN 1"), "Bahn-Ende: kein Ergebnis-Fenster, Banner (%s) und WEITER-Knopf" % m.hud._banner.text)
+	var order := PackedStringArray()
+	var totals_ok := true
+	var prev_total := -1
+	for i in m.hud._board.get_child_count():
+		var brow: Node = m.hud._board.get_child(i)
+		var tot: int = int((brow.find_child("Total", true, false) as Label).text)
+		order.append("%s %d" % [(brow.find_child("Name", true, false) as Label).text, tot])
+		if tot < prev_total:
+			totals_ok = false
+		prev_total = tot
+	var shown := {}
+	for i in m.hud._board.get_child_count():
+		var brow2: Node = m.hud._board.get_child(i)
+		shown[(brow2.find_child("Name", true, false) as Label).text] = int((brow2.find_child("Total", true, false) as Label).text)
+	var exact := true
+	for rec in m.players:
+		if int(shown.get(rec.name, -1)) != rec.total or rec.total <= 0:
+			exact = false
+	check(totals_ok and exact and m.hud._board.get_child_count() == 3, "Bahn-Ende: Rangliste nach Gesamtschlaegen sortiert, Schlaege der Bahn genau einmal gezaehlt (%s)" % ", ".join(order))
+	m.hud.skip_pressed.emit()
+	await _process_frames(4)
+	check(m.hole_index == 1 and m.phase == Match3D.Phase.INTRO and not m.hud._next_btn.visible and m.rig.target == m.local.node(),
+		"WEITER startet die naechste Bahn (Kamera wieder am eigenen Ball)")
+	m.queue_free()
+	await _process_frames(3)
 
 # ---------------------------------------------------------------- Touch-Eingabe (Zielen, Drehen, Pinch)
 

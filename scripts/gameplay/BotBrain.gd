@@ -21,6 +21,9 @@ static var weak_aim_deg: float = 1.5
 static var weak_power: float = 0.03
 static var weak_power_abs: float = 0.015
 static var weak_blunder: float = 0.12
+## Anfaenger planen nicht perfekt: Sie nehmen irgendeinen Schlag, der hoechstens so viele Wertungspunkte (etwa Meter
+## Rest-Weg) schlechter ist als der beste - und ein vorhergesagtes Einlochen zaehlt fuer sie nur wie "liegt am Loch".
+static var weak_slack: float = 6.0
 ## Zusaetzlich gepruefte Abschlag-Zeitpunkte (s nach dem Planungszeitpunkt) fuer die besten Kandidaten.
 const TIME_OFFSETS: Array[float] = [0.9, 1.8, 2.7, 3.6, 4.8]
 
@@ -135,6 +138,7 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 					_refined = true
 					_add_timing_candidates()
 					continue
+				_pick_like_a_beginner()
 				phase = Phase.AIMED
 				_timer = 0.25
 				_shoot_at = _plan_time + float(_best.get("dt", 0.0))
@@ -151,16 +155,40 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 		if _sim.advance(24):
 			var sc: float = _score(_sim.result, _candidates[_index])
 			_candidates[_index]["score"] = sc
+			var pred := {"pred_end": _sim.result["end_pos"], "pred_holed": bool(_sim.result["holed"]),
+				"pred_out": bool(_sim.result["out"]), "pred_stopped": bool(_sim.result["stopped"]),
+				"pred_launched": bool(_sim.result.get("launched", false))}
+			_candidates[_index]["pred"] = pred
 			if sc > _best_score:
 				_best_score = sc
 				_best = _candidates[_index]
-				_best_pred = {"pred_end": _sim.result["end_pos"], "pred_holed": bool(_sim.result["holed"]),
-					"pred_out": bool(_sim.result["out"]), "pred_stopped": bool(_sim.result["stopped"]),
-					"pred_launched": bool(_sim.result.get("launched", false))}
+				_best_pred = pred
 			_sim = null
 			_index += 1
 		if Time.get_ticks_usec() - t_start > time_budget_usec:
 			return
+
+## Anfaenger (weakness() > 0) nehmen nicht den besten Schlag, sondern zufaellig einen der "auch ganz guten":
+## alle sicheren Kandidaten (kein Aus, kein Hindernis-Treffer), deren Wertung hoechstens weak_slack * weakness()
+## unter der besten liegt. Ein vorhergesagtes Einlochen zaehlt dabei nur wie ein Ball direkt am Loch - ein Anfaenger
+## erkennt den perfekten Schlag nicht. Sichere Spieler (weakness() == 0) bleiben beim besten Schlag.
+func _pick_like_a_beginner() -> void:
+	var weak: float = weakness()
+	if weak <= 0.0 or weak_slack <= 0.0 or _best.is_empty() or _best_score < -400.0:
+		return
+	var top: float = minf(_best_score, 0.0)
+	var pool: Array[Dictionary] = []
+	for c in _candidates:
+		if not c.has("score") or float(c["score"]) < -400.0:
+			continue
+		if minf(float(c["score"]), 0.0) >= top - weak_slack * weak:
+			pool.append(c)
+	if pool.size() < 2:
+		return
+	var pick: Dictionary = pool[_rng.randi_range(0, pool.size() - 1)]
+	_best = pick
+	_best_score = float(pick["score"])
+	_best_pred = pick.get("pred", {})
 
 # ================================================================ Kandidaten
 

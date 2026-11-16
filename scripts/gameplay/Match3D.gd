@@ -5,6 +5,8 @@ extends Node3D
 ##  - Touch-Steuerung: am Ball ziehen = zielen (3D-Kraftpfeil + Flugbahn-Vorschau), sonst Kamera drehen, Pinch = Zoom
 ##  - alle spielen gleichzeitig; Bahn endet, wenn alle fertig sind oder die Zeit ablaeuft
 ##  - Style-Punkte, Zeitlupen-Kamera am Loch, Replay, Loch-Explosionen, Emotes
+##  - Zuschauen: Ist der eigene Ball im Loch, folgt die Kamera in der Spielersicht dem noch spielenden Ball, der dem
+##    Loch am naechsten ist (keine Vogelperspektive), und wechselt, sobald ein anderer naeher dran ist
 ##  - Online: eigene Baelle senden Position/Schlaege per NetworkManager, fremde werden interpoliert
 
 enum Phase { LOADING, INTRO, PLAY, HOLE_END, MATCH_END }
@@ -118,6 +120,15 @@ var _hole_start_received: int = -1
 var _hole_scored: bool = false
 ## Bahn-Zeit (phase_time), zu der der lokale Spieler fertig wurde (-1 = spielt noch)
 var _local_done_at: float = -1.0
+## Zuschauen (der lokale Spieler ist fertig): aktiv?, wem die Kamera folgt, Sekunden seit dem letzten Wechsel,
+## rollte der beobachtete Ball im letzten Bild?
+var _spectate_on: bool = false
+var _spectating: PlayerRec = null
+var _spectate_time: float = 0.0
+var _spectate_moving: bool = false
+## Ein anderer Ball muss um so viele Meter naeher am Loch sein, und der letzte Wechsel so viele Sekunden her
+const SPECTATE_MARGIN := 1.5
+const SPECTATE_DWELL := 1.5
 
 # ================================================================ Start
 
@@ -191,6 +202,7 @@ func _start_hole(index: int) -> void:
 	phase = Phase.LOADING
 	_hole_scored = false
 	_local_done_at = -1.0
+	_end_spectate()
 	_cancel_aim()
 	_end_slowmo()
 	_stop_replay()
@@ -359,6 +371,7 @@ func _update_play(delta: float, real_dt: float) -> void:
 		SoundManager.set_wind(0.0)
 	_update_slowmo(real_dt)
 	_update_replay(real_dt)
+	_update_spectate(real_dt)
 	if online:
 		_net_tick(real_dt)
 	# Bahn-Ende
@@ -1031,6 +1044,9 @@ func _finish_player(rec: PlayerRec, in_hole: bool) -> void:
 		_cancel_aim()
 		if not in_hole and not course.one_shot:
 			hud.show_banner("LIMIT ERREICHT", "", 1.6, UIKit.RED)
+		if not in_hole:
+			# kein Replay -> sofort den anderen zuschauen (nach dem Einlochen erst nach dem Replay)
+			_begin_spectate()
 	if online and rec.ball != null:
 		NetworkManager.send_game_event("done", {"id": rec.id, "n": rec.strokes, "h": in_hole, "t": rec.hole_time})
 	_refresh_board()
@@ -1043,8 +1059,9 @@ func _check_hole_end() -> void:
 		if not rec.done:
 			if rec == local or local == null or not local.done:
 				return
-			# lokaler Spieler ist fertig: Hinweis, dass auf andere gewartet wird
-			hud.set_status("Warte auf Mitspieler …")
+			# lokaler Spieler ist fertig: Hinweis, dass auf andere gewartet wird (beim Zuschauen steht dort der Name)
+			if not (_spectate_on and _spectating != null) and _replay_ghost == null:
+				hud.set_status("Warte auf Mitspieler …")
 			return
 	_end_hole()
 
@@ -1108,8 +1125,10 @@ func _end_hole() -> void:
 		var sub: String = "%s · Platz %d von %d" % [mine, place, players.size()] if players.size() > 1 else mine
 		hud.show_banner(head, sub, (2.0 if auto_play else HOLE_END_TIME) - 0.9, UIKit.GOLD if local.holed else UIKit.RED)
 	hud.show_next(not online and not last and not auto_play)
-	rig.set_top(true)
-	hud.set_top_view(true)
+	# Keine Vogelperspektive: die Kamera kreist langsam um die Fahne (ausser der Spieler hat die Uebersicht selbst gewaehlt)
+	_end_spectate()
+	if not rig.is_top():
+		rig.replay_at(course.hole_pos)
 	_strokes_in_match += local.strokes if local != null else 0
 	# Platz des Spielers auf dieser Bahn (fuer die Bahn-Trophaeen); Gleichstand = bester gemeinsamer Platz
 	if local != null:
@@ -1244,8 +1263,7 @@ func _update_replay(real_dt: float) -> void:
 	if idx >= _replay_points.size() - 1:
 		_stop_replay()
 		if phase == Phase.PLAY:
-			rig.set_top(true)
-			hud.set_top_view(true)
+			_begin_spectate()
 			_check_hole_end()
 		return
 	var a: Vector3 = _replay_points[idx]
@@ -1260,12 +1278,12 @@ func _update_replay(real_dt: float) -> void:
 			_replay_ghost.rotate(axis.normalized(), flat.length() / Ball3D.RADIUS)
 
 func _start_replay() -> void:
-	if local == null or local.ball == null or phase != Phase.PLAY or auto_play:
+	if local == null or local.ball == null or phase != Phase.PLAY:
 		return
 	var rec_pts: PackedVector3Array = local.ball.record
-	if rec_pts.size() < 40:
-		rig.set_top(true)
-		hud.set_top_view(true)
+	if auto_play or rec_pts.size() < 40:
+		# kein Replay (Test-Automatik bzw. zu kurzer Schlag) -> gleich den anderen zuschauen
+		_begin_spectate()
 		return
 	var start: int = maxi(0, rec_pts.size() - 360)
 	_replay_points = rec_pts.slice(start)
@@ -1286,6 +1304,86 @@ func _stop_replay() -> void:
 			hud.set_status("")
 		if rig != null and rig.mode == CameraManager3D.Mode.REPLAY:
 			rig.mode = CameraManager3D.Mode.FOLLOW
+
+# ================================================================ Zuschauen (eigener Ball ist fertig)
+
+## Wem die Zuschauer-Kamera folgt: dem noch spielenden Ball, der dem Loch am naechsten ist.
+## dists[i] = Abstand von Spieler i zum Loch (INF = spielt nicht mehr), current = bisher beobachteter Index (-1 = keiner),
+## dwell = Sekunden seit dem letzten Wechsel. Gewechselt wird erst nach min_dwell und nur, wenn ein anderer um mehr als
+## margin naeher am Loch ist (kein Flackern, wenn zwei Baelle fast gleichauf liegen oder aneinander vorbeirollen).
+## Ist der bisherige fertig, wird sofort gewechselt. Rueckgabe -1: niemand spielt mehr.
+static func pick_spectate(dists: PackedFloat32Array, current: int, dwell: float, margin: float = SPECTATE_MARGIN,
+		min_dwell: float = SPECTATE_DWELL) -> int:
+	var best := -1
+	for i in dists.size():
+		if is_finite(dists[i]) and (best < 0 or dists[i] < dists[best]):
+			best = i
+	if best < 0:
+		return -1
+	if current < 0 or current >= dists.size() or not is_finite(dists[current]):
+		return best
+	if best != current and dwell >= min_dwell and dists[best] < dists[current] - margin:
+		return best
+	return current
+
+## Der lokale Spieler ist fertig: ab jetzt zeigt die Kamera die Spielersicht der anderen.
+func _begin_spectate() -> void:
+	if phase != Phase.PLAY or local == null or not local.done:
+		return
+	_spectate_on = true
+	_spectating = null
+	_spectate_time = SPECTATE_DWELL
+	_update_spectate(0.0)
+
+func _end_spectate() -> void:
+	_spectate_on = false
+	_spectating = null
+
+func _update_spectate(real_dt: float) -> void:
+	if not _spectate_on or phase != Phase.PLAY or course == null:
+		return
+	_spectate_time += real_dt
+	var dists := PackedFloat32Array()
+	var cur := -1
+	for i in players.size():
+		var rec: PlayerRec = players[i]
+		var n: Node3D = rec.node()
+		var playing: bool = not rec.done and rec != local and n != null and is_instance_valid(n)
+		dists.append(n.global_position.distance_to(course.hole_pos) if playing else INF)
+		if rec == _spectating:
+			cur = i
+	var pick: int = pick_spectate(dists, cur, _spectate_time)
+	if pick < 0:
+		return
+	var watch: PlayerRec = players[pick]
+	var node: Node3D = watch.node()
+	var sp: float = float(node.call("speed")) if node.has_method("speed") else 0.0
+	if watch != _spectating:
+		_spectating = watch
+		_spectate_time = 0.0
+		_spectate_moving = sp > 0.6
+		hud.set_status("Zuschauen: %s" % watch.name)
+		if rig.is_top():
+			# Der Spieler hat die Uebersicht selbst eingeschaltet: nicht umschalten, nur das Ziel wechseln
+			rig.target = node
+		else:
+			rig.follow(node)
+			if rig.idle_time > 1.2:
+				rig.aim_at(_spectate_direction(node, sp))
+		return
+	# Der beobachtete Ball ist zur Ruhe gekommen: hinter ihn drehen, Blick dorthin, wo er als Naechstes hinspielt
+	if _spectate_moving and sp < 0.3 and rig.idle_time > 1.2 and not rig.is_top():
+		rig.aim_at(_suggest_direction(node.global_position))
+	_spectate_moving = sp > 0.6
+
+## Blickrichtung fuer die Spielersicht eines Balls: rollt er, in Rollrichtung; ruht er, in seine naechste Spielrichtung.
+func _spectate_direction(node: Node3D, sp: float) -> Vector3:
+	if sp > 1.5 and node is RigidBody3D:
+		var v: Vector3 = (node as RigidBody3D).linear_velocity
+		var flat := Vector3(v.x, 0.0, v.z)
+		if flat.length() > 1.0:
+			return flat.normalized()
+	return _suggest_direction(node.global_position)
 
 # ================================================================ Emotes
 
