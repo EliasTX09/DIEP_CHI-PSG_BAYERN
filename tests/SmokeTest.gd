@@ -1286,7 +1286,7 @@ func _stage_input() -> void:
 	check(m.hud._power_chip.visible and vp_r.encloses(chip_r) and nearest.distance_to(ball_now) < ball_px * 2.5 + 6.0
 		and m.hud._power_label.text == "%d%%" % int(round(m._aim_power * 100.0)),
 		"Kraft in Prozent schwebt direkt am Ball (%s, Pille %s, Ball %s mit Radius %.0f px)" % [m.hud._power_label.text, chip_r, ball_now, ball_px])
-	check(m._dots.visible and m._arrow.visible, "Kraftpfeil und Flugbahn-Vorschau sichtbar")
+	check(m._dots.visible and m._arrow.visible, "Gummiband und Flugbahn-Vorschau sichtbar")
 	var tag_alpha: float = 0.0
 	var tag_count := 0
 	for rec in m.players:
@@ -1318,6 +1318,17 @@ func _stage_input() -> void:
 		if Match3D._hidden_by_balls(dp, all_balls, m._drawn_cam):
 			stuck += 1
 	check(m._drawn_dots.size() > 3 and stuck == 0, "Keine Vorschau-Punkte auf dem Ball gezeichnet (%d von %d)" % [stuck, m._drawn_dots.size()])
+	# Die Vorschau besteht aus Winkeln, die in Laufrichtung zeigen (am Abschlag: geradeaus in Schussrichtung)
+	var aim_flat := Vector3(m._aim_dir.x, 0.0, m._aim_dir.z).normalized()
+	var chevrons := 0
+	var chev_min := 1.0
+	for i in mini(4, m._drawn_dirs.size()):
+		if m._drawn_dirs[i] != Vector3.ZERO:
+			chevrons += 1
+			chev_min = minf(chev_min, m._drawn_dirs[i].dot(aim_flat))
+	check(m._drawn_dirs.size() == m._drawn_dots.size() and chevrons >= 3 and chev_min > 0.9
+		and int((m._dots.material_override as ShaderMaterial).get_shader_parameter("shape")) == 2 and m._dots.multimesh.use_custom_data,
+		"Vorschau: Winkel statt Punkte, Spitze in Schussrichtung (%d geprueft, kleinste Uebereinstimmung %.2f), blenden zur Ferne aus" % [chevrons, chev_min])
 	check(Match3D._hidden_by_ball(ball.global_position + (ball.global_position - cam_p).normalized() * 0.5, ball.global_position, cam_p)
 		and not Match3D._hidden_by_ball(ball.global_position + (cam_p - ball.global_position).normalized() * 0.6, ball.global_position, cam_p),
 		"Verdeckungs-Test: Punkt hinter dem Ball verdeckt, Punkt davor sichtbar")
@@ -1334,12 +1345,35 @@ func _stage_input() -> void:
 	await _process_frames(2)
 	var end_after: Vector3 = m._preview_end
 	check(end_before != Vector3.INF and end_after != Vector3.INF and end_before.distance_to(end_after) > 0.05, "Spin live: Seiten-Effet verschiebt die Punkt-Kette (%.2f m)" % end_before.distance_to(end_after))
-	check(m._target_ring.visible or m._dots_out, "Zielkreis am Ende der Punkt-Kette (oder rote Kette = Aus)")
-	var knob: Node3D = m._arrow.get_node("Knob")
-	check(knob.position.z > 0.5 and m._band_mesh.visible and m._band_im.get_surface_count() == 1,
-		"Gummiband gespannt (Griff %.2f m hinter dem Ball, leuchtendes Band gebaut)" % knob.position.z)
+	# Zielkreis nur, wenn die Vorschau den Ball zur Ruhe kommen sieht; sonst laeuft die Kette blasser aus
+	check(m._target_ring.visible == (m._preview_settled and not m._dots_out), "Zielkreis genau dann, wenn die Vorschau bis zum Liegepunkt reicht (reicht=%s, Kreis=%s)" % [m._preview_settled, m._target_ring.visible])
+	# Gummiband: Griff-Ring am Finger, Band als Trichter vom Ball bis in den Ring
+	await _process_frames(20)
+	var grip: Node3D = m._arrow.get_node("Grip")
+	check(grip.visible and grip.position.z > Match3D.BAND_MIN and grip.position.z < Match3D.BAND_MAX + 0.3
+		and m._band_mesh.visible and m._band_im.get_surface_count() == 1,
+		"Gummiband gespannt (Griff-Ring %.2f m hinter dem Ball, Band gebaut)" % grip.position.z)
+	var bb: AABB = m._band_im.get_aabb()
+	check(bb.size.x > Match3D.BAND_W_GRIP * 0.8 and bb.position.z >= Match3D.BAND_START_MIN - 0.01 and bb.end.z < grip.position.z
+		and bb.end.z > grip.position.z - Match3D.GRIP_RADIUS,
+		"Band: Trichter vom Ball (ab %.2f m) bis in den Ring (bis %.2f m, breiteste Stelle %.2f m)" % [bb.position.z, bb.end.z, bb.size.x])
+	check(not Match3D._hidden_by_ball(m._arrow.global_transform * Vector3(0.0, 0.0, bb.position.z), ball.global_position, m.rig.camera.global_position),
+		"Band beginnt erst dort, wo es nicht mehr hinter der Kugel liegt")
 	var band_col: Color = (m._band_mat.get_shader_parameter("core_color") as Color)
-	check(band_col.r > 0.9 and band_col.b < 0.3, "Gummiband-Kern leuchtet neon-orange/rot (%s)" % band_col)
+	check(band_col.r > 0.9 and band_col.b < 0.3, "Gummiband leuchtet in der Kraft-Farbe orange/rot (%s)" % band_col)
+	# Sanfter Putt: der Ball bleibt innerhalb der Vorschau liegen -> Zielkreis am Liegepunkt; danach wieder voll spannen
+	_drag(0, screen + Vector2(0.0, 72.0), Vector2(0.0, -248.0))
+	for i in 240:
+		await _process_frames(1)
+		if is_equal_approx(m._preview_power, m._aim_power) and m._preview_spin == m.hud.spin:
+			break
+	check(m._aim_power > 0.02 and m._aim_power < 0.2 and m._preview_settled and (m._target_ring.visible or m._dots_out),
+		"Sanfter Putt (Kraft %.2f): Vorschau reicht bis zum Liegepunkt -> Zielkreis" % m._aim_power)
+	_drag(0, screen + Vector2(0.0, 320.0), Vector2(0.0, 248.0))
+	for i in 240:
+		await _process_frames(1)
+		if is_equal_approx(m._preview_power, m._aim_power):
+			break
 	m.hud._spin_pad.set_value(Vector2.ZERO)
 	await _process_frames(6)
 	var far_before: float = m.rig.attributes.dof_blur_far_distance

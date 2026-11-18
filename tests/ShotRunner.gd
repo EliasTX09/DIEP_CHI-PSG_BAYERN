@@ -37,7 +37,7 @@ func _run() -> void:
 	if _wanted("game"):
 		await _shot_game()
 
-## Spielszene mit HUD: einmal normal, einmal waehrend des Zielens (Kraftpfeil + Vorschau).
+## Spielszene mit HUD: einmal normal, einmal waehrend des Zielens (Gummiband + Vorschau-Kette).
 func _shot_game() -> void:
 	var cfg: Dictionary = GameManager.make_bot_match("emerald", 3, 3)
 	cfg["courses"] = ["e2"]
@@ -149,16 +149,22 @@ func _shot_game() -> void:
 	m.queue_free()
 	await get_tree().process_frame
 
-## Beim Zielen im echten Hochformat: Griff des Zug-Pfeils bei VOLLER Kraft (gerader Zug) im Bild und ueber dem Hinweis,
-## Kraft-Anzeige sichtbar, ganz im Bild und direkt am Ball, kein Kraftbalken am unteren Rand.
+## Beim Zielen im echten Hochformat: der ganze Griff-Ring des Gummibands bei VOLLER Kraft (gerader Zug) im Bild und
+## ueber dem Hinweis (geprueft wird die Ring-Unterkante), Kraft-Anzeige sichtbar, ganz im Bild und direkt am Ball,
+## kein Kraftbalken am unteren Rand.
 func _check_aim_layout(m: Match3D, hvp: Rect2) -> void:
 	var cam: Camera3D = m.rig.camera
 	var ball_pos: Vector3 = m.local.ball.global_position
 	var back := Vector3(-m._aim_dir.x, 0.0, -m._aim_dir.z).normalized()
 	var tail: Vector3 = ball_pos + Vector3(0.0, -Ball3D.RADIUS + 0.05, 0.0) + back * Match3D.BAND_MAX
-	var tail_s: Vector2 = cam.unproject_position(tail)
+	# Unterkante und Seiten des Rings (Ring-Mitte liegt bei BAND_MAX, Radius GRIP_RADIUS)
+	var right_w: Vector3 = Vector3.UP.cross(back).normalized()
+	var tail_s: Vector2 = cam.unproject_position(tail + back * Match3D.GRIP_RADIUS)
+	var side_a: Vector2 = cam.unproject_position(tail + right_w * Match3D.GRIP_RADIUS)
+	var side_b: Vector2 = cam.unproject_position(tail - right_w * Match3D.GRIP_RADIUS)
 	var hint_top: float = m.hud._hint.get_global_rect().position.y if m.hud._hint.text != "" else hvp.size.y
-	var ok_tail: bool = not cam.is_position_behind(tail) and hvp.grow(-4.0).has_point(tail_s) and tail_s.y < hint_top
+	var ok_tail: bool = not cam.is_position_behind(tail) and hvp.grow(-4.0).has_point(tail_s) and tail_s.y < hint_top \
+		and hvp.has_point(side_a) and hvp.has_point(side_b)
 	var chip: Rect2 = m.hud._power_chip.get_global_rect()
 	var ball_s: Vector2 = cam.unproject_position(ball_pos)
 	var ok_chip: bool = m.hud._power_chip.visible and hvp.encloses(chip) and chip.get_center().distance_to(ball_s) < hvp.size.y * 0.12
@@ -171,12 +177,13 @@ func _check_aim_layout(m: Match3D, hvp: Rect2) -> void:
 		for c: Control in [m.hud._mode_btn, m.hud._spin_pad, m.hud._emote_btn]:
 			if c.get_global_rect().has_point(ts):
 				under.append(c.name)
-		print("[SHOTS] Zielen schraeg %+.0f Grad: Pfeil-Griff bei voller Kraft bei %s, im Bild=%s, unter %s" % [ang, ts, hvp.has_point(ts), under])
+		print("[SHOTS] Zielen schraeg %+.0f Grad: Mitte des Griff-Rings bei voller Kraft bei %s, im Bild=%s, unter %s" % [ang, ts, hvp.has_point(ts), under])
 	if ok_tail and ok_chip and no_bar:
-		print("[SHOTS] Zielen: Pfeil-Griff (volle Kraft) bei %s ueber dem Hinweis (%.0f), Kraft-Anzeige %s am Ball %s" % [tail_s, hint_top, chip, ball_s])
+		print("[SHOTS] Zielen: Unterkante des Griff-Rings (volle Kraft) bei %s ueber dem Hinweis (%.0f), Ring-Seiten %s / %s, Kraft-Anzeige %s am Ball %s" % [
+			tail_s, hint_top, side_a, side_b, chip, ball_s])
 	else:
-		print("[SHOTS][FAIL] Zielen: Pfeil-Griff %s (Hinweis ab %.0f), Kraft-Anzeige %s sichtbar=%s, Ball %s, Kraftbalken weg=%s" % [tail_s, hint_top,
-			chip, m.hud._power_chip.visible, ball_s, no_bar])
+		print("[SHOTS][FAIL] Zielen: Unterkante des Griff-Rings %s (Hinweis ab %.0f), Ring-Seiten %s / %s, Kraft-Anzeige %s sichtbar=%s, Ball %s, Kraftbalken weg=%s" % [
+			tail_s, hint_top, side_a, side_b, chip, m.hud._power_chip.visible, ball_s, no_bar])
 
 func _course_camera(c: Course3D) -> Camera3D:
 	var cam := Camera3D.new()

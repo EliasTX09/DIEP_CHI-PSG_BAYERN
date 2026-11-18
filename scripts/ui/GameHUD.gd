@@ -63,7 +63,7 @@ var _toast: PanelContainer = null
 ## Rangliste: Breite des Namens (px) - laengere Namen werden mit "..." gekuerzt
 const BOARD_NAME_W := 112.0
 
-## Farbe der Schlagkraft (Zug-Pfeil und Kraft-Anzeige): Neon-Gold -> Orange -> Rot.
+## Farbe der Schlagkraft (Gummiband, Griff-Ring und Kraft-Anzeige): Gold -> Orange -> Rot.
 static func power_color(power: float) -> Color:
 	var p: float = clampf(power, 0.0, 1.0)
 	return Color(1.0, 0.78, 0.16).lerp(Color(1.0, 0.45, 0.06), clampf(p * 2.0, 0.0, 1.0)).lerp(Color(1.0, 0.13, 0.1), clampf(p * 2.0 - 1.0, 0.0, 1.0))
@@ -356,7 +356,7 @@ func _build_center(area: Control) -> void:
 	_banner_sub.modulate.a = 0.0
 	v.add_child(_banner_sub)
 
-## Kleine Kraft-Anzeige: dunkle Pille mit Blitz + Prozent, Rand und Zahl in der Farbe des Zug-Pfeils.
+## Kleine Kraft-Anzeige: dunkle Pille mit Blitz + Prozent, Rand und Zahl in der Farbe des Gummibands.
 ## Liegt direkt im Root (Bildschirm-Koordinaten), Position kommt jedes Bild von Match3D (place_power).
 func _build_power_chip() -> void:
 	_power_chip = PanelContainer.new()

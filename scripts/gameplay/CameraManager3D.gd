@@ -28,7 +28,7 @@ const DEFAULT_PITCH := 0.95
 const DEFAULT_DISTANCE := 10.0
 const BASE_FOV := 62.0
 ## Blickpunkt liegt um Abstand x LOOK_AHEAD vor dem Ball (Ball im unteren Drittel). Beim Zielen naeher am Ball
-## (LOOK_AHEAD_AIM), damit der Griff des Zug-Pfeils im Bild und ueber dem Hinweis bleibt.
+## (LOOK_AHEAD_AIM), damit der Griff-Ring des Gummibands im Bild und ueber dem Hinweis bleibt.
 const LOOK_AHEAD := 0.3
 const LOOK_AHEAD_AIM := 0.12
 ## Freie Sicht auf den ruhenden Ball: Kollisions-Ebenen der Welt (Bahn, Tore, Aeste, Hindernisse, Plattformen - ohne
