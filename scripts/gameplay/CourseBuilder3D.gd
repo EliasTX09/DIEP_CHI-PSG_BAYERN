@@ -36,28 +36,46 @@ static func course_par(course_id: String) -> int:
 
 ## Bahnen ohne Abkuerzung: e1 (gerade Einsteiger-Bahn, Par 2) und der Golden Shot (nur ein Schlag).
 const NO_SHORTCUT: Array[String] = ["e1", "daily"]
+## Hoechstens so viele Abkuerzungen pro Bahn (jede an einer eigenen Bande-Oeffnung).
+const MAX_SHORTCUTS := 3
 const LANE_LEN := 7.0
-const LANE_WIDTH := 2.0
+const LANE_WIDTH := 2.4
 const OPENING_LEN := 4.8
+## Rampe am Steg-Ende (TrackKit.kicker): Bogenlaenge und moegliche Absprungwinkel in Grad.
+const KICK_LEN := 4.0
+const KICK_ANGLES: Array[float] = [20.0, 26.0, 32.0]
+## Tempo-Klassen, gemessen am Tor (Einfahrt in den Steg), in m/s. Zum Vergleich: der Startschlaeger schafft bei voller
+## Kraft rund 31 m/s, Schlaeger mit Schlagkraft 70 rund 35, die staerksten knapp 39 (Ball3D.MAX_SPEED * power_factor).
+## Normale Abkuerzung: die Landemitte braucht hoechstens V_EASY - mit jedem Schlaeger machbar, wenn man nah genug ist.
+## Power-Abkuerzung: schon der vordere Landerand braucht V_POWER_MIN..V_POWER_MAX - nur mit starkem Schlaeger.
+const V_EASY := 28.0
+const V_POWER_MIN := 31.5
+const V_POWER_MAX := 37.0
 ## Diagnose der letzten Abkuerzungs-Suche: Anzahl verworfener Kandidaten je Grund (fuer den Smoke-Test).
 static var plan_stats: Dictionary = {}
 
 ## Baut eine Bahn. Fuer "daily" bestimmt `rng_seed` den Tages-Parcours.
-## Abkuerzung: erst wird die Bahn probeweise gebaut und die beste Stelle fuer eine Bande-Oeffnung gesucht,
-## dann wird sie mit Oeffnung, schmalem Steg, Felsentor, Sprungschanze und Landezone auf dem Gruen gebaut.
+## Abkuerzungen: erst wird die Bahn probeweise gebaut und nach Stellen fuer Bande-Oeffnungen gesucht (_plan_shortcuts),
+## dann wird sie mit Oeffnungen gebaut, und an jede kommt ein schmaler Steg mit Rampe (_build_shortcut).
 static func build(course_id: String, rng_seed: int = 0, with_environment: bool = true) -> Course3D:
 	var id: String = course_id if INFO.has(course_id) else "e1"
-	var plan: Dictionary = {}
+	var plans: Array[Dictionary] = []
 	if not NO_SHORTCUT.has(id):
 		var probe: Array = _assemble(id, rng_seed, [])
-		plan = _plan_shortcut(probe[0], probe[1])
+		plans = _plan_shortcuts(probe[0], probe[1])
 		(probe[0] as Course3D).free()
-	var built: Array = _assemble(id, rng_seed, plan.get("openings", []))
+	var openings: Array = []
+	for pl in plans:
+		openings.append(pl["opening"])
+	var built: Array = _assemble(id, rng_seed, openings)
 	var c: Course3D = built[0]
 	var k: TrackKit = built[1]
 	var th: WorldTheme = built[2]
-	if not plan.is_empty() and not k.built_openings.is_empty():
-		_build_shortcut(c, k, th, plan)
+	for pl in plans:
+		for o in k.built_openings:
+			if absf(float(o.get("d0", -99.0)) - float(pl["opening"]["d0"])) < 0.01:
+				_build_shortcut(c, k, th, pl, o)
+				break
 	k.commit(th.materials)
 	# Feine Putt-Ringe rund ums Loch
 	var gm := th.materials[TrackKit.S_GREEN] as ShaderMaterial
@@ -128,25 +146,24 @@ static func _assemble(id: String, rng_seed: int, openings: Array) -> Array:
 			_daily(c, k, th, rng)
 	return [c, k, th]
 
-# ================================================================ Abkuerzung
+# ================================================================ Abkuerzungen (Rampen)
 
-## Sucht die Stelle fuer die Abkuerzung: ein gerades Stueck mit Bande, von dem aus ein Steg (7 m) und ein Sprung
-## direkt zur Landezone auf dem Gruen fuehren. Bedingungen: der Hauptweg ist mindestens 12 m laenger,
-## Steg und Flugbahn kreuzen keine anderen Bahnteile (Flug hoch genug ueber Banden/Hindernissen).
-static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
-	var best: Dictionary = {}
-	var best_score: float = -INF
+## Sucht Stellen fuer Abkuerzungen: ein gerades Stueck mit Bande, von dem ein schmaler Steg ohne Banden zu einer Rampe
+## fuehrt. Von der Rampe fliegt der Ball rein physikalisch weiter - geradeaus in Steg-Richtung -, also muss das Ziel
+## (Gruen oder ein spaeteres, beidseitig umbandetes Fairway-Stueck) genau in dieser Richtung liegen. Wie weit der Ball
+## fliegt, haengt nur vom Tempo ab, mit dem er die Rampe hinauffaehrt.
+## Rueckgabe: bis zu MAX_SHORTCUTS Plaene (zuerst die beste normale, dann die beste Power-Abkuerzung, dann weitere).
+static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 	var total: float = c.total_length()
 	plan_stats = {"straights": k.straights.size()}
-	# Landeziele: das Gruen (bevorzugt) oder ein spaeteres, beidseitig umbandetes Fairway-Stueck
-	var targets: Array[Dictionary] = [{"green": true, "xf": k.green_xf, "size": k.green_size, "d": total, "zone": 3.0}]
+	# Landeziele: das Gruen und spaetere, beidseitig umbandete, waagerechte Fairway-Stuecke
+	var targets: Array[Dictionary] = [{"green": true, "xf": k.green_xf, "size": k.green_size, "d": total, "aim": c.hole_pos}]
 	for t in k.straights:
 		var txf: Transform3D = t["xf"]
 		if float(t["dist"]) < 8.0 or float(t["length"]) < 6.0 or not bool(t["wall_l"]) or not bool(t["wall_r"]) or float(t["width"]) < 4.5 or txf.basis.y.y < 0.98:
 			continue
 		targets.append({"green": false, "xf": txf, "size": Vector2(float(t["width"]), float(t["length"])),
-			"d": float(t["dist"]) + float(t["length"]) * 0.5, "zone": minf(2.2, float(t["width"]) * 0.5 - 0.3),
-			"land": txf * Vector3(0.0, 0.0, -float(t["length"]) * 0.5)})
+			"d": float(t["dist"]) + float(t["length"]) * 0.5, "aim": txf * Vector3(0.0, 0.0, -float(t["length"]) * 0.5)})
 	# Belag-Proben in ein 4-m-Raster sortieren (schnelle Nachbarschafts-Abfragen)
 	var grid: Dictionary = {}
 	for i in c.surface_pts.size():
@@ -157,7 +174,9 @@ static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
 		var arr: PackedInt32Array = grid[key]
 		arr.append(i)
 		grid[key] = arr
-	for st in k.straights:
+	var cands: Array[Dictionary] = []
+	for si in k.straights.size():
+		var st: Dictionary = k.straights[si]
 		var length: float = float(st["length"])
 		var xf0: Transform3D = st["xf"]
 		if float(st["dist"]) < 1.0 or length < OPENING_LEN + 0.6 or xf0.basis.y.y < 0.98:
@@ -168,18 +187,51 @@ static func _plan_shortcut(c: Course3D, k: TrackKit) -> Dictionary:
 				continue
 			var u: float = OPENING_LEN * 0.5 + 0.2
 			while u <= length - OPENING_LEN * 0.5 - 0.2:
-				for lane_len: float in [7.0, 5.0, 9.5]:
-					var cand: Dictionary = {}
+				for lane_len: float in [5.0, 7.0, 9.5]:
 					for tg in targets:
-						var cnd: Dictionary = _eval_gate(c, k, grid, xf0, half, u, side, total, lane_len, tg)
-						if not cnd.is_empty() and (cand.is_empty() or float(cnd["score"]) > float(cand["score"])):
-							cand = cnd
-					if not cand.is_empty() and float(cand["score"]) > best_score:
-						best_score = float(cand["score"])
-						cand["openings"] = [{"d0": float(st["dist"]) + u - OPENING_LEN * 0.5, "d1": float(st["dist"]) + u + OPENING_LEN * 0.5, "side": side}]
-						best = cand
+						for cnd in _eval_ramp(c, grid, xf0, half, u, side, lane_len, tg):
+							cnd["straight"] = si
+							cnd["opening"] = {"d0": float(st["dist"]) + u - OPENING_LEN * 0.5, "d1": float(st["dist"]) + u + OPENING_LEN * 0.5, "side": side}
+							cands.append(cnd)
 				u += 1.1
-	return best
+	plan_stats["kandidaten"] = cands.size()
+	cands.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return float(x["score"]) > float(y["score"]))
+	var out: Array[Dictionary] = []
+	for want: String in ["easy", "power", ""]:
+		for cd in cands:
+			if out.size() >= MAX_SHORTCUTS:
+				break
+			if want != "" and str(cd["cls"]) != want:
+				continue
+			if _shortcut_fits(cd, out):
+				out.append(cd)
+				if want != "":
+					break
+	return out
+
+## Vertraegt sich die Abkuerzung mit den schon gewaehlten? Eigenes gerades Stueck (eine Oeffnung pro Stueck),
+## Tore mindestens 6 m auseinander, Steg + Flug mindestens 4 m von Steg + Flug der anderen entfernt.
+static func _shortcut_fits(cd: Dictionary, chosen: Array[Dictionary]) -> bool:
+	for o in chosen:
+		if int(o["straight"]) == int(cd["straight"]):
+			return false
+		var g1: Vector3 = cd["gate"]
+		var g2: Vector3 = o["gate"]
+		if Vector2(g1.x - g2.x, g1.z - g2.z).length() < 6.0:
+			return false
+		var segs1: Array = [[cd["gate"], cd["lip"]], [cd["lip"], cd["land_mid"]]]
+		var segs2: Array = [[o["gate"], o["lip"]], [o["lip"], o["land_mid"]]]
+		for s1: Array in segs1:
+			for s2: Array in segs2:
+				var a1: Vector3 = s1[0]
+				var b1: Vector3 = s1[1]
+				var a2: Vector3 = s2[0]
+				var b2: Vector3 = s2[1]
+				var pts: PackedVector2Array = Geometry2D.get_closest_points_between_segments(Vector2(a1.x, a1.z), Vector2(b1.x, b1.z),
+					Vector2(a2.x, a2.z), Vector2(b2.x, b2.z))
+				if pts[0].distance_to(pts[1]) < 4.0:
+					return false
+	return true
 
 const GRID_CELL := 4.0
 
@@ -197,146 +249,219 @@ static func _near_samples(grid: Dictionary, a: Vector2, b: Vector2, margin: floa
 				out.append_array(grid[key])
 	return out
 
-## Landepunkt auf dem Gruen: 2.2 m vor dem Loch, von der Abkuerzung aus gesehen; mit Abstand zu den Banden.
-## Die Landezone bremst stark ab - meist bleibt ein kurzer Putt.
-static func _landing_point(k: TrackKit, hole: Vector3, from: Vector3) -> Vector3:
-	var inv: Transform3D = k.green_xf.affine_inverse()
-	var gl: Vector3 = inv * from
-	var hl: Vector3 = inv * hole
-	var dl := Vector2(gl.x - hl.x, gl.z - hl.z)
-	dl = dl.normalized() if dl.length() > 0.01 else Vector2(0.0, 1.0)
-	var ll := Vector2(hl.x, hl.z) + dl * 2.2
-	ll.x = clampf(ll.x, -k.green_size.x * 0.5 + 2.0, k.green_size.x * 0.5 - 2.0)
-	ll.y = clampf(ll.y, -k.green_size.y + 2.0, -2.0)
-	return k.green_xf * Vector3(ll.x, 0.0, ll.y)
-
-static func _reject(reason: String) -> Dictionary:
+static func _reject(reason: String) -> Array[Dictionary]:
 	plan_stats[reason] = int(plan_stats.get(reason, 0)) + 1
-	return {}
+	return []
 
-static func _eval_gate(c: Course3D, k: TrackKit, grid: Dictionary, xf0: Transform3D, half: float, u: float, side: int, total: float, lane_len: float, tg: Dictionary) -> Dictionary:
+## Absprung-Tempo an der Rampenkante, um `d` Meter weiter und `dh` Meter hoeher (negativ: tiefer) zu landen
+## (Winkel th in rad). Mit kleinem Aufschlag fuer den Luftwiderstand (Ball3D.AIR_DAMP). INF = unmoeglich.
+static func takeoff_speed(d: float, dh: float, th: float) -> float:
+	var denom: float = 2.0 * cos(th) * cos(th) * (d * tan(th) - dh)
+	if denom <= 0.01:
+		return INF
+	var v: float = sqrt(Gadgets.gravity() * d * d / denom)
+	var t: float = d / maxf(1.0, v * cos(th))
+	return v * (1.0 + Ball3D.AIR_DAMP * t * 0.5)
+
+## Tempo, mit dem der Ball am Tor in den Steg rollen muss, damit er mit v_lip von der Rampe abspringt:
+## rueckwaerts ueber Rampe (Steigung waechst bis th) und Steg integriert, mit Rollwiderstand wie in Ball3D.
+static func gate_speed(v_lip: float, lane_len: float, th: float) -> float:
+	if v_lip == INF:
+		return INF
+	var g: float = Gadgets.gravity()
+	var v: float = v_lip
+	var n := 40
+	var ds: float = KICK_LEN / float(n)
+	for i in n:
+		var phi: float = th * (1.0 - (float(i) + 0.5) / float(n))
+		v = sqrt(v * v + 2.0 * (Ball3D.ROLL_DECEL + Ball3D.ROLL_DAMP * v + g * sin(phi)) * ds)
+	ds = lane_len / float(n)
+	for i in n:
+		v = sqrt(v * v + 2.0 * (Ball3D.ROLL_DECEL + Ball3D.ROLL_DAMP * v) * ds)
+	return v
+
+## Schlagkraft-Wert (0..100), mit dem ein Ball bei voller Kraft direkt am Tor `v_gate` erreicht.
+static func power_needed(v_gate: float) -> int:
+	var factor: float = v_gate / Ball3D.MAX_SPEED
+	return clampi(int(ceil((factor - 0.85) / 0.45 * 100.0)), 0, 100)
+
+## Bewertet eine Abkuerzung: Tor an Position u des geraden Stuecks, Steg lane_len, Ziel tg. Probiert die Rampenwinkel
+## durch und liefert die beste normale und die beste Power-Variante (je hoechstens eine).
+static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: float, u: float, side: int, lane_len: float, tg: Dictionary) -> Array[Dictionary]:
 	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -u)
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var green: bool = bool(tg["green"])
-	var land: Vector3 = _landing_point(k, c.hole_pos, g) if green else tg["land"]
-	var rect_xf: Transform3D = tg["xf"]
-	var rect_size: Vector2 = tg["size"]
-	var flat := Vector3(land.x - g.x, 0.0, land.z - g.z)
-	if flat.length() < 1.0:
-		return {}
-	var to_target: Vector3 = flat.normalized()
-	# Steg zeigt moeglichst Richtung Ziel, aber immer deutlich von der Hauptbahn weg;
-	# das Sprungpad am Ende schiesst den Ball dann in jede Richtung zum Ziel.
-	var dir: Vector3 = to_target
-	if to_target.dot(nrm) < 0.6:
-		var tang: Vector3 = to_target - nrm * to_target.dot(nrm)
-		if tang.length() < 0.001:
-			dir = nrm
-		else:
-			dir = (nrm * 0.6 + tang.normalized() * 0.8).normalized()
-	var lip: Vector3 = g + dir * lane_len
-	var fly_vec := Vector3(land.x - lip.x, 0.0, land.z - lip.z)
-	var fly: float = fly_vec.length()
-	if fly < 1.0 or fly_vec.normalized().dot(dir) < 0.1:
+	var aim: Vector3 = tg["aim"]
+	var flat := Vector3(aim.x - g.x, 0.0, aim.z - g.z)
+	if flat.length() < 8.0:
+		return _reject("nah")
+	var dir: Vector3 = flat.normalized()
+	# Steg muss deutlich von der Hauptbahn weg zeigen (und schraeg noch durch die Oeffnung passen)
+	if dir.dot(nrm) < 0.55:
 		return _reject("winkel")
-	var dist_h: float = lane_len + fly
-	var dh: float = land.y - lip.y
-	if fly < 6.0 or fly > 44.0:
-		return _reject("flugweite")
-	if dh < -16.0 or dh > 8.0:
-		return _reject("hoehe")
 	for bl in c.blockers:
 		if Vector2(bl.x - g.x, bl.z - g.z).length() < 4.5:
 			return _reject("hindernis")
-	for bl in c.blockers:
-		if Vector2(bl.x - land.x, bl.z - land.z).length() < 4.0:
-			return _reject("ziel_hindernis")
 	var gate_d: float = c.path_dist[c.nearest_path_index(g)]
 	var remaining: float = float(tg["d"]) - gate_d
-	if remaining < dist_h + (6.0 if green else 10.0):
+	if remaining < lane_len + KICK_LEN + 10.0:
 		return _reject("ersparnis")
 	var g2 := Vector2(g.x, g.z)
-	var lip2 := Vector2(lip.x, lip.z)
-	var land2 := Vector2(land.x, land.z)
-	# Steg: kein anderer Bahnteil daneben
-	for i in _near_samples(grid, g2, lip2, LANE_WIDTH * 0.5 + 1.4):
+	var lane_end: Vector3 = g + dir * lane_len
+	# Steg + Rampe: kein anderer Bahnteil daneben
+	var ramp_end2 := Vector2(lane_end.x, lane_end.z) + Vector2(dir.x, dir.z) * KICK_LEN
+	for i in _near_samples(grid, g2, ramp_end2, LANE_WIDTH * 0.5 + 1.4):
 		var q: Vector3 = c.surface_pts[i]
 		var q2 := Vector2(q.x, q.z)
 		if q2.distance_to(g2) < 3.8:
 			continue
-		if _seg_dist(q2, g2, lip2) < LANE_WIDTH * 0.5 + 1.2:
+		if _seg_dist(q2, g2, ramp_end2) < LANE_WIDTH * 0.5 + 1.2:
 			return _reject("steg")
-	# Flug: niedrigster Abschusswinkel, der ueber alles hinweg reicht
+	var rect_xf: Transform3D = tg["xf"]
+	var rect_size: Vector2 = tg["size"]
 	var inv: Transform3D = rect_xf.affine_inverse()
-	var near_flight: PackedInt32Array = _near_samples(grid, lip2, land2, 3.6)
-	for elev: float in [38.0, 46.0, 54.0, 62.0]:
-		var tn: float = tan(deg_to_rad(elev))
-		if fly * tn < dh + 1.0:
-			continue
-		var clear := true
-		for i in near_flight:
-			var q: Vector3 = c.surface_pts[i]
-			var q2 := Vector2(q.x, q.z)
-			var ab: Vector2 = land2 - lip2
-			var t: float = clampf((q2 - lip2).dot(ab) / maxf(0.0001, ab.length_squared()), 0.0, 1.0)
-			if q2.distance_to(lip2 + ab * t) > 3.5:
-				continue
-			var arc_y: float = lip.y + t * fly * tn - t * t * (fly * tn - dh)
-			var ql: Vector3 = inv * q
-			var on_green: bool = absf(ql.x) <= rect_size.x * 0.5 + 0.1 and ql.z <= 0.1 and ql.z >= -rect_size.y - 0.1
-			if on_green:
-				# Im Landefeld zaehlen nur die Banden am Rand
-				var edge: float = minf(rect_size.x * 0.5 - absf(ql.x), minf(-ql.z, rect_size.y + ql.z))
-				if edge > 0.6:
-					continue
-			var need: float = q.y + (1.0 if on_green else 4.8)
-			if arc_y < need:
-				clear = false
+	var out: Array[Dictionary] = []
+	var by_cls: Dictionary = {}
+	for kick_deg: float in KICK_ANGLES:
+		var th: float = deg_to_rad(kick_deg)
+		var rr: float = KICK_LEN / th
+		var lip: Vector3 = lane_end + dir * (rr * sin(th)) + Vector3.UP * (rr * (1.0 - cos(th)))
+		# Landefenster: Abschnitt der Fluglinie, der im Ziel liegt (1 m Abstand zu den Banden)
+		var s_in := -1.0
+		var s_out := -1.0
+		var sd := 2.0
+		while sd <= 46.0:
+			var pt: Vector3 = lip + dir * sd
+			var ql: Vector3 = inv * Vector3(pt.x, rect_xf.origin.y, pt.z)
+			var inside: bool = absf(ql.x) <= rect_size.x * 0.5 - 1.0 and ql.z <= -1.0 and ql.z >= -rect_size.y + 1.0
+			if inside:
+				if s_in < 0.0:
+					s_in = sd
+				s_out = sd
+			elif s_in >= 0.0:
 				break
-		if clear:
-			var score: float = remaining - dist_h + dir.dot(nrm) * 4.0 - (elev - 38.0) * 0.15 - absf(lane_len - 7.0) * 0.5 + (12.0 if green else 0.0)
-			return {"score": score, "landing": land, "elev": elev, "fly": fly, "lane": lane_len, "remaining": remaining, "direct": dist_h, "lane_dir": dir,
-				"green": green, "zone": float(tg["zone"]), "target_d": float(tg["d"])}
-	return _reject("flugbahn")
+			sd += 0.5
+		if s_in < 0.0 or s_out - s_in < 2.0:
+			plan_stats["ziel"] = int(plan_stats.get("ziel", 0)) + 1
+			continue
+		var d_near: float = s_in + 0.5
+		var d_mid: float = (s_in + s_out) * 0.5
+		var dh: float = rect_xf.origin.y - lip.y
+		var v_near: float = gate_speed(takeoff_speed(d_near, dh, th), lane_len, th)
+		var v_mid: float = gate_speed(takeoff_speed(d_mid, dh, th), lane_len, th)
+		var cls := ""
+		if v_mid <= V_EASY:
+			cls = "easy"
+		elif v_near >= V_POWER_MIN and v_near <= V_POWER_MAX:
+			cls = "power"
+		else:
+			plan_stats["tempo"] = int(plan_stats.get("tempo", 0)) + 1
+			continue
+		if not _flight_clear(c, grid, lip, dir, d_near, dh, th, inv, rect_size) or not _flight_clear(c, grid, lip, dir, d_mid, dh, th, inv, rect_size):
+			plan_stats["flugbahn"] = int(plan_stats.get("flugbahn", 0)) + 1
+			continue
+		var direct: float = lane_len + KICK_LEN + d_mid
+		var saving: float = remaining - direct
+		if saving < (8.0 if green else 10.0):
+			plan_stats["ersparnis"] = int(plan_stats.get("ersparnis", 0)) + 1
+			continue
+		var score: float = saving + dir.dot(nrm) * 3.0 - absf(lane_len - 7.0) * 0.5 + (4.0 if green else 0.0)
+		if by_cls.has(cls) and float((by_cls[cls] as Dictionary)["score"]) >= score:
+			continue
+		var land_y: float = rect_xf.origin.y
+		by_cls[cls] = {"score": score, "cls": cls, "gate": g, "lip": lip, "lane": lane_len, "lane_dir": dir, "kick_deg": kick_deg,
+			"land_mid": Vector3(lip.x, land_y, lip.z) + dir * d_mid, "land_near": Vector3(lip.x, land_y, lip.z) + dir * d_near,
+			"land_far": Vector3(lip.x, land_y, lip.z) + dir * (s_out - 0.5), "d_mid": d_mid, "v_near": v_near, "v_mid": v_mid,
+			"remaining": remaining, "direct": direct, "green": green, "target_d": float(tg["d"]), "gate_d": gate_d}
+	for key in by_cls.keys():
+		out.append(by_cls[key])
+	return out
+
+## Fliegt der Ball (Abschuss unter th von der Kante lip, Landung nach d Metern dh tiefer/hoeher) frei? Ueber anderen
+## Bahnteilen braucht er Abstand zu den Banden, im Ziel nur ueber den Rand-Banden.
+static func _flight_clear(c: Course3D, grid: Dictionary, lip: Vector3, dir: Vector3, d: float, dh: float, th: float, inv: Transform3D, rect_size: Vector2) -> bool:
+	var lip2 := Vector2(lip.x, lip.z)
+	var land2: Vector2 = lip2 + Vector2(dir.x, dir.z) * d
+	var tn: float = tan(th)
+	for i in _near_samples(grid, lip2, land2, 3.6):
+		var q: Vector3 = c.surface_pts[i]
+		var q2 := Vector2(q.x, q.z)
+		var ab: Vector2 = land2 - lip2
+		var t: float = (q2 - lip2).dot(ab) / maxf(0.0001, ab.length_squared())
+		if t < 0.0 or t > 1.0:
+			continue
+		if q2.distance_to(lip2 + ab * t) > 3.0:
+			continue
+		var x: float = t * d
+		var arc_y: float = lip.y + x * tn - t * t * (d * tn - dh)
+		var ql: Vector3 = inv * q
+		var on_target: bool = absf(ql.x) <= rect_size.x * 0.5 + 0.1 and ql.z <= 0.1 and ql.z >= -rect_size.y - 0.1
+		if on_target:
+			var edge: float = minf(rect_size.x * 0.5 - absf(ql.x), minf(-ql.z, rect_size.y + ql.z))
+			if edge > 0.6:
+				continue
+		if arc_y < q.y + 1.3:
+			return false
+	return true
 
 static func _seg_dist(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var ab: Vector2 = b - a
 	var t: float = clampf((p - a).dot(ab) / maxf(0.0001, ab.length_squared()), 0.0, 1.0)
 	return p.distance_to(a + ab * t)
 
-## Baut Steg, Felsentor, Schanze, Landezone und Schlucht-Korridor fuer die geplante Abkuerzung.
-static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dictionary) -> void:
-	var o: Dictionary = k.built_openings[0]
+## Baut Steg, Rampe, Felsentor und die Schlucht unter dem Flug fuer eine geplante Abkuerzung.
+static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dictionary, o: Dictionary) -> void:
 	var xf0: Transform3D = o["xf"]
 	var side: int = int(o["side"])
 	var half: float = float(o["width"]) * 0.5
 	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -OPENING_LEN * 0.5)
-	var land: Vector3 = plan["landing"]
-	var dir: Vector3 = plan.get("lane_dir", Vector3(land.x - g.x, 0.0, land.z - g.z).normalized())
+	var dir: Vector3 = plan["lane_dir"]
 	var perp: Vector3 = dir.cross(Vector3.UP).normalized()
 	var back_off: float = 2.6
 	var start: Vector3 = g - dir * back_off + Vector3(0.0, -0.012, 0.0)
-	# Steg (schmal, ohne Banden) - zaehlt nicht zur Mittellinie
+	var lane_len: float = float(plan.get("lane", LANE_LEN))
+	var kick_deg: float = float(plan["kick_deg"])
+	# Steg (schmal, ohne Banden) und Rampe - zaehlen nicht zur Mittellinie
 	var saved: Dictionary = k.push_state()
 	k.branch = true
 	k.start(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
 	k.set_width(LANE_WIDTH)
 	k.set_walls(false, false)
 	k.set_surface(TrackKit.S_ALT)
-	var lane_len: float = float(plan.get("lane", LANE_LEN))
 	k.straight(back_off + lane_len)
+	k.kicker(KICK_LEN, kick_deg)
+	var lip: Vector3 = k.xf.origin
 	k.end_run()
 	k.branch = false
 	k.pop_state(saved)
-	var lip: Vector3 = g + dir * lane_len
-	var n_sup: int = int(lane_len / 2.5)
+	var n_sup: int = int((lane_len + KICK_LEN) / 2.5)
 	for i in n_sup:
 		k.supports.append(g + dir * (2.0 + 2.5 * float(i)))
-	# Felsentor: zwei Felssaeulen (mit Kollision) + Querbalken, knapp breiter als der Steg
+	var power: bool = str(plan["cls"]) == "power"
+	_gate_arch(c, th, g, dir, perp, xf0, side, lane_len, power)
+	# Kante der Rampe markieren (nur Erkennung, kein Boost)
+	var tag := Gadgets.RampTag.new(LANE_WIDTH)
+	tag.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lip)
+	c.add_gadget(tag)
+	# Schlucht unter dem Flug (endet vor dem Ziel)
+	var d_mid: float = float(plan["d_mid"])
+	if d_mid > 7.0:
+		c.add_corridor(lip, lip + dir * (d_mid - 4.0), 2.5, 7.5)
+	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
+	var land_y: float = (plan["land_mid"] as Vector3).y
+	var flat_lip := Vector3(lip.x, land_y, lip.z)
+	c.shortcuts.append({"gate": g, "gate_d": float(plan["gate_d"]), "dir": dir, "normal": nrm, "lane_start": g + dir * 0.6, "lip": lip,
+		"landing": flat_lip + dir * d_mid, "land_near": plan["land_near"], "land_far": plan["land_far"], "kick_deg": kick_deg,
+		"v_gate": float(plan["v_mid"]), "v_gate_min": float(plan["v_near"]), "power": power, "need_power": power_needed(float(plan["v_near"])),
+		"remaining": float(plan["remaining"]), "direct": float(plan["direct"]), "green": bool(plan["green"]), "target_d": float(plan["target_d"])})
+
+## Felsentor am Steg-Anfang (zwei Saeulen mit Kollision + Querbalken). Power-Abkuerzungen erkennt man an
+## gluehenden roten Baendern - ohne Schrift.
+static func _gate_arch(c: Course3D, th: WorldTheme, g: Vector3, dir: Vector3, perp: Vector3, xf0: Transform3D, side: int, lane_len: float, power: bool) -> void:
 	# Tor so weit draussen, dass keine Saeule auf der Hauptbahn steht (schraeger Steg -> weiter hinaus)
 	var nrm0: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var dn: float = clampf(dir.dot(nrm0), 0.3, 1.0)
-	var gate_along: float = clampf((1.48 * sqrt(1.0 - dn * dn) + 0.7) / dn, 2.6, lane_len - 0.4)
+	var gate_along: float = clampf((1.68 * sqrt(1.0 - dn * dn) + 0.7) / dn, 2.6, lane_len - 0.4)
 	var gate_pos: Vector3 = g + dir * gate_along
 	var rock_mat := Flora.stone_material({"volcano": Color(0.2, 0.15, 0.13), "pirate": Color(0.62, 0.55, 0.45), "neon": Color(0.16, 0.16, 0.24)}.get(th.id, Color(0.42, 0.4, 0.37)),
 		float(th.land.get("moss", 0.0)))
@@ -348,6 +473,7 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	pm.bounce = 0.3
 	pm.friction = 0.0
 	body.physics_material_override = pm
+	var glow := Mat.glow(Color(1.0, 0.25, 0.12), 2.4)
 	for sgn: float in [-1.0, 1.0]:
 		var p: Vector3 = gate_pos + perp * (sgn * (LANE_WIDTH * 0.5 + 0.48))
 		var cs := CollisionShape3D.new()
@@ -363,42 +489,24 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 		rock.scale = Vector3(0.62, 6.0, 0.62)
 		rock.position = p + Vector3(0.0, -1.5, 0.0)
 		body.add_child(rock)
+		if power:
+			for hgt: float in [1.2, 2.2]:
+				var band := Mat.torus(0.62, 0.74, glow, p + Vector3(0.0, hgt, 0.0))
+				band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				body.add_child(band)
 	var lintel := MeshInstance3D.new()
 	lintel.mesh = Flora.boulder()
 	lintel.material_override = rock_mat
 	lintel.basis = Basis.looking_at(dir, Vector3.UP) * Basis.from_scale(Vector3((LANE_WIDTH + 2.6) * 0.5, 0.5, 0.6))
 	lintel.position = gate_pos + Vector3(0.0, 3.5, 0.0)
 	body.add_child(lintel)
-	var sign := Label3D.new()
-	sign.text = "ABKÜRZUNG"
-	sign.font_size = 72
-	sign.outline_size = 18
-	sign.modulate = Color(1.0, 0.86, 0.25)
-	sign.outline_modulate = Color(0.1, 0.06, 0.02)
-	sign.pixel_size = 0.009
-	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sign.no_depth_test = false
-	sign.position = gate_pos + Vector3(0.0, 4.6, 0.0)
-	body.add_child(sign)
+	if power:
+		var strip := Mat.box(Vector3(LANE_WIDTH + 1.6, 0.16, 0.16), glow)
+		strip.basis = Basis.looking_at(dir, Vector3.UP)
+		strip.position = gate_pos + Vector3(0.0, 3.05, 0.0) - dir * 0.55
+		strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		body.add_child(strip)
 	c.add_child(body)
-	# Sprungschanze am Steg-Ende und Landezone auf dem Gruen
-	# Schanze wirkt nur mitten auf dem Steg (wer am Rand entlangrollt, faellt vorher herunter)
-	var launcher := Gadgets.Launcher.new(Vector3(LANE_WIDTH - 0.3, 2.0, 1.8), land, float(plan["elev"]), 3.0, th.boost_color)
-	launcher.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lip - dir * 0.9)
-	var zone := Gadgets.LandingZone.new(float(plan.get("zone", 3.0)), th.boost_color)
-	zone.transform = Transform3D(Basis.IDENTITY, land)
-	launcher.catcher = zone
-	c.add_gadget(launcher)
-	c.add_gadget(zone)
-	# Schlucht unter Steg und Flug (endet vor dem Gruen)
-	var fly_dir := Vector3(land.x - lip.x, 0.0, land.z - lip.z)
-	var fly_len: float = fly_dir.length()
-	if fly_len > 10.0:
-		c.add_corridor(lip, lip + fly_dir / fly_len * (fly_len - 8.0), 2.5, 7.5)
-	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
-	c.shortcut = {"gate": g, "dir": dir, "normal": nrm, "lane_start": g + dir * 0.6, "lip": lip, "landing": land, "elev": float(plan["elev"]),
-		"remaining": float(plan["remaining"]), "direct": float(plan["direct"]), "green": bool(plan.get("green", true)),
-		"target_d": float(plan.get("target_d", c.total_length()))}
 
 # ================================================================ Platzierungs-Helfer
 
@@ -653,11 +761,11 @@ static func _edge_blocked(c: Course3D, center: Vector3, edge: Vector3, avoid: Ar
 	for p in movers:
 		if Vector2(p.x - center.x, p.z - center.z).length() < (7.0 if on_track else 4.5):
 			return "beweglich"
-	if not c.shortcut.is_empty():
+	for sc in c.shortcuts:
 		for key in ["gate", "lane_start", "lip"]:
-			if (c.shortcut[key] as Vector3).distance_to(center) < 5.0:
+			if (sc[key] as Vector3).distance_to(center) < 5.0:
 				return "abkuerzung"
-		if (c.shortcut["landing"] as Vector3).distance_to(center) < 6.0:
+		if (sc["landing"] as Vector3).distance_to(center) < 6.0 or _near_flight(sc, center, 4.0):
 			return "abkuerzung"
 	if on_track:
 		for cor in c.corridors:
@@ -666,7 +774,15 @@ static func _edge_blocked(c: Course3D, center: Vector3, edge: Vector3, avoid: Ar
 				return "korridor"
 	return ""
 
-## Liegt der Ast (Strecke a-b in Weltkoordinaten) frei von Flug-Korridoren und der Abkuerzung?
+## Liegt p (waagerecht) naeher als `margin` an Steg oder Fluglinie einer Abkuerzung?
+static func _near_flight(sc: Dictionary, p: Vector3, margin: float) -> bool:
+	var p2 := Vector2(p.x, p.z)
+	var g: Vector3 = sc["gate"]
+	var lip: Vector3 = sc["lip"]
+	var land: Vector3 = sc["landing"]
+	return _seg_dist(p2, Vector2(g.x, g.z), Vector2(lip.x, lip.z)) < margin or _seg_dist(p2, Vector2(lip.x, lip.z), Vector2(land.x, land.z)) < margin
+
+## Liegt der Ast (Strecke a-b in Weltkoordinaten) frei von Flug-Korridoren und den Abkuerzungen?
 static func _branch_free(c: Course3D, a: Vector3, b: Vector3, avoid: Array[Vector3]) -> bool:
 	for i in 5:
 		var p: Vector3 = a.lerp(b, float(i) / 4.0)
@@ -674,8 +790,9 @@ static func _branch_free(c: Course3D, a: Vector3, b: Vector3, avoid: Array[Vecto
 			var q: Vector3 = Geometry3D.get_closest_point_to_segment(p, cor["a"], cor["b"])
 			if Vector2(q.x - p.x, q.z - p.z).length() < float(cor["half"]) + 2.5:
 				return false
-		if not c.shortcut.is_empty() and (c.shortcut["landing"] as Vector3).distance_to(p) < 8.0:
-			return false
+		for sc in c.shortcuts:
+			if (sc["landing"] as Vector3).distance_to(p) < 8.0 or _near_flight(sc, p, 4.0):
+				return false
 		for o in avoid:
 			if Vector2(o.x - p.x, o.z - p.z).length() < 3.0:
 				return false

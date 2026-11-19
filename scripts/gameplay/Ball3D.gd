@@ -61,7 +61,7 @@ var _max_air: float = 0.0
 var _bank_hits: int = 0
 var _last_bank_ms: int = 0
 var _close_call: bool = false
-## Ball hat in diesem Schlag die Abkuerzungs-Schanze genommen
+## Ball ist in diesem Schlag von einer Abkuerzungs-Rampe abgesprungen
 var _shortcut: bool = false
 var _close_tick: float = 0.0
 var _shot_time: float = 0.0
@@ -93,7 +93,7 @@ var _squash_axis: Vector3 = Vector3.UP
 var _roll: Basis = Basis.IDENTITY
 var _vis_pos: Vector3 = Vector3.INF
 var _last_fx_ms: int = 0
-## Wie oft der Ball auf dieser Bahn ueber die Abkuerzungs-Schanze geflogen ist
+## Wie oft der Ball auf dieser Bahn von einer Abkuerzungs-Rampe abgesprungen ist
 var shortcut_launches: int = 0
 var _ray := PhysicsRayQueryParameters3D.new()
 ## Weicher Kontaktschatten unter der Kugel (eigener Strahl, damit die Physik-Abfragen unberuehrt bleiben)
@@ -448,11 +448,10 @@ func _emit_events() -> void:
 			"rail_in":
 				SoundManager.play("whoosh", 1.0, 1.2, sound_gain)
 			"launch":
-				# Abkuerzungs-Schanze: fester Flug, kein Spin-Einfluss mehr
-				_spin = Vector2.ZERO
+				# Absprung von einer Abkuerzungs-Rampe (reine Physik - nur fuer Style-Punkte und Statistik gemerkt)
 				_shortcut = true
 				shortcut_launches += 1
-				SoundManager.play("boost", 1.0, 0.8, sound_gain)
+				SoundManager.play("whoosh", 1.0, 0.9, sound_gain)
 			"land":
 				SoundManager.play("pop", 1.0, 0.9, sound_gain)
 

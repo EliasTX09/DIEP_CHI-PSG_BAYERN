@@ -1085,7 +1085,7 @@ func make_bot_match(world_id: String, rounds: int, bot_count: int = 0) -> Dictio
 	var players: Array = [local_player_entry()]
 	var names: Array = Catalog.BOT_NAMES.duplicate()
 	names.shuffle()
-	var tier: float = clampf(float(trophies()) / 1500.0, 0.0, 1.0)
+	var tier: float = clampf(float(trophies()) / 500.0, 0.0, 1.0)
 	for i in clampi(bot_count, 1, Catalog.MAX_PLAYERS - 1):
 		players.append(make_bot_entry("bot%d" % i, str(names[i % names.size()]), i + 1, tier))
 	var cfg: Dictionary = make_match_config("quick", world_id, rounds, players, int(_rng.randi() & 0x7fffffff), false)
@@ -1094,9 +1094,9 @@ func make_bot_match(world_id: String, rounds: int, bot_count: int = 0) -> Dictio
 		cfg["rounds"] = (cfg["courses"] as Array).size()
 	return cfg
 
-## Koennen eines Bots (0..1): waechst mit den Trophaeen des Spielers. tier = Trophaeen / 1500 (0..1), jitter = Zufalls-
+## Koennen eines Bots (0..1): waechst mit den Trophaeen des Spielers. tier = Trophaeen / 500 (0..1), jitter = Zufalls-
 ## anteil je Bot (-1..1). Neue Spieler treffen auf Anfaenger (um 0.22: grosse Ziel- und Kraftfehler, verhauene Schlaege,
-## lange Bedenkzeit - siehe BotBrain.weakness()), ab etwa 1500 Trophaeen auf sichere Spieler.
+## lange Bedenkzeit - siehe BotBrain.weakness()), ab etwa 500 Trophaeen auf sichere Spieler.
 static func bot_skill(tier: float, jitter: float) -> float:
 	return clampf(0.22 + 0.63 * clampf(tier, 0.0, 1.0) + 0.1 * clampf(jitter, -1.0, 1.0), 0.12, 0.95)
 

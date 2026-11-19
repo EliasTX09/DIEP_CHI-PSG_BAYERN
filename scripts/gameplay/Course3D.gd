@@ -47,8 +47,14 @@ var corridors: Array[Dictionary] = []
 var terrain: Terrain3D = null
 ## Feste Hindernisse am Bahnrand (Stamm, Fels, Bach) - die Abkuerzungs-Oeffnung haelt Abstand davon.
 var blockers: PackedVector3Array = PackedVector3Array()
-## Abkuerzung (leer = keine): gate, dir, lane_start, lip, landing, elev, remaining (Hauptweg ab Tor), direct (Steg + Flug)
-var shortcut: Dictionary = {}
+## Abkuerzungen (Rampen): je {gate, gate_d, dir, normal, lane_start, lip, landing, land_near, land_far, kick_deg,
+## v_gate (Tempo am Tor fuer die Landemitte), v_gate_min, power (nur mit starkem Schlaeger), need_power (Schlagkraft-Wert),
+## remaining (Hauptweg ab Tor), direct (Steg + Rampe + Flug), green, target_d}
+var shortcuts: Array[Dictionary] = []
+## Erste Abkuerzung ({} = keine) - fuer Stellen, die nur eine brauchen (Screenshots, Tests).
+var shortcut: Dictionary:
+	get:
+		return shortcuts[0] if not shortcuts.is_empty() else {}
 ## Natur am Bahnrand mit Kollision: {kind: "tree" | "root" | "rock", pos, branch (bool), clearance (m ueber dem Belag)}
 var edge_items: Array[Dictionary] = []
 

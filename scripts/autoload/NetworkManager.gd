@@ -525,7 +525,7 @@ func start_lobby_match() -> void:
 	if fill_bots:
 		var names: Array = Catalog.BOT_NAMES.duplicate()
 		names.shuffle()
-		var tier: float = clampf(float(GameManager.trophies()) / 1500.0, 0.0, 1.0)
+		var tier: float = clampf(float(GameManager.trophies()) / 500.0, 0.0, 1.0)
 		var n := 0
 		while entries.size() < Catalog.MAX_PLAYERS:
 			var bot: Dictionary = GameManager.make_bot_entry("bot_%s_%d" % [str(lobby["code"]), n], str(names[n % names.size()]), entries.size(), tier)

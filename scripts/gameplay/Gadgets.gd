@@ -89,40 +89,46 @@ class SandTrap extends Gadget:
 	func _init(size: Vector2 = Vector2(3.0, 3.0), decel_factor: float = 4.5) -> void:
 		half = size * 0.5
 		drag = decel_factor
-		# Sandflaeche mit Koernung und Rippeln, leicht gewoelbt, darum eine weiche Gras-Lippe
+		# Sauberer Bunker: weich geschwungener (nicht kreisrunder) Umriss, flache Mulde, gerechte Sandrillen und ein
+		# dunklerer, leicht erhabener Sandrand, der in den Rasen uebergeht - kein Ring drumherum.
 		var mat := Mat.shader("sand", {})
-		var bowl := _bowl(28, 5)
+		var seed_v: float = fmod(size.x * 13.7 + size.y * 7.3, TAU)
 		var mi := MeshInstance3D.new()
-		mi.mesh = bowl
+		mi.mesh = _bunker(40, 6, seed_v)
 		mi.material_override = mat
 		mi.scale = Vector3(half.x, 1.0, half.y)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
-		var lip := Mat.torus(0.97, 1.09, Mat.flat(Color(0.3, 0.55, 0.22), 0.95), Vector3(0.0, 0.035, 0.0))
-		lip.scale = Vector3(half.x, 0.55, half.y)
-		lip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(lip)
 
-	## Flache Schale: Rand auf Hoehe 0.05, Mitte etwas tiefer (rein optisch; die Kollision bleibt der Bahnboden).
-	static func _bowl(segments: int, rings: int) -> ArrayMesh:
+	## Umriss-Faktor (um 1.0) fuer den Winkel a: zwei sanfte Wellen -> natuerlich geschwungene Bunkerform.
+	static func outline(a: float, seed_v: float) -> float:
+		return 1.0 + 0.07 * sin(2.0 * a + seed_v) + 0.045 * sin(3.0 * a + seed_v * 1.7) - 0.05
+
+	## Mulde: Mitte 2 cm unter dem Belag, Rand knapp darueber (rein optisch; die Kollision bleibt der Bahnboden).
+	## UV.x = Abstand zum Rand (0 Mitte .. 1 Rand), UV2 = lokale Position (fuer die Rillen).
+	static func _bunker(segments: int, rings: int, seed_v: float) -> ArrayMesh:
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		for r in rings:
 			var r0: float = float(r) / float(rings)
 			var r1: float = float(r + 1) / float(rings)
-			var y0: float = 0.05 - 0.035 * (1.0 - r0 * r0)
-			var y1: float = 0.05 - 0.035 * (1.0 - r1 * r1)
+			var y0: float = 0.045 - 0.065 * (1.0 - r0 * r0)
+			var y1: float = 0.045 - 0.065 * (1.0 - r1 * r1)
 			for i in segments:
 				var a0: float = TAU * float(i) / float(segments)
 				var a1: float = TAU * float(i + 1) / float(segments)
-				var p00 := Vector3(cos(a0) * r0, y0, sin(a0) * r0)
-				var p01 := Vector3(cos(a1) * r0, y0, sin(a1) * r0)
-				var p10 := Vector3(cos(a0) * r1, y1, sin(a0) * r1)
-				var p11 := Vector3(cos(a1) * r1, y1, sin(a1) * r1)
-				for v in [p00, p10, p11, p00, p11, p01]:
+				var o0: float = outline(a0, seed_v)
+				var o1: float = outline(a1, seed_v)
+				var p00 := Vector3(cos(a0) * r0 * o0, y0, sin(a0) * r0 * o0)
+				var p01 := Vector3(cos(a1) * r0 * o1, y0, sin(a1) * r0 * o1)
+				var p10 := Vector3(cos(a0) * r1 * o0, y1, sin(a0) * r1 * o0)
+				var p11 := Vector3(cos(a1) * r1 * o1, y1, sin(a1) * r1 * o1)
+				for v: Array in [[p00, r0], [p10, r1], [p11, r1], [p00, r0], [p11, r1], [p01, r0]]:
+					var pv: Vector3 = v[0]
 					st.set_normal(Vector3.UP)
-					st.set_uv(Vector2(v.x, v.z))
-					st.add_vertex(v)
+					st.set_uv(Vector2(float(v[1]), 0.0))
+					st.set_uv2(Vector2(pv.x, pv.z))
+					st.add_vertex(pv)
 		return st.commit()
 
 	func affect(st: SimState, _dt: float) -> void:
@@ -454,93 +460,32 @@ class KillBox extends Gadget:
 		if in_local_box(st.pos, half):
 			st.out_kind = kind
 
-# ================================================================ Abkuerzung: Sprungschanze + Landezone
+# ================================================================ Abkuerzung: Rampe (reine Physik)
 
-## Sprungpad am Ende eines Abkuerzungs-Stegs: Ein Ball, der mit Schwung (>= min_speed in Steg-Richtung)
-## ankommt, fliegt auf einer Parabel Richtung Landezone. Zu langsam: er rollt ueber die Kante (Aus).
-## Das Risiko: Wer seitlich versetzt auf dem Steg rollt, fliegt seitlich versetzt; zu schnell = zu weit,
-## zu langsam = zu kurz. Daneben heisst: Bande, Schlucht oder Aus. (Deterministisch - die Vorschau zeigt es.)
-class Launcher extends Gadget:
-	var half: Vector3
-	var target: Vector3
-	var elevation: float
-	var min_speed: float
-	var catcher: Gadget = null
-	## Seitliche Ablage am Ziel je Meter Versatz auf dem Steg
-	const SPREAD := 1.6
-	## Ideal-Tempo am Pad (m/s); Abweichung verlaengert/verkuerzt den Flug
-	const IDEAL_SPEED := 6.5
+## Markiert die Kante einer Abkuerzungs-Rampe. Die Rampe selbst ist ganz normale Bahn (TrackKit.kicker): Wie weit
+## der Ball fliegt, ergibt sich nur aus Tempo und Richtung, mit denen er hinaufrollt - kein Boost, kein Zielflug.
+## Dieses Volumen veraendert den Ball nicht; es meldet nur "launch", wenn er mit Schwung ueber die Kante geht
+## (fuer Style-Punkte, Statistik und die Bot-Planung).
+class RampTag extends Gadget:
+	var half_w: float
+	## Ab diesem Tempo in Rampen-Richtung zaehlt es als Absprung
+	const MIN_SPEED := 4.0
 
-	func _init(zone: Vector3 = Vector3(2.2, 2.0, 1.8), target_pos: Vector3 = Vector3.ZERO, elevation_deg: float = 42.0, need_speed: float = 3.0, color: Color = Color(1.0, 0.8, 0.2)) -> void:
-		half = zone * 0.5
-		target = target_pos
-		elevation = elevation_deg
-		min_speed = need_speed
-		# Optik: rundes Sprungpad (Feder-Pilz) mit leuchtendem Ring und Pfeilen - schiesst in jede Richtung
-		var base_mat := Mat.flat(Color(0.3, 0.22, 0.14), 0.8)
-		add_child(Mat.cylinder(0.95, 1.05, 0.14, base_mat, Vector3(0.0, 0.07, 0.0), 20))
-		var ring := Mat.torus(0.82, 0.95, Mat.glow(color, 2.2))
-		ring.position = Vector3(0.0, 0.15, 0.0)
-		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(ring)
-		var pad := Mat.plane(Vector2(1.3, 1.3), Mat.shader("booster", {"arrow": color, "base": color.darkened(0.85)}), Vector3(0.0, 0.16, 0.0))
-		pad.rotation.y = PI
-		pad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(pad)
-		for i in 4:
-			var a: float = TAU * float(i) / 4.0 + PI * 0.25
-			add_child(Mat.cylinder(0.05, 0.05, 0.3, Mat.flat(Color(0.75, 0.75, 0.8), 0.3, 0.8), Vector3(cos(a) * 0.7, -0.05, sin(a) * 0.7), 6))
+	func _init(lane_width: float = 2.4) -> void:
+		half_w = lane_width * 0.5 + 0.3
 
 	func affect(st: SimState, _dt: float) -> void:
 		if st.on_cooldown(self):
 			return
 		var l := to_local_point(st.pos)
-		if absf(l.x) > half.x or absf(l.z) > half.z or l.y < -0.2 or l.y > half.y:
+		# lokales -z = Flugrichtung; Fenster kurz vor bis kurz hinter der Kante
+		if absf(l.x) > half_w or l.z > 1.2 or l.z < -1.6 or l.y < -0.5 or l.y > 1.4:
 			return
 		var dir: Vector3 = -global_transform.basis.z
-		var along: float = st.vel.dot(dir)
-		if along < min_speed:
+		if st.vel.dot(dir) < MIN_SPEED:
 			return
-		st.pos += Vector3.UP * 0.04
-		var flight := Vector3(target.x - st.pos.x, 0.0, target.z - st.pos.z)
-		var fdir: Vector3 = flight.normalized() if flight.length() > 0.01 else dir
-		var fright: Vector3 = fdir.cross(Vector3.UP)
-		var aim: Vector3 = target + fright * (l.x * SPREAD) + fdir * clampf((along - IDEAL_SPEED) * 0.2, -2.5, 2.5)
-		var v: Vector3 = Gadgets.ballistic_velocity(st.pos, aim + Vector3.UP * BALL_R, elevation)
-		# Luftwiderstand ausgleichen (Ball3D/ShotSim daempfen im Flug um AIR_DAMP pro Sekunde)
-		var hs: float = Vector2(v.x, v.z).length()
-		var flight_t: float = Vector2(aim.x - st.pos.x, aim.z - st.pos.z).length() / maxf(1.0, hs)
-		st.vel = v * (1.0 + Ball3D.AIR_DAMP * flight_t * 0.5)
-		# ab jetzt Flug (wie bei der Kanone): Vorhersage und echter Ball rechnen in der Luft weiter
-		st.teleported = true
-		st.grounded = false
-		st.set_cooldown(self, 1.0)
-		if catcher != null:
-			st.set_cooldown(catcher, 6.0)
+		st.set_cooldown(self, 3.0)
 		st.events.append("launch")
-
-## Landezone auf dem Gruen: faengt einen von der Schanze kommenden Ball weich ab (wie starker Backspin),
-## damit er auf dem Gruen bleibt. Wirkt nur, wenn die Schanze sie "scharf" geschaltet hat.
-class LandingZone extends Gadget:
-	var radius: float
-
-	func _init(zone_radius: float = 4.0, color: Color = Color(1.0, 0.85, 0.2)) -> void:
-		radius = zone_radius
-		for i in 2:
-			var ring := Mat.torus(radius * (0.55 + 0.4 * float(i)), radius * (0.55 + 0.4 * float(i)) + 0.09, Mat.glow(color, 1.2))
-			ring.position = Vector3(0.0, 0.03, 0.0)
-			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			add_child(ring)
-
-	func affect(st: SimState, _dt: float) -> void:
-		if not st.on_cooldown(self):
-			return
-		var l := to_local_point(st.pos)
-		if l.x * l.x + l.z * l.z > radius * radius or l.y > 0.75 or l.y < -0.6 or st.vel.y > 0.0:
-			return
-		st.vel = Vector3(st.vel.x * 0.18, minf(st.vel.y, 0.0) * 0.2, st.vel.z * 0.18)
-		st.cooldowns.erase(get_instance_id())
-		st.events.append("land")
 
 # ================================================================ Gelaende-Grenze (Aus)
 

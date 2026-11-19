@@ -291,6 +291,19 @@ func _build_candidates(replan: bool = false) -> void:
 		if dists[i] > 9.0 and i < 4:
 			for cp: float in [0.55, 0.8, 1.0]:
 				_candidates.append({"dir": dirs[i], "power": cp, "chip": true})
+	# Abkuerzungs-Rampen vor dem Ball: geradeaus auf die Rampenkante zielen, mit kraeftigen Putts (die Simulation
+	# zeigt, ob der Ball durch die Oeffnung, ueber den Steg und weit genug fliegt - sonst ist es ein Aus)
+	if _allow_shortcut and shortcut_chance > 0.0:
+		for sc: Dictionary in course.shortcuts:
+			var gate: Vector3 = sc["gate"]
+			if pos.distance_to(gate) > 32.0 or _start_progress > float(sc.get("gate_d", 0.0)) + 1.0:
+				continue
+			var lip: Vector3 = sc["lip"]
+			var to_lip := Vector3(lip.x - pos.x, 0.0, lip.z - pos.z)
+			if to_lip.length() < 2.0:
+				continue
+			for sp: float in [0.72, 0.84, 0.94, 1.0]:
+				_candidates.append({"dir": to_lip.normalized(), "power": sp, "chip": false})
 
 ## Merkt sich den letzten Schlag als Fehlschlag, wenn der Ball wieder (fast) am Ausgangspunkt liegt
 ## oder nicht vorangekommen ist - beim naechsten Mal waehlt der Bot dann etwas anderes.

@@ -353,7 +353,7 @@ func straight(length: float) -> TrackKit:
 				set_walls(false, was_r)
 			else:
 				set_walls(was_l, false)
-			built_openings.append({"xf": xf, "length": d1 - d0, "side": int(o["side"]), "width": width})
+			built_openings.append({"xf": xf, "length": d1 - d0, "side": int(o["side"]), "width": width, "d0": d0})
 			_straight_piece(d1 - d0)
 			set_walls(was_l, was_r)
 			_straight_piece(after)

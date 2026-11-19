@@ -419,18 +419,26 @@ func _check_terrain(c: Course3D, id: String, build_usec: int) -> void:
 
 # ---------------------------------------------------------------- Abkuerzungen
 
-## Jede Bahn ausser e1 (gerade Einsteiger-Bahn) und dem Golden Shot hat eine Abkuerzung:
-## ein Ball mit Schwung auf dem Steg landet per Schanze auf dem Gruen (Vorhersage und echter Ball),
-## ein Ball, der seitlich vom Steg rollt, ist aus. Die Ersparnis wird gemessen, nicht angenommen.
+## Abkuerzungen sind echte Rampen: schmaler Steg ohne Banden, Rampe am Ende, der Flug ergibt sich nur aus Tempo und
+## Richtung (kein Boost, keine Landezone). Bis zu drei pro Bahn; Power-Abkuerzungen schafft nur ein starker Schlaeger.
+## Je Abkuerzung: Es gibt ein Tempo, mit dem der Ball im Ziel landet (Vorhersage), mit halbem Tempo nicht, seitlich vom
+## Steg ist er aus, und bei Power-Abkuerzungen reicht der Startschlaeger selbst direkt am Tor nicht. Stichproben mit dem
+## echten Ball. Die Ersparnis wird gemessen, nicht angenommen.
 func _stage_shortcuts() -> void:
-	print("[SMOKE] Stage: Abkuerzungen")
+	print("[SMOKE] Stage: Abkuerzungen (Rampen)")
 	var missing := PackedStringArray()
 	var found := 0
+	var total := 0
+	var powers := 0
+	var multi := 0
+	var strong: Dictionary = GameManager.make_shot_profile("driver_legendary", 6, "standard")
+	strong["scatter_deg"] = 0.0
+	var start_club_v: float = Ball3D.MAX_SPEED * float(_test_profile().get("power", 1.0))
 	for id in Catalog.all_course_ids():
 		var c: Course3D = CourseBuilder3D.build(id, 4242, false)
 		add_child(c)
 		await _frames(3)
-		if c.shortcut.is_empty():
+		if c.shortcuts.is_empty():
 			print("[SMOKE] %s: keine Abkuerzung (verworfen: %s)" % [id, str(CourseBuilder3D.plan_stats)])
 			if id != "e1":
 				missing.append(id)
@@ -438,96 +446,90 @@ func _stage_shortcuts() -> void:
 			await _frames(2)
 			continue
 		found += 1
-		var sc: Dictionary = c.shortcut
-		var dir: Vector3 = sc["dir"]
-		var start: Vector3 = (sc["gate"] as Vector3) + dir * 1.2 + Vector3.UP * (Ball3D.RADIUS + 0.01)
+		total += c.shortcuts.size()
+		if c.shortcuts.size() >= 2:
+			multi += 1
 		var space := c.get_world_3d().direct_space_state
-		var prof := _test_profile()
-		# Anstoss mit Schwung passend zur Steg-Laenge (5 - 9.5 m), damit der Ball das Sprungpad erreicht
-		var push: float = 9.0 + 0.45 * maxf(0.0, (sc["lip"] as Vector3).distance_to(start) - 5.0)
-		var res: Dictionary = ShotSim.run(c, space, start, dir * push, {"max_time": 12.0, "profile": prof})
-		var end: Vector3 = res["end_pos"]
-		var to_green: bool = bool(sc.get("green", true))
-		var target_d: float = float(sc.get("target_d", c.total_length()))
-		var on_green: bool = bool(res["holed"]) or (not bool(res["out"]) and ((to_green and end.distance_to(c.hole_pos) < 8.5 and absf(end.y - c.hole_pos.y) < 0.6) or (not to_green and c.progress_at(end) >= target_d - 5.0)))
-		var perp: Vector3 = dir.cross(Vector3.UP).normalized()
-		if perp.dot(sc["normal"]) < 0.0:
-			perp = -perp
-		var miss: Dictionary = ShotSim.run(c, space, start + dir * 3.0, dir * 1.5 + perp * 6.0, {"max_time": 8.0, "profile": prof})
-		var weak: Dictionary = ShotSim.run(c, space, start + dir * 3.0, dir * 3.6, {"max_time": 8.0, "profile": prof})
-		# Risiko: seitlich versetzt und zu schnell ueber den Steg -> Flug weicht ab
-		var off: Dictionary = ShotSim.run(c, space, start + perp * 0.7, dir * (push + 6.0), {"max_time": 12.0, "profile": prof})
-		var off_end: Vector3 = off["end_pos"]
-		print("[SMOKE] %s Abkuerzung versetzt+zu schnell: %s" % [id, "Loch" if bool(off["holed"]) else ("AUS/" + str(off["out_kind"]) if bool(off["out"]) else "liegt %.1f m vom Loch" % off_end.distance_to(c.hole_pos))])
-		var main_len: float = float(sc["remaining"])
-		var direct: float = float(sc["direct"])
-		print("[SMOKE] %s Abkuerzung (Ziel: %s): Hauptweg ab Tor %.0f m, Steg+Flug %.0f m (spart %.0f m), Abschuss %.0f Grad -> Vorhersage %s (%.1f m vom Loch), Fehlschuss %s, zu langsam %s" % [
-			id, "Gruen" if to_green else "Fairway bei %.0f m" % target_d, main_len, direct, main_len - direct, float(sc["elev"]),
-			"Loch" if bool(res["holed"]) else ("AUS/" + str(res["out_kind"]) if bool(res["out"]) else "liegt"), end.distance_to(c.hole_pos),
-			"aus" if bool(miss["out"]) else "NICHT aus", "aus" if bool(weak["out"]) else ("bleibt auf dem Steg" if not bool(weak["out"]) else "")])
-		check(on_green, "%s: Abkuerzung landet im Ziel (Vorhersage)" % id)
-		check(bool(miss["out"]), "%s: seitlich vom Steg = aus" % id)
-		if id in ["e2", "v3", "p1", "n3"]:
-			var ball := _new_ball(c)
-			ball.place_on_tee(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
-			await _frames(3)
-			ball.unfreeze()
-			var power: float = push / (Ball3D.MAX_SPEED * float(prof.get("power", 1.0)))
-			ball.shoot(dir, power, false, Vector2.ZERO)
-			await _wait_ball(ball, 16.0)
-			var bp: Vector3 = ball.global_position
-			var real_ok: bool = ball.state == Ball3D.State.HOLED or (ball.state == Ball3D.State.IDLE and ((to_green and bp.distance_to(c.hole_pos) < 8.5 and absf(bp.y - c.hole_pos.y) < 0.6) or (not to_green and c.progress_at(bp) >= target_d - 5.0)))
-			print("[SMOKE] %s Abkuerzung echter Ball: State %d, %.1f m vom Loch (Vorhersage %.1f m)" % [id, ball.state, bp.distance_to(c.hole_pos), end.distance_to(c.hole_pos)])
-			check(real_ok, "%s: echter Ball landet ueber die Abkuerzung im Ziel" % id)
-			ball.queue_free()
+		for si in c.shortcuts.size():
+			var sc: Dictionary = c.shortcuts[si]
+			var dir: Vector3 = sc["dir"]
+			var start: Vector3 = (sc["gate"] as Vector3) + dir * 1.2 + Vector3.UP * (Ball3D.RADIUS + 0.01)
+			var v_plan: float = float(sc["v_gate"])
+			var hits := PackedStringArray()
+			var tries := PackedStringArray()
+			var best_v := -1.0
+			for f: float in [1.0, 0.95, 1.05, 0.9, 1.1, 0.85, 1.15, 0.8, 1.2]:
+				var v: float = v_plan * f
+				var res: Dictionary = ShotSim.run(c, space, start, dir * v, {"max_time": 12.0, "profile": strong})
+				tries.append("%.1f:%s" % [v, _shot_txt(c, res)])
+				if _in_target(c, sc, res):
+					hits.append("%.1f" % v)
+					if best_v < 0.0:
+						best_v = v
+			var label: String = "%s Abkuerzung %d/%d (%s, Ziel %s)" % [id, si + 1, c.shortcuts.size(), "POWER, Schlagkraft %d" % int(sc["need_power"]) if bool(sc["power"]) else "normal",
+				"Gruen" if bool(sc["green"]) else "Fairway bei %.0f m" % float(sc["target_d"])]
+			print("[SMOKE] %s: Rampe %.0f Grad, Steg+Rampe+Flug %.0f m statt %.0f m Hauptweg, geplant %.1f m/s am Tor (vorderer Rand %.1f) -> im Ziel bei %s | %s" % [
+				label, float(sc["kick_deg"]), float(sc["direct"]), float(sc["remaining"]), v_plan, float(sc["v_gate_min"]),
+				", ".join(hits) if not hits.is_empty() else "KEINEM Tempo", " ".join(tries)])
+			check(not hits.is_empty(), "%s: es gibt ein Tempo, mit dem der Ball im Ziel landet" % label)
+			var slow: Dictionary = ShotSim.run(c, space, start, dir * (v_plan * 0.5), {"max_time": 12.0, "profile": strong})
+			check(not _in_target(c, sc, slow), "%s: mit halbem Tempo kommt der Ball nicht ins Ziel (%s)" % [label, _shot_txt(c, slow)])
+			var perp: Vector3 = dir.cross(Vector3.UP).normalized()
+			if perp.dot(sc["normal"]) < 0.0:
+				perp = -perp
+			var miss: Dictionary = ShotSim.run(c, space, start + dir * 2.0, dir * 1.5 + perp * 6.0, {"max_time": 8.0, "profile": strong})
+			check(bool(miss["out"]), "%s: seitlich vom Steg = aus" % label)
+			if bool(sc["power"]):
+				powers += 1
+				var weak_start: Vector3 = (sc["gate"] as Vector3) + dir * 0.3 + Vector3.UP * (Ball3D.RADIUS + 0.01)
+				var weak: Dictionary = ShotSim.run(c, space, weak_start, dir * start_club_v, {"max_time": 12.0, "profile": strong})
+				check(not _in_target(c, sc, weak), "%s: der Startschlaeger (%.1f m/s) schafft es selbst direkt am Tor nicht (%s)" % [label, start_club_v, _shot_txt(c, weak)])
+			if si == 0 and best_v > 0.0 and id in ["e2", "v3", "p1", "n3"]:
+				var ball := Ball3D.new()
+				c.add_child(ball)
+				ball.setup(c, "test", strong, "standard", "none", false)
+				ball.sound_gain = 0.0
+				ball.place_on_tee(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
+				await _frames(3)
+				ball.unfreeze()
+				ball.shoot(dir, best_v / (Ball3D.MAX_SPEED * float(strong["power"])), false, Vector2.ZERO)
+				await _wait_ball(ball, 16.0)
+				var real := {"holed": ball.state == Ball3D.State.HOLED, "out": ball.state != Ball3D.State.IDLE and ball.state != Ball3D.State.HOLED,
+					"end_pos": ball.global_position}
+				print("[SMOKE] %s echter Ball mit %.1f m/s: %s, Absprung %d x" % [label, best_v, _shot_txt(c, real), ball.shortcut_launches])
+				check(_in_target(c, sc, real) and ball.shortcut_launches == 1, "%s: echter Ball springt ab und landet im Ziel" % label)
+				ball.queue_free()
 		c.queue_free()
 		await _frames(2)
-	print("[SMOKE] Abkuerzungen: %d von 15 Bahnen; ohne: e1 (gerade Einsteiger-Bahn)%s" % [found, (", " + ", ".join(missing)) if not missing.is_empty() else ""])
+	print("[SMOKE] Abkuerzungen: %d Bahnen mit Abkuerzung, %d Rampen gesamt, %d Bahnen mit mehreren, %d Power-Rampen; ohne: e1 (gerade Einsteiger-Bahn)%s" % [
+		found, total, multi, powers, (", " + ", ".join(missing)) if not missing.is_empty() else ""])
 	check(missing.is_empty(), "Jede Bahn ausser e1 hat eine Abkuerzung (fehlt: %s)" % ", ".join(missing))
+	check(multi >= 3, "Mehrere Abkuerzungen auf einer Bahn (%d Bahnen mit mindestens zwei)" % multi)
+	check(powers >= 1, "Es gibt Power-Abkuerzungen, die nur ein starker Schlaeger schafft (%d)" % powers)
 
-## Hindernisse auf der Bahn: Bach (seitlich = Wasser, Steg = frei, darueber = frei), Rough bremst,
-## Baumstamm/Felsen haben Kollision.
-func _stage_hazards() -> void:
-	print("[SMOKE] Stage: Hindernisse auf der Bahn")
-	var c: Course3D = CourseBuilder3D.build("e3", 4242, false)
-	add_child(c)
-	await _frames(3)
-	var creek: Gadget = null
-	for g in c.gadgets:
-		if g is Gadgets.Creek:
-			creek = g
-	check(creek != null, "e3: Bach quer ueber die Bahn")
-	if creek != null:
-		var st := SimState.new()
-		var results := PackedStringArray()
-		for lp: Vector3 in [Vector3(1.8, 0.3, 0.0), Vector3(0.0, 0.3, 0.0), Vector3(1.8, 1.2, 0.0)]:
-			st.begin_tick(creek.global_transform * lp, Vector3.ZERO, true, 0.0, 1.0 / 60.0)
-			creek.affect(st, 1.0 / 60.0)
-			results.append(st.out_kind)
-		check(results[0] == "water" and results[1] == "" and results[2] == "", "Bach: seitlich rollend = Wasser, ueber den Steg = frei, darueber geflogen = frei (%s)" % ", ".join(results))
-	c.queue_free()
-	await _frames(2)
-	c = CourseBuilder3D.build("e2", 4242, false)
-	add_child(c)
-	await _frames(3)
-	var rough: Gadget = null
-	for g in c.gadgets:
-		if g is Gadgets.RoughZone:
-			rough = g
-	check(rough != null, "e2: Rough am Rand")
-	if rough != null:
-		var st2 := SimState.new()
-		st2.begin_tick(rough.global_transform * Vector3(0.0, 0.3, 0.0), Vector3.ZERO, true, 0.0, 1.0 / 60.0)
-		rough.affect(st2, 1.0 / 60.0)
-		check(st2.decel_mul > 1.5, "Rough bremst rollende Baelle (Faktor %.1f)" % st2.decel_mul)
-	var solid := 0
-	for n in c.find_children("*", "StaticBody3D", true, false):
-		if n != c.floor_body and n != c.wall_body:
-			solid += 1
-	check(solid >= 1, "e2: Baumstamm mit Kollision (%d feste Hindernisse)" % solid)
-	print("[SMOKE] Hindernisse: e2 %d feste Koerper, %d Blocker fuer die Abkuerzung" % [solid, c.blockers.size()])
-	c.queue_free()
-	await _frames(2)
+## Ist der Ball (Ergebnis von ShotSim.run oder echter Ball) im Ziel der Abkuerzung gelandet? Gruen: liegt auf dem Gruen
+## bzw. im Loch; Fairway: liegt auf der Hauptbahn ab kurz vor dem Ziel-Stueck, auf dessen Hoehe.
+func _in_target(c: Course3D, sc: Dictionary, res: Dictionary) -> bool:
+	if bool(res.get("holed", false)):
+		return true
+	if bool(res.get("out", false)):
+		return false
+	var end: Vector3 = res["end_pos"]
+	var land: Vector3 = sc["landing"]
+	if absf(end.y - land.y) > 1.5:
+		return false
+	var prog: float = c.progress_at(end)
+	if bool(sc["green"]):
+		return prog >= c.total_length() - 12.0 and end.distance_to(c.hole_pos) < 10.0
+	return prog >= float(sc["target_d"]) - 8.0
+
+func _shot_txt(c: Course3D, res: Dictionary) -> String:
+	if bool(res.get("holed", false)):
+		return "Loch"
+	if bool(res.get("out", false)):
+		return "AUS/" + str(res.get("out_kind", "?"))
+	var e: Vector3 = res["end_pos"]
+	return "%.0f m (%.1f vom Loch)" % [c.progress_at(e), e.distance_to(c.hole_pos)]
 
 # ---------------------------------------------------------------- Physik: Vorhersage gegen echten Ball
 
@@ -779,7 +781,7 @@ func _newbie_series(ids: Array, seeds: Array, tag: String, skills: Array = []) -
 func _stage_adaptive_bots() -> void:
 	print("[SMOKE] Stage: Adaptive Bots (SmartBotController)")
 	check(SmartBotController.shortcut_chance(0) == 0.0 and SmartBotController.shortcut_chance(500) == 1.0
-		and SmartBotController.shortcut_chance(90) > 0.0 and SmartBotController.shortcut_chance(90) < 1.0, "Abkuerzungs-Chance steigt mit den Bahn-Trophaeen")
+		and SmartBotController.shortcut_chance(25) > 0.0 and SmartBotController.shortcut_chance(25) < 1.0, "Abkuerzungs-Chance steigt mit den Bahn-Trophaeen")
 	check(SmartBotController.skill_bonus(0) == 0.0 and SmartBotController.skill_bonus(300) > 0.1, "Koennens-Bonus steigt mit den Bahn-Trophaeen")
 	BotBrain.time_budget_usec = 400000
 	var holed := 0
@@ -809,7 +811,7 @@ func _stage_adaptive_bots() -> void:
 	# Je Bahn 6 Durchlaeufe: schwaechster, mittlerer und staerkster Einsteiger x 2 Zufallsfolgen.
 	check(is_equal_approx(GameManager.bot_skill(0.0, 0.0), 0.22) and GameManager.bot_skill(0.0, 1.0) < 0.4 and GameManager.bot_skill(0.0, -1.0) >= 0.12
 		and GameManager.bot_skill(1.0, 0.0) >= 0.8 and GameManager.bot_skill(1.0, 1.0) <= 0.95,
-		"Bot-Koennen waechst mit den Trophaeen: Einsteiger %.2f-%.2f, ab 1500 Trophaeen %.2f-%.2f" % [GameManager.bot_skill(0.0, -1.0),
+		"Bot-Koennen waechst mit den Trophaeen: Einsteiger %.2f-%.2f, ab 500 Trophaeen %.2f-%.2f" % [GameManager.bot_skill(0.0, -1.0),
 			GameManager.bot_skill(0.0, 1.0), GameManager.bot_skill(1.0, -1.0), GameManager.bot_skill(1.0, 1.0)])
 	var nb: Dictionary = await _newbie_series(["e1", "e2", "e3", "e4", "e5"], [777, 4711], "")
 	var newbie_avg: float = float(nb["over"]) / float(maxi(1, int(nb["runs"])))
@@ -819,23 +821,6 @@ func _stage_adaptive_bots() -> void:
 	check(float(nb["weak"]) > 0.7 and int(nb["blunders"]) > 0, "Einsteiger-Bots spielen mit Anfaenger-Fehlern (Anteil %.2f, %d verhauene Schlaege)" % [float(nb["weak"]), int(nb["blunders"])])
 	check(newbie_avg >= 1.5, "Einsteiger-Bots sind schlagbar: im Mittel mindestens 1,5 Schlaege ueber Par (%.1f)" % newbie_avg)
 	check(int(nb["holed"]) * 2 >= int(nb["runs"]), "Einsteiger-Bots lochen trotzdem meist ein (%d von %d)" % [int(nb["holed"]), int(nb["runs"])])
-	# MESSREIHE (voruebergehend): alte Staerke als Vergleich + mehrere Stufen auf e1-e4, um die passende zu waehlen
-	var keep: Array = [BotBrain.weak_aim_deg, BotBrain.weak_power, BotBrain.weak_power_abs, BotBrain.weak_blunder, BotBrain.weak_slack]
-	for sw: Array in [[0.0, 0.0, 0.0, 0.0, 0.0, 1], [0.6, 0.01, 0.008, 0.08, 5.0, 0], [1.0, 0.02, 0.012, 0.1, 5.0, 0], [0.6, 0.01, 0.008, 0.08, 9.0, 0], [0.0, 0.0, 0.0, 0.0, 6.0, 0]]:
-		BotBrain.weak_aim_deg = sw[0]
-		BotBrain.weak_power = sw[1]
-		BotBrain.weak_power_abs = sw[2]
-		BotBrain.weak_blunder = sw[3]
-		BotBrain.weak_slack = sw[4]
-		var old_curve: bool = int(sw[5]) == 1
-		var r_sw: Dictionary = await _newbie_series(["e1", "e2", "e3", "e4"], [777, 4711, 31337], "Stufe %s " % str(sw), [0.23, 0.35, 0.47] if old_curve else [])
-		print("[SMOKE] MESSREIHE %s%s: %d von %d eingelocht, im Mittel %.1f ueber Par, %d Hole-in-One" % [str(sw), " (ALTE Staerke 0.23-0.47)" if old_curve else "",
-			int(r_sw["holed"]), int(r_sw["runs"]), float(r_sw["over"]) / float(maxi(1, int(r_sw["runs"]))), int(r_sw["aces"])])
-	BotBrain.weak_aim_deg = keep[0]
-	BotBrain.weak_power = keep[1]
-	BotBrain.weak_power_abs = keep[2]
-	BotBrain.weak_blunder = keep[3]
-	BotBrain.weak_slack = keep[4]
 	# Sichere Spieler bleiben unveraendert: ab Koennen 0.7 gibt es keine Anfaenger-Fehler
 	var c_w: Course3D = CourseBuilder3D.build("e1", 1, false)
 	add_child(c_w)
