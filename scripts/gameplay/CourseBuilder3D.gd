@@ -40,10 +40,11 @@ const NO_SHORTCUT: Array[String] = ["e1", "daily"]
 const MAX_SHORTCUTS := 3
 const LANE_LEN := 7.0
 const LANE_WIDTH := 2.4
-const OPENING_LEN := 4.8
+const OPENING_LEN := 5.4
 ## Rampe am Steg-Ende (TrackKit.kicker): Bogenlaenge und moegliche Absprungwinkel in Grad.
 const KICK_LEN := 4.0
-const KICK_ANGLES: Array[float] = [20.0, 28.0, 36.0]
+## (nicht zu steil: wer steil landet, springt beim Aufprall ueber die Bande des Ziels)
+const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0]
 ## Tempo-Klassen, gemessen am Tor (Einfahrt in den Steg), fuer den vorderen Rand des Landefensters, in m/s.
 ## Zum Vergleich: der Startschlaeger schafft bei voller Kraft rund 31 m/s, Schlaeger mit Schlagkraft 70 rund 35,
 ## die staerksten knapp 39 (Ball3D.MAX_SPEED * power_factor).
@@ -298,12 +299,13 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var green: bool = bool(tg["green"])
 	for bl in c.blockers:
-		if Vector2(bl.x - g.x, bl.z - g.z).length() < 4.5:
+		if Vector2(bl.x - g.x, bl.z - g.z).length() < 3.5:
 			return _reject("hindernis")
 	var gate_d: float = c.path_dist[c.nearest_path_index(g)]
 	var remaining: float = float(tg["d"]) - gate_d
-	if remaining < lane_len + KICK_LEN + 10.0:
+	if remaining < lane_len + KICK_LEN + 8.0:
 		return _reject("ersparnis")
+	var fwd_t: Vector3 = -rect_fwd(tg["xf"])
 	var g2 := Vector2(g.x, g.z)
 	var rect_xf: Transform3D = tg["xf"]
 	var rect_size: Vector2 = tg["size"]
@@ -315,9 +317,13 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 			_stat("nah")
 			continue
 		var dir: Vector3 = flat.normalized()
-		# Steg muss deutlich von der Hauptbahn weg zeigen (und schraeg noch durch die Oeffnung passen)
-		if dir.dot(nrm) < 0.55:
+		# Steg muss deutlich von der Hauptbahn weg zeigen (und schraeg noch durch die Oeffnung passen);
+		# das Felsentor muss auf dem Steg stehen, nicht auf der Hauptbahn
+		if dir.dot(nrm) < 0.48:
 			_stat("winkel")
+			continue
+		if gate_along(dir.dot(nrm)) > lane_len - 0.4:
+			_stat("tor")
 			continue
 		var lane_end: Vector3 = g + dir * lane_len
 		# Steg + Rampe: kein anderer Bahnteil daneben
@@ -374,10 +380,11 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 				continue
 			var direct: float = lane_len + KICK_LEN + d_mid
 			var saving: float = remaining - direct
-			if saving < (8.0 if green else 10.0):
+			if saving < (6.0 if green else 8.0):
 				_stat("ersparnis")
 				continue
-			var score: float = saving + dir.dot(nrm) * 3.0 - absf(lane_len - 6.0) * 0.5 + (4.0 if green else 0.0)
+			# lieber in Fahrtrichtung des Ziels landen (der Ball rollt dann weiter Richtung Loch)
+			var score: float = saving + dir.dot(nrm) * 3.0 - absf(lane_len - 6.0) * 0.5 + (4.0 if green else 0.0) + dir.dot(fwd_t) * 5.0
 			if by_cls.has(cls) and float((by_cls[cls] as Dictionary)["score"]) >= score:
 				continue
 			var land_y: float = rect_xf.origin.y
@@ -389,6 +396,17 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 	for key in by_cls.keys():
 		out.append(by_cls[key])
 	return out
+
+## Wie weit hinter dem Tor das Felsentor steht (m), damit keine Saeule auf der Hauptbahn steht
+## (dn = Kosinus zwischen Steg-Richtung und Banden-Normale; schraeger Steg -> weiter hinaus).
+static func gate_along(dn: float) -> float:
+	var d: float = clampf(dn, 0.3, 1.0)
+	return maxf(2.6, (1.68 * sqrt(1.0 - d * d) + 0.7) / d)
+
+## Waagerechte Rueckwaerts-Richtung (+z) eines Ziel-Rechtecks (die Bahn laeuft in -z).
+static func rect_fwd(xf: Transform3D) -> Vector3:
+	var z: Vector3 = xf.basis.z
+	return Vector3(z.x, 0.0, z.z).normalized()
 
 static func _stat(reason: String) -> void:
 	plan_stats[reason] = int(plan_stats.get(reason, 0)) + 1
@@ -416,7 +434,8 @@ static func _flight_clear(c: Course3D, grid: Dictionary, lip: Vector3, dir: Vect
 			var edge: float = minf(rect_size.x * 0.5 - absf(ql.x), minf(-ql.z, rect_size.y + ql.z))
 			if edge > 0.6:
 				continue
-		if arc_y < q.y + 1.3:
+		# Ballmitte ~0.3 ueber der Bogenlinie: am Ziel-Rand ueber die Bande (0.55), sonst mit etwas mehr Luft
+		if arc_y < q.y + (0.75 if on_target else 1.0):
 			return false
 	return true
 
@@ -459,10 +478,12 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	var tag := Gadgets.RampTag.new(LANE_WIDTH)
 	tag.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lip)
 	c.add_gadget(tag)
-	# Schlucht unter dem Flug (endet vor dem Ziel)
+	# Schlucht unter dem ganzen Flug bis kurz vor den Rand des Ziels (sonst steht dort Gelaende im Weg)
 	var d_mid: float = float(plan["d_mid"])
-	if d_mid > 7.0:
-		c.add_corridor(lip, lip + dir * (d_mid - 4.0), 2.5, 7.5)
+	var near_flat := Vector3((plan["land_near"] as Vector3).x, lip.y, (plan["land_near"] as Vector3).z)
+	var reach_len: float = lip.distance_to(near_flat) - 1.6
+	if reach_len > 1.0:
+		c.add_corridor(lip, lip + dir * reach_len, 2.5, 7.5)
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var land_y: float = (plan["land_mid"] as Vector3).y
 	var flat_lip := Vector3(lip.x, land_y, lip.z)
@@ -476,9 +497,7 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 static func _gate_arch(c: Course3D, th: WorldTheme, g: Vector3, dir: Vector3, perp: Vector3, xf0: Transform3D, side: int, lane_len: float, power: bool) -> void:
 	# Tor so weit draussen, dass keine Saeule auf der Hauptbahn steht (schraeger Steg -> weiter hinaus)
 	var nrm0: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
-	var dn: float = clampf(dir.dot(nrm0), 0.3, 1.0)
-	var gate_along: float = clampf((1.68 * sqrt(1.0 - dn * dn) + 0.7) / dn, 2.6, lane_len - 0.4)
-	var gate_pos: Vector3 = g + dir * gate_along
+	var gate_pos: Vector3 = g + dir * minf(gate_along(dir.dot(nrm0)), lane_len - 0.4)
 	var rock_mat := Flora.stone_material({"volcano": Color(0.2, 0.15, 0.13), "pirate": Color(0.62, 0.55, 0.45), "neon": Color(0.16, 0.16, 0.24)}.get(th.id, Color(0.42, 0.4, 0.37)),
 		float(th.land.get("moss", 0.0)))
 	var body := StaticBody3D.new()
@@ -715,7 +734,7 @@ static func _edge_nature(c: Course3D, k: TrackKit, th: WorldTheme, nature_seed: 
 				for frac: float in ([1.25, 0.75] if not easy else [0.7]):
 					var try_reach: float = TrackKit.WALL_T + 1.55 + half * frac
 					var tip: Vector3 = base + inward * try_reach
-					if _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, near_all):
+					if _floor_below(c, tip, edge.y) and _branch_free(c, base + Vector3.UP * BRANCH_CLEAR, tip + Vector3.UP * BRANCH_CLEAR, near_all):
 						reach = try_reach
 						break
 				if reach <= 0.0:
@@ -789,6 +808,14 @@ static func _edge_blocked(c: Course3D, center: Vector3, edge: Vector3, avoid: Ar
 			if Vector2(q.x - center.x, q.z - center.z).length() < float(cor["half"]) + 1.5:
 				return "korridor"
 	return ""
+
+## Liegt senkrecht unter p Bahnbelag auf Hoehe floor_y (+-0.25)? Geprueft ueber die Belag-Proben im Umkreis
+## von 1.4 m (sie liegen hoechstens ~1.8 m quer und 2.5 m laengs auseinander).
+static func _floor_below(c: Course3D, p: Vector3, floor_y: float) -> bool:
+	for q in c.surface_pts:
+		if absf(q.y - floor_y) < 0.25 and Vector2(q.x - p.x, q.z - p.z).length() < 1.4:
+			return true
+	return false
 
 ## Liegt p (waagerecht) naeher als `margin` an Steg oder Fluglinie einer Abkuerzung?
 static func _near_flight(sc: Dictionary, p: Vector3, margin: float) -> bool:

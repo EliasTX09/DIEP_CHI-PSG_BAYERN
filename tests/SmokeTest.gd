@@ -352,6 +352,9 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 					var fh: Dictionary = space.intersect_ray(down)
 					if not fh.is_empty() and fh["collider"] == c.floor_body and absf((fh["position"] as Vector3).y - float(it["floor_y"])) < 0.3:
 						over_floor += 1
+					else:
+						print("[SMOKE] %s Astspitze ohne Belag darunter: Spitze %s, Belag-Hoehe %.2f, Treffer %s" % [id, str(tip), float(it["floor_y"]),
+							"nichts" if fh.is_empty() else "%s bei %s" % [str((fh["collider"] as Node).name), str(fh["position"])]])
 			"root":
 				roots += 1
 			"rock":
