@@ -17,10 +17,10 @@ const WEAK_BELOW := 0.7
 ## Anfaenger-Fehler bei weakness() = 1: zusaetzliche Ziel-Streuung (Grad) und Kraft-Streuung (Anteil), fester Kraft-
 ## fehler (Anteil der Maximalkraft - trifft vor allem kurze Putts), Wahrscheinlichkeit eines verhauenen Schlags.
 ## (static var statt const: der Test misst damit mehrere Stufen durch)
-static var weak_aim_deg: float = 2.0
-static var weak_power: float = 0.03
+static var weak_aim_deg: float = 2.5
+static var weak_power: float = 0.035
 static var weak_power_abs: float = 0.015
-static var weak_blunder: float = 0.16
+static var weak_blunder: float = 0.2
 ## Anfaenger planen nicht perfekt: Sie nehmen irgendeinen Schlag, der hoechstens so viele Wertungspunkte (etwa Meter
 ## Rest-Weg) schlechter ist als der beste - und ein vorhergesagtes Einlochen zaehlt fuer sie nur wie "liegt am Loch".
 static var weak_slack: float = 6.0

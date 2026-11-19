@@ -44,7 +44,7 @@ const OPENING_LEN := 5.4
 ## Rampe am Steg-Ende (TrackKit.kicker): Bogenlaenge und moegliche Absprungwinkel in Grad.
 const KICK_LEN := 4.0
 ## (nicht zu steil: wer steil landet, springt beim Aufprall ueber die Bande des Ziels)
-const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0]
+const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0, 40.0]
 ## Tempo-Klassen, gemessen am Tor (Einfahrt in den Steg), fuer den vorderen Rand des Landefensters, in m/s.
 ## Zum Vergleich: der Startschlaeger schafft bei voller Kraft rund 31 m/s, Schlaeger mit Schlagkraft 70 rund 35,
 ## die staerksten knapp 39 (Ball3D.MAX_SPEED * power_factor).
@@ -52,7 +52,7 @@ const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0]
 ## Power-Abkuerzung: V_POWER_MIN..V_POWER_MAX - selbst direkt am Tor reicht der Startschlaeger nicht.
 const V_EASY := 30.5
 ## Hoechstes waagerechtes Lande-Tempo (m/s) fuer Rampen aufs Gruen.
-const GREEN_MAX_VH := 17.0
+const GREEN_MAX_VH := 19.0
 const V_POWER_MIN := 31.8
 const V_POWER_MAX := 38.5
 ## Diagnose der letzten Abkuerzungs-Suche: Anzahl verworfener Kandidaten je Grund (fuer den Smoke-Test).
@@ -168,7 +168,7 @@ static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 		"aims": [c.hole_pos, gxf * Vector3(0.0, 0.0, -k.green_size.y * 0.5), gxf * Vector3(0.0, 0.0, -k.green_size.y * 0.3)]}]
 	for t in k.straights:
 		var txf: Transform3D = t["xf"]
-		if float(t["dist"]) < 8.0 or float(t["length"]) < 6.0 or not bool(t["wall_l"]) or not bool(t["wall_r"]) or float(t["width"]) < 4.5 or txf.basis.y.y < 0.98:
+		if float(t["dist"]) < 8.0 or float(t["length"]) < 5.0 or not bool(t["wall_l"]) or not bool(t["wall_r"]) or float(t["width"]) < 4.0 or txf.basis.y.y < 0.98:
 			continue
 		var tl: float = float(t["length"])
 		targets.append({"green": false, "xf": txf, "size": Vector2(float(t["width"]), tl), "d": float(t["dist"]) + tl * 0.5,
@@ -315,7 +315,7 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 	var by_cls: Dictionary = {}
 	for aim: Vector3 in tg["aims"]:
 		var flat := Vector3(aim.x - g.x, 0.0, aim.z - g.z)
-		if flat.length() < 8.0:
+		if flat.length() < 6.0:
 			_stat("nah")
 			continue
 		var dir: Vector3 = flat.normalized()
@@ -387,7 +387,7 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 				continue
 			var direct: float = lane_len + KICK_LEN + d_mid
 			var saving: float = remaining - direct
-			if saving < (6.0 if green else 8.0):
+			if saving < (5.0 if green else 6.0):
 				_stat("ersparnis")
 				continue
 			# lieber in Fahrtrichtung des Ziels landen (der Ball rollt dann weiter Richtung Loch)

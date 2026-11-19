@@ -348,14 +348,16 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 							branch_hits += 1
 							break
 					# unabhaengig vom Baum: senkrecht unter der Astspitze muss Bahnbelag liegen (Ast ragt wirklich ueber die Bahn)
-					var down := PhysicsRayQueryParameters3D.create(tip + Vector3.DOWN * 0.4, tip + Vector3.DOWN * 6.0, 1)
+					# minimal versetzt: Baeume stehen an den Rahmen der Bahn, ein Strahl genau auf einer Dreieckskante kann verfehlen
+					var probe_p: Vector3 = tip + Vector3(0.013, 0.0, 0.017)
+					var down := PhysicsRayQueryParameters3D.create(probe_p + Vector3.DOWN * 0.4, probe_p + Vector3.DOWN * 6.0, 1)
 					var fh: Dictionary = space.intersect_ray(down)
 					if not fh.is_empty() and fh["collider"] == c.floor_body and absf((fh["position"] as Vector3).y - float(it["floor_y"])) < 0.3:
 						over_floor += 1
 					else:
 						var all_q := PhysicsRayQueryParameters3D.create(tip + Vector3.UP * 3.0, tip + Vector3.DOWN * 12.0, 0xFFFFFFFF)
 						var ah: Dictionary = space.intersect_ray(all_q)
-						var mid_q := PhysicsRayQueryParameters3D.create(Vector3(0.0, 3.0, tip.z), Vector3(0.0, -6.0, tip.z), 1)
+						var mid_q := PhysicsRayQueryParameters3D.create(Vector3(0.013, 3.0, tip.z + 0.017), Vector3(0.013, -6.0, tip.z + 0.017), 1)
 						var mh: Dictionary = space.intersect_ray(mid_q)
 						print("[SMOKE] %s Astspitze ohne Belag darunter: Spitze %s, Belag-Hoehe %.2f, Treffer %s | alle Ebenen: %s | Bahnmitte x=0: %s | Boden-Formen %d" % [
 							id, str(tip), float(it["floor_y"]), "nichts" if fh.is_empty() else "%s bei %s" % [str((fh["collider"] as Node).name), str(fh["position"])],
@@ -506,7 +508,21 @@ func _stage_shortcuts() -> void:
 				await _frames(3)
 				ball.unfreeze()
 				ball.shoot(dir, best_v / (Ball3D.MAX_SPEED * float(strong["power"])), false, Vector2.ZERO)
-				await _wait_ball(ball, 16.0)
+				var real_track := PackedStringArray()
+				for fr in 16 * 60:
+					await get_tree().physics_frame
+					if fr % 6 == 0 and real_track.size() < 40 and ball.state == Ball3D.State.MOVING:
+						var bp: Vector3 = ball.global_position
+						real_track.append("(%.1f,%.1f,%.1f|%.0f)" % [bp.x, bp.y, bp.z, ball.linear_velocity.length()])
+					if ball.state != Ball3D.State.MOVING and ball.state != Ball3D.State.OUT and fr > 10:
+						break
+				var pred_res: Dictionary = ShotSim.run(c, space, start, dir * best_v, {"max_time": 12.0, "profile": strong, "sample": 6})
+				var pred_track := PackedStringArray()
+				for pp: Vector3 in (pred_res["points"] as PackedVector3Array):
+					if pred_track.size() < 40:
+						pred_track.append("(%.1f,%.1f,%.1f)" % [pp.x, pp.y, pp.z])
+				print("[SMOKE]   echter Ball:  ", " ".join(real_track))
+				print("[SMOKE]   Vorhersage:   ", " ".join(pred_track))
 				var real := {"holed": ball.state == Ball3D.State.HOLED, "out": ball.state != Ball3D.State.IDLE and ball.state != Ball3D.State.HOLED,
 					"end_pos": ball.global_position}
 				print("[SMOKE] %s echter Ball mit %.1f m/s: %s, Absprung %d x" % [label, best_v, _shot_txt(c, real), ball.shortcut_launches])
@@ -888,11 +904,17 @@ func _stage_adaptive_bots() -> void:
 	await _frames(2)
 	# Profi-Stufe: viele Bahn-Trophaeen -> Bots nutzen die Abkuerzung, wo sie sich lohnt
 	var pro_used := PackedStringArray()
-	for id in ["e2", "v3", "p1"]:
+	var pro_tried := 0
+	for id in Catalog.all_course_ids():
+		if pro_tried >= 6:
+			break
 		var r2: Dictionary = await _bot_playthrough(id, false, 0.85, 400)
+		if not bool(r2["has_shortcut"]):
+			continue
+		pro_tried += 1
 		if int(r2["launches"]) > 0:
 			pro_used.append(id)
-		print("[SMOKE] Profi-Bot (400 Bahn-Trophaeen) auf %s: %d Schlaege, Schanze %d x" % [id, int(r2["strokes"]), int(r2["launches"])])
+		print("[SMOKE] Profi-Bot (400 Bahn-Trophaeen) auf %s: %d Schlaege, Rampe %d x" % [id, int(r2["strokes"]), int(r2["launches"])])
 	check(pro_used.size() >= 1, "Profi-Bots nutzen die Abkuerzung (auf: %s)" % ", ".join(pro_used))
 
 ## Trophaeen pro Bahn und Arena-Freischaltung
