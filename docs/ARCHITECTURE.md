@@ -63,18 +63,25 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Nebenstränge (Abkürzungs-Steg), ohne Mittellinie, Stützen oder Bounds der Bahn zu verändern.
 - `CourseBuilder3D` – definiert die 15 Bahnen + Daily-Parcours und liefert ein `Course3D`. Baut jede Bahn zweimal:
   ein Probelauf sucht Stellen für bis zu drei **Abkürzungs-Rampen** (`_plan_shortcuts`), der zweite Lauf baut sie.
-  Eine Abkürzung = Banden-Öffnung in einem geraden Stück, schmaler Steg ohne Banden (5–9,5 m), Felsentor mit
-  Kollision, am Ende eine echte Rampe (`TrackKit.kicker`, 4 m Bogen, 20/26/32° Absprung) und eine Schlucht unter dem
-  Flug. Kein Boost, keine Landezone: Der Ball fliegt rein physikalisch geradeaus in Steg-Richtung weiter, also muss das
-  Ziel (Grün oder ein späteres, beidseitig umbandetes Fairway-Stück) genau in dieser Richtung liegen. Der Planer
-  berechnet das Landefenster entlang der Fluglinie, das nötige Absprung-Tempo (`takeoff_speed`, Wurfparabel + Aufschlag
-  für Luftwiderstand) und rechnet es rückwärts über Rampe und Steg auf das Tempo am Tor zurück (`gate_speed`, gleicher
-  Rollwiderstand wie `Ball3D`). Klassen: normal (Landemitte mit ≤ 28 m/s am Tor) und **Power** (schon der vordere
-  Landerand braucht 31,5–37 m/s – mehr als der Startschläger mit ~31 m/s; `need_power` = nötige Schlagkraft direkt am
-  Tor). Gewählt wird die beste normale, die beste Power-Rampe, dann weitere, jede an einem eigenen geraden Stück und
-  mit Abstand zu den anderen. Power-Tore tragen rot glühende Bänder, Schrift gibt es keine. `Gadgets.RampTag` an der
-  Rampenkante verändert den Ball nicht, sondern meldet nur „launch“ (Style-Punkte, Statistik, Bot-Planung). Ohne
-  Abkürzung: e1 (gerade Einsteiger-Bahn) und der Golden Shot. Hindernisse auf der Bahn: Bach mit Holzsteg (`Gadgets.Creek`), Rough (`Gadgets.RoughZone`),
+  Eine Abkürzung = Banden-Öffnung (nur so lang, wie der schräge Steg an der Bande braucht, + 0,5 m), schmaler Steg ohne
+  Banden (4–20 m), Felsentor mit Kollision, am Ende eine echte Rampe (`TrackKit.kicker`, 6 m Bogen in 1°-Schritten,
+  Absprung 20/27/34/40°) und eine Schlucht unter dem ganzen Flug bis vor das Ziel. Kein Boost, keine Landezone: Der Ball
+  fliegt geradeaus in Steg-Richtung weiter, also muss das Ziel (Grün oder ein späteres, beidseitig umbandetes
+  Fairway-Stück; je drei Zielpunkte) genau in dieser Richtung liegen. Der Planer berechnet das Landefenster entlang der
+  Fluglinie (mind. 3 m, 1 m Abstand zu den Banden), das Absprung-Tempo (`takeoff_speed`: Wurfparabel + Aufschlag für den
+  Luftwiderstand) und rechnet es rückwärts über Rampe und Steg aufs Tempo am Tor um (`gate_speed`, Rollwiderstand wie
+  `Ball3D`). Aufs Grün nur, wenn der Ball dort langsam (≤ 21 m/s waagerecht) oder flach (≤ 10,5 m/s senkrecht, springt
+  < 0,5 m hoch) ankommt. Das Ziel muss einen Tempo-Bereich von mind. 12 % abdecken (echte Physik und Vorhersage weichen
+  an Rampen um einige Prozent ab). Klassen nach dem Tempo für den vorderen Landerand: normal ≤ 29,5 m/s, **Power**
+  30,5–38,5 m/s (vom Fairway aus schafft der Startschläger mit ~31 m/s das nicht; `need_power` = nötige Schlagkraft
+  direkt am Tor). Gewählt wird die beste normale, die beste Power-Rampe, dann weitere; Öffnungen auf derselben Seite
+  eines geraden Stücks überlappen nicht, Tore ≥ 4,5 m auseinander, Stege und Flüge (bis 6 m vor der Landung) ≥ 4 m
+  auseinander - mehrere Rampen dürfen aufs selbe Grün springen. Power-Tore tragen rot glühende Bänder, Schrift gibt es
+  keine. `Gadgets.RampTag` an der Kante setzt die Abflugrichtung genau auf den Rampenwinkel (Tempo und seitliche
+  Richtung bleiben - kein Boost; so fliegen echter Ball, Vorschau und Bot-Planung gleich) und meldet „launch“. Die
+  Stirnfläche unter der Kante hat keine Kollision (Jolt-Geisterkontakt an der Kante schleuderte den Ball senkrecht
+  hoch). Ohne Abkürzung: e1 (gerade Einsteiger-Bahn), der Golden Shot und Bahnen ohne sichere Stelle.
+  Hindernisse auf der Bahn: Bach mit Holzsteg (`Gadgets.Creek`), Rough (`Gadgets.RoughZone`),
   Baumstämme und Felsbrocken (`Obstacles.log_obstacle/boulder`), Lianen-Bögen (Deko).
   **Natur am Bahnrand** (`CourseBuilder3D._edge_nature`, nach dem Gelände, immer gebaut, Seed nur aus der Bahn-ID →
   in jedem Match und im Test identisch): entlang aller ebenen Querschnitte der Hauptbahn mit Bande stehen Randbäume (`Obstacles.edge_tree`), mindestens 40 % davon mit einem dicken Ast quer
