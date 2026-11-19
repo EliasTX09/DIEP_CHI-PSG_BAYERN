@@ -54,6 +54,8 @@ const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0, 40.0]
 const V_EASY := 29.5
 ## Hoechstes waagerechtes Lande-Tempo (m/s) fuer Rampen aufs Gruen.
 const GREEN_MAX_VH := 21.0
+## ... oder hoechstes senkrechtes Lande-Tempo (m/s): Abprall 0.45 -> der Ball springt dann weniger als 0.5 m hoch.
+const GREEN_MAX_VY := 10.5
 const V_POWER_MIN := 30.5
 const V_POWER_MAX := 38.5
 ## Diagnose der letzten Abkuerzungs-Suche: Anzahl verworfener Kandidaten je Grund (fuer den Smoke-Test).
@@ -367,7 +369,8 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 				elif s_in >= 0.0:
 					break
 				sd += 0.5
-			if s_in < 0.0 or s_out - s_in < 2.0:
+			# Landefenster nicht zu knapp (sonst klappt es nur mit genau einem Tempo)
+			if s_in < 0.0 or s_out - s_in < 3.0:
 				_stat("ziel")
 				continue
 			var d_near: float = s_in + 0.5
@@ -376,8 +379,9 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 			var v_lip_mid: float = takeoff_speed(d_mid, dh, th)
 			var v_near: float = gate_speed(takeoff_speed(d_near, dh, th), lane_len, th)
 			var v_mid: float = gate_speed(v_lip_mid, lane_len, th)
-			# Gruen ist klein und rundum umbandet: wer zu flach und schnell ankommt, springt wieder hinaus
-			if green and v_lip_mid * cos(th) > GREEN_MAX_VH:
+			# Gruen ist klein und rundum umbandet: Der Ball darf entweder nicht zu schnell ankommen oder muss so flach
+			# landen, dass er niedrig abprallt (dann haelt ihn die Bande; flache, schnelle Spruenge = Power-Rampen)
+			if green and v_lip_mid * cos(th) > GREEN_MAX_VH and v_lip_mid * sin(th) > GREEN_MAX_VY:
 				_stat("landung")
 				continue
 			var cls := ""
@@ -397,7 +401,8 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 				_stat("ersparnis")
 				continue
 			# lieber in Fahrtrichtung des Ziels landen (der Ball rollt dann weiter Richtung Loch)
-			var score: float = saving + dir.dot(nrm) * 3.0 - absf(lane_len - 6.0) * 0.5 + (4.0 if green else 0.0) + dir.dot(fwd_t) * 5.0
+			var score: float = saving + dir.dot(nrm) * 3.0 - absf(lane_len - 6.0) * 0.5 + (4.0 if green else 0.0) + dir.dot(fwd_t) * 5.0 \
+				+ (s_out - s_in) * 0.6
 			if by_cls.has(cls) and float((by_cls[cls] as Dictionary)["score"]) >= score:
 				continue
 			var land_y: float = rect_xf.origin.y
