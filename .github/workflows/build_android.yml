@@ -21,12 +21,16 @@ on:
         description: "Nur diese Screenshots (kommagetrennt, leer = alle)"
         type: string
         default: ""
+      backend_check:
+        description: "Nur das Live-Backend pruefen (echtes Supabase-Projekt: Gast-Login, Profil, Lobby, Echtzeit) - baut keine APK"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 concurrency:
-  group: build-${{ github.ref }}-${{ github.event_name }}
+  group: build-${{ github.ref }}-${{ github.event_name }}-${{ inputs.backend_check && 'live' || 'build' }}
   cancel-in-progress: true
 
 env:
@@ -36,6 +40,7 @@ env:
 jobs:
   build-apk:
     name: Test + Android-APK
+    if: ${{ !inputs.backend_check }}
     runs-on: ubuntu-22.04
     timeout-minutes: 40
     container:
@@ -116,6 +121,10 @@ jobs:
             PORTAL="https://${OWNER}.github.io/${GITHUB_REPOSITORY#*/}/"
           fi
           printf '[supabase]\nurl="%s"\nanon_key="%s"\n\n[web]\nportal_url="%s"\n' "$URL" "$KEY" "$PORTAL" > "$CFG"
+          # Die Tests laufen immer offline - auch wenn ein echtes Backend eingetragen ist (sonst wuerde jeder Push
+          # Gast-Accounts im echten Projekt anlegen). backend.local.cfg hat im Spiel Vorrang und wird vor dem
+          # APK-Export wieder geloescht; die APK bekommt die echten Werte aus backend.cfg.
+          printf '[supabase]\nurl="https://DEIN-PROJEKT.supabase.co"\nanon_key="DEIN_ANON_PUBLIC_KEY"\n\n[web]\nportal_url="%s"\n' "$PORTAL" > config/backend.local.cfg
           if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then echo "Supabase-Zugang aus Secrets."; else echo "Supabase-Zugang aus der eingecheckten config/backend.cfg."; fi
           echo "Web-Portal: $PORTAL"
 
@@ -161,6 +170,8 @@ jobs:
       - name: Android-APK exportieren
         run: |
           set -o pipefail
+          rm -f config/backend.local.cfg
+          if grep -q "DEIN-PROJEKT\|DEIN_ANON" config/backend.cfg; then echo "APK ohne Backend (Offline-Modus mit Bots)."; else echo "APK mit Online-Backend."; fi
           timeout 1200 godot --headless --export-debug "Android" "build/$APK_NAME" 2>&1 | tee ci_out/export.log | grep -v "^ADDING:" || true
           ls -la build
           test -s "build/$APK_NAME"
@@ -207,6 +218,7 @@ jobs:
 
   visual-check:
     name: Shader-Check + Screenshots (Software-Rendering)
+    if: ${{ !inputs.backend_check }}
     runs-on: ubuntu-24.04
     timeout-minutes: 36
     steps:
@@ -233,6 +245,8 @@ jobs:
       - name: Projekt importieren
         run: |
           mkdir -p ci_out/shots
+          # Screenshots immer im Offline-Modus (kein Login gegen ein echtes Backend)
+          printf '[supabase]\nurl="https://DEIN-PROJEKT.supabase.co"\nanon_key="DEIN_ANON_PUBLIC_KEY"\n\n[web]\nportal_url="https://DEINNAME.github.io/DEIN-REPO/"\n' > config/backend.local.cfg
           timeout 600 "$RUNNER_TEMP/godot/godot" --headless --import > ci_out/vimport1.log 2>&1 || true
           timeout 600 "$RUNNER_TEMP/godot/godot" --headless --import > ci_out/vimport2.log 2>&1 || true
 
@@ -285,6 +299,7 @@ jobs:
 
   schema-check:
     name: Supabase-Schema gegen Postgres pruefen
+    if: ${{ !inputs.backend_check }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
@@ -320,6 +335,7 @@ jobs:
   # --------------------------------------------------------------------------
   web-portal-check:
     name: Web-Portal im Browser testen
+    if: ${{ !inputs.backend_check }}
     runs-on: ubuntu-24.04
     steps:
       - name: Repository auschecken
@@ -350,3 +366,29 @@ jobs:
           name: portal-screenshots
           path: ci_out/*.png
           if-no-files-found: ignore
+
+  # --------------------------------------------------------------------------
+  # Echtes Supabase-Projekt pruefen (nur auf Knopfdruck: Run workflow -> "backend_check")
+  # --------------------------------------------------------------------------
+  backend-live-check:
+    name: Live-Backend pruefen (echtes Supabase-Projekt)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.backend_check }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Gast-Login, Profil + RLS, Lobby, Echtzeit, Spiel-Code, Speicher
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -o pipefail
+          node tests/live/backend_check.mjs | tee live_check.log
+          grep -q "LIVE CHECK: PASS" live_check.log

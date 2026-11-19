@@ -1,7 +1,8 @@
 # Veroeffentlicht das Web-Portal (Ordner webapp/) auf GitHub Pages.
 # Nur manuell (Actions -> "Web-Portal veroeffentlichen" -> Run workflow), damit eine bestehende
 # GitHub-Pages-Seite dieses Repositorys nicht versehentlich ersetzt wird.
-# Voraussetzung: Settings -> Pages -> Source: "GitHub Actions". Secrets SUPABASE_URL und SUPABASE_ANON_KEY.
+# Voraussetzung: Settings -> Pages -> Source: "GitHub Actions".
+# Supabase-Zugang: Secrets SUPABASE_URL/SUPABASE_ANON_KEY oder (ohne Secrets) die Werte aus config/backend.cfg.
 name: Web-Portal veroeffentlichen
 
 on:
@@ -31,10 +32,15 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::warning::Secrets SUPABASE_URL/SUPABASE_ANON_KEY fehlen - das Portal zeigt einen Einrichtungs-Hinweis."
+          CFG=config/backend.cfg
+          cur() { sed -n "s/^$1=\"\(.*\)\"\s*$/\1/p" "$CFG" | head -n 1; }
+          URL="${SUPABASE_URL:-$(cur url)}"
+          KEY="${SUPABASE_ANON_KEY:-$(cur anon_key)}"
+          if [ -z "$URL" ] || [ -z "$KEY" ] || echo "$URL $KEY" | grep -q "DEIN-PROJEKT\|DEIN_ANON"; then
+            echo "::warning::Kein Supabase-Zugang (weder Secrets noch config/backend.cfg) - das Portal zeigt einen Einrichtungs-Hinweis."
           else
-            node -e 'const fs=require("fs");fs.writeFileSync("webapp/config.js","window.GOLF_CONFIG = "+JSON.stringify({supabaseUrl:process.env.SUPABASE_URL,anonKey:process.env.SUPABASE_ANON_KEY})+";\n")'
+            URL="$URL" KEY="$KEY" node -e 'const fs=require("fs");fs.writeFileSync("webapp/config.js","window.GOLF_CONFIG = "+JSON.stringify({supabaseUrl:process.env.URL,anonKey:process.env.KEY})+";\n")'
+            if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then echo "Supabase-Zugang aus Secrets."; else echo "Supabase-Zugang aus config/backend.cfg."; fi
           fi
           rm -f webapp/.gdignore
           touch webapp/.nojekyll

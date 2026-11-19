@@ -37,7 +37,9 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 3. **Authentication → Sign In / Providers**:
    - **„Allow anonymous sign-ins“ einschalten** (für den Sofort-Gast-Login per Geräte-ID).
    - **Email** aktiviert lassen (zum Verknüpfen des Gast-Accounts mit E-Mail + Passwort).
-     Für schnelle Tests kannst du „Confirm email“ ausschalten.
+   - **„Confirm email“ ausschalten**, solange kein eigener Mail-Server (SMTP) eingetragen ist: Ohne eigenen
+     Mail-Server verschickt Supabase Bestätigungs-Mails nur sehr eingeschränkt (wenige pro Stunde, nur an
+     Mitglieder deines Supabase-Teams) – deine Freunde kämen sonst bei der Registrierung im Portal nicht weiter.
 4. **Authentication → URL Configuration**: als **Site URL** und unter **Redirect URLs** die Adresse deines
    Web-Portals eintragen (z.B. `https://<dein-name>.github.io/<repo>/`), damit Bestätigungs- und
    Passwort-Mails zurück aufs Portal führen.
@@ -66,6 +68,23 @@ anon_key="eyJhbGciOi..."
 ```
 
 Solange dort die Platzhalter stehen, startet das Spiel im **Offline-Modus** (Bots, lokaler Speicherstand).
+Beide Werte sind öffentlich (sie stecken ohnehin in der APK und im Portal) – geschützt wird alles durch die
+RLS-Regeln im Schema. Das Web-Portal nimmt dieselben Werte, wenn keine Secrets gesetzt sind.
+
+Die automatischen Tests laufen auch mit eingetragenem Backend immer **offline** (CI legt dafür eine
+`config/backend.local.cfg` mit Platzhaltern an und löscht sie vor dem APK-Export) – normale Pushes legen also
+keine Test-Accounts in deinem Projekt an.
+
+### 2b. Live-Backend prüfen (ein Klick)
+
+**Actions → Build Android APK → Run workflow → Haken bei „backend_check“ → Run.** Das prüft das echte Projekt
+genau so, wie das Spiel es benutzt: Gast-Login, automatisch angelegtes Profil, RLS (fremde Spielstände bleiben
+privat), Lobby anlegen und per Code finden, Echtzeit-Kanal mit Spielerliste (Presence) und Nachrichten
+(Broadcast), Spiel-Code-Funktion und Profilbild-Speicher. Bei Fehlern steht im Log, was im Dashboard fehlt.
+Jeder Lauf legt zwei Gast-Accounts „CI Test A/B“ an (unter Authentication → Users löschbar).
+
+Hinweis: Kostenlose Supabase-Projekte werden nach etwa einer Woche ohne Nutzung pausiert – dann im Dashboard
+auf „Restore“ klicken.
 
 ### 3. Auf GitHub pushen
 
@@ -201,7 +220,7 @@ scripts/gameplay/                 Ball3D, CameraManager3D, CourseBuilder3D (inkl
 scripts/fx/                       Materialien, Partikel, Flora (Bäume, Felsen), Ball-Skins, Explosionen, Schlägermodelle, Emoji-Icons
 scripts/ui/                       MainMenu (MainMenuView), MenuPages, Preview3D, GameHUD, UIKit, UIIcon, UIAvatar
 tests/                            Smoke-Test, Schein-Supabase-Server, Screenshot-Runner, Physik-Fingerabdruck,
-                                  SQL-Tests, web/portal_test.js (Browser-Test)
+                                  SQL-Tests, web/portal_test.js (Browser-Test), live/backend_check.mjs (echtes Projekt)
 docs/ARCHITECTURE.md              Architektur und Schnittstellen
 ```
 
@@ -221,7 +240,7 @@ docs/ARCHITECTURE.md              Architektur und Schnittstellen
 | Login-Ablauf im Spiel (Gast, Web-Code, Profil-Abgleich, Profilbild) | in CI gegen einen **lokalen Schein-Server** getestet – prüft das Spiel, nicht den echten Supabase-Server |
 | Spiel-Codes, Profilbild-Pfade, Storage-Regeln | in CI gegen PostgreSQL 16 getestet (Supabase-Storage nachgebildet) |
 | Web-Portal (Registrieren, Profilbild, Freunde, Spiel-Code, XSS-Schutz, Handy-Breite) | in CI im Browser (Chromium) gegen simulierte Supabase-Antworten getestet |
-| Supabase-Login, Freunde, Lobbys, Realtime, Portal gegen ein **echtes** Supabase-Projekt | **nicht getestet** |
+| Supabase-Login, Freunde, Lobbys, Realtime, Portal gegen ein **echtes** Supabase-Projekt | **nicht getestet** (es ist noch kein Projekt eingetragen). Sobald eins eingetragen ist, prüft „backend_check“ (Abschnitt 2b) Gast-Login, Profil/RLS, Lobby, Echtzeit, Spiel-Code-Funktion und Speicher-Bucket – Freundesliste und Portal-Registrierung prüft er nicht |
 | Hochformat-HUD | in CI geprüft (Layout oben/unten, Daumenzone) |
 | Gelände-Tal | in CI geprüft: liegt auf allen 16 Bahnen überall unter dem Belag, Schluchten unter allen Sprüngen/Flügen, Aus-Grenze greift neben der Bahn; Bau ~40 ms pro Bahn |
 | Abkürzungen | in CI geprüft auf allen 14 Bahnen: Vorhersage landet auf dem Grün, seitlich vom Steg = Aus, zu langsam = bleibt auf dem Steg; echter Ball auf e2, v3, n3, p1 landet wie vorhergesagt (≤ 0,1 m Abweichung). Die Ersparnis wird gemessen (11–101 m Weg), nicht pauschal „2 Schläge“ |
