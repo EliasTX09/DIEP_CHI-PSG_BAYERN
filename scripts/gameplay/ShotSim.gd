@@ -141,7 +141,6 @@ func _one_step() -> bool:
 	for g in _course.gadgets:
 		g.affect(_st, dt)
 	if _st.events.has("launch"):
-		_spin = Vector2.ZERO
 		result["launched"] = true
 	if _st.out_kind != "":
 		result["out"] = true

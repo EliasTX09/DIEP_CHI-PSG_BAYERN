@@ -497,7 +497,7 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	var power: bool = str(plan["cls"]) == "power"
 	_gate_arch(c, th, g, dir, perp, xf0, side, lane_len, power)
 	# Kante der Rampe markieren (nur Erkennung, kein Boost)
-	var tag := Gadgets.RampTag.new(LANE_WIDTH)
+	var tag := Gadgets.RampTag.new(LANE_WIDTH, kick_deg)
 	tag.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), lip)
 	c.add_gadget(tag)
 	# Schlucht unter dem ganzen Flug bis kurz vor den Rand des Ziels (sonst steht dort Gelaende im Weg)

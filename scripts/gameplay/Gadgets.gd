@@ -468,22 +468,39 @@ class KillBox extends Gadget:
 ## (fuer Style-Punkte, Statistik und die Bot-Planung).
 class RampTag extends Gadget:
 	var half_w: float
+	## Absprungwinkel der Rampe an der Kante (rad)
+	var lip_angle: float
 	## Ab diesem Tempo in Rampen-Richtung zaehlt es als Absprung
 	const MIN_SPEED := 4.0
 
-	func _init(lane_width: float = 2.4) -> void:
+	func _init(lane_width: float = 2.4, lip_deg: float = 30.0) -> void:
 		half_w = lane_width * 0.5 + 0.3
+		lip_angle = deg_to_rad(lip_deg)
 
+	## An der Kante: Der Ball verlaesst die Rampe genau unter ihrem Winkel. Tempo und seitliche Richtung bleiben, wie sie
+	## sind - es ist kein Boost. (Jolt liess schnelle Baelle am gekruemmten Rampenende etwas steiler abheben als die
+	## Vorhersage; so sind echter Ball, Vorschau und Bot-Planung gleich.)
 	func affect(st: SimState, _dt: float) -> void:
 		if st.on_cooldown(self):
 			return
 		var l := to_local_point(st.pos)
-		# lokales -z = Flugrichtung; Fenster kurz vor bis kurz hinter der Kante
-		if absf(l.x) > half_w or l.z > 1.2 or l.z < -1.6 or l.y < -0.5 or l.y > 1.4:
+		# lokales -z = Flugrichtung; ausgeloest genau an/kurz hinter der Kante
+		if absf(l.x) > half_w or l.z > 0.05 or l.z < -1.6 or l.y < -0.4 or l.y > 1.4:
 			return
 		var dir: Vector3 = -global_transform.basis.z
-		if st.vel.dot(dir) < MIN_SPEED:
+		dir = Vector3(dir.x, 0.0, dir.z).normalized()
+		var along: float = st.vel.dot(dir)
+		if along < MIN_SPEED:
 			return
+		var speed: float = st.vel.length()
+		var flat := Vector3(st.vel.x, 0.0, st.vel.z)
+		var fdir: Vector3 = flat.normalized() if flat.length() > 0.01 else dir
+		# schraeg ueber die Kante: steigt nur entlang der Rampen-Achse
+		var elev: float = atan(tan(lip_angle) * clampf(fdir.dot(dir), 0.0, 1.0))
+		st.vel = fdir * (speed * cos(elev)) + Vector3.UP * (speed * sin(elev))
+		# ab hier Flug: echter Ball und Vorhersage rechnen in der Luft weiter (wie nach jedem Absprung)
+		st.teleported = true
+		st.grounded = false
 		st.set_cooldown(self, 3.0)
 		st.events.append("launch")
 
