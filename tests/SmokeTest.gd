@@ -1362,12 +1362,13 @@ func _stage_input() -> void:
 	var band_col: Color = (m._band_mat.get_shader_parameter("core_color") as Color)
 	check(band_col.r > 0.9 and band_col.b < 0.3, "Gummiband leuchtet in der Kraft-Farbe orange/rot (%s)" % band_col)
 	# Sanfter Putt ohne Effet: der Ball bleibt innerhalb der Vorschau liegen -> Zielkreis am Liegepunkt.
-	# Wie weit die Vorschau reicht, haengt am Guide-Wert (Sekunden) und am Belag -> so lange kuerzer ziehen,
-	# bis sie den Ball zur Ruhe kommen sieht; danach wieder voll spannen.
+	# Ganz kurze Putts enden direkt vor dem Ball (Kreis liegt hinter der Kugel und wird bewusst ausgeblendet),
+	# lange reichen ueber den Guide-Wert hinaus -> von kurz nach lang ziehen, bis der Kreis sichtbar ist.
 	m.hud._spin_pad.set_value(Vector2.ZERO)
 	var pull: float = 320.0
 	var soft_info: String = ""
-	for target in [72.0, 56.0, 44.0, 36.0, 30.0]:
+	var soft_ring: bool = false
+	for target in [72.0, 100.0, 130.0, 160.0, 200.0, 240.0]:
 		_drag(0, screen + Vector2(0.0, target), Vector2(0.0, target - pull))
 		pull = target
 		for i in 240:
@@ -1376,10 +1377,12 @@ func _stage_input() -> void:
 				break
 		var end_d: float = m._preview_end.distance_to(ball.global_position) if m._preview_end != Vector3.INF else -1.0
 		soft_info += " [%d px: Kraft %.3f, reicht=%s, Kreis=%s, aus=%s, Ende %.2f m]" % [int(target), m._aim_power, m._preview_settled, m._target_ring.visible, m._dots_out, end_d]
-		if m._preview_settled or m._aim_power < 0.03:
+		if m._preview_settled and m._target_ring.visible:
+			soft_ring = true
 			break
-	check(m._aim_power > 0.02 and m._aim_power < 0.2 and m._preview_settled and (m._target_ring.visible or m._dots_out),
-		"Sanfter Putt: Vorschau reicht bis zum Liegepunkt -> Zielkreis" + soft_info)
+		if not m._preview_settled:
+			break
+	check(soft_ring and m._aim_power < 0.5, "Sanfter Putt: Vorschau reicht bis zum Liegepunkt -> Zielkreis" + soft_info)
 	print("[SMOKE] Sanfter Putt:" + soft_info)
 	_drag(0, screen + Vector2(0.0, 320.0), Vector2(0.0, 320.0 - pull))
 	for i in 240:
