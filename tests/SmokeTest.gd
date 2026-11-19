@@ -496,9 +496,13 @@ func _stage_shortcuts() -> void:
 			check(bool(miss["out"]), "%s: seitlich vom Steg = aus" % label)
 			if bool(sc["power"]):
 				powers += 1
-				var weak_start: Vector3 = (sc["gate"] as Vector3) + dir * 0.3 + Vector3.UP * (Ball3D.RADIUS + 0.01)
+				# vom Fairway aus, 3 m vor dem Tor in Verlaengerung des Stegs, mit voller Kraft des Startschlaegers
+				var weak_start: Vector3 = (sc["gate"] as Vector3) - dir * 3.0 + Vector3.UP * (Ball3D.RADIUS + 0.01)
 				var weak: Dictionary = ShotSim.run(c, space, weak_start, dir * start_club_v, {"max_time": 12.0, "profile": strong})
-				check(not _in_target(c, sc, weak), "%s: der Startschlaeger (%.1f m/s) schafft es selbst direkt am Tor nicht (%s)" % [label, start_club_v, _shot_txt(c, weak)])
+				check(not _in_target(c, sc, weak), "%s: der Startschlaeger (%.1f m/s) schafft es vom Fairway aus nicht (%s)" % [label, start_club_v, _shot_txt(c, weak)])
+				var strong_v: float = Ball3D.MAX_SPEED * float(strong["power"])
+				var pro: Dictionary = ShotSim.run(c, space, weak_start, dir * minf(strong_v, v_plan + 1.8), {"max_time": 12.0, "profile": strong})
+				print("[SMOKE] %s: starker Schlaeger vom Fairway mit %.1f m/s -> %s" % [label, minf(strong_v, v_plan + 1.8), _shot_txt(c, pro)])
 			if si == 0 and best_v > 0.0 and id in ["e2", "v3", "p1", "n3"]:
 				var ball := Ball3D.new()
 				c.add_child(ball)

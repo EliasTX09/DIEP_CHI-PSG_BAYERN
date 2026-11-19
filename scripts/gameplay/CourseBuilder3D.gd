@@ -49,11 +49,12 @@ const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0, 40.0]
 ## Zum Vergleich: der Startschlaeger schafft bei voller Kraft rund 31 m/s, Schlaeger mit Schlagkraft 70 rund 35,
 ## die staerksten knapp 39 (Ball3D.MAX_SPEED * power_factor).
 ## Normale Abkuerzung: hoechstens V_EASY - mit jedem Schlaeger machbar (je knapper, desto naeher muss man ran).
-## Power-Abkuerzung: V_POWER_MIN..V_POWER_MAX - selbst direkt am Tor reicht der Startschlaeger nicht.
-const V_EASY := 30.5
+## Power-Abkuerzung: V_POWER_MIN..V_POWER_MAX - vom Fairway aus (ein paar Meter vor dem Tor) reicht der
+## Startschlaeger nicht, starke Schlaeger schaffen es.
+const V_EASY := 29.5
 ## Hoechstes waagerechtes Lande-Tempo (m/s) fuer Rampen aufs Gruen.
-const GREEN_MAX_VH := 19.0
-const V_POWER_MIN := 31.8
+const GREEN_MAX_VH := 21.0
+const V_POWER_MIN := 30.5
 const V_POWER_MAX := 38.5
 ## Diagnose der letzten Abkuerzungs-Suche: Anzahl verworfener Kandidaten je Grund (fuer den Smoke-Test).
 static var plan_stats: Dictionary = {}
@@ -218,15 +219,19 @@ static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 					break
 	return out
 
-## Vertraegt sich die Abkuerzung mit den schon gewaehlten? Eigenes gerades Stueck (eine Oeffnung pro Stueck),
-## Tore mindestens 6 m auseinander, Steg + Flug mindestens 4 m von Steg + Flug der anderen entfernt.
+## Vertraegt sich die Abkuerzung mit den schon gewaehlten? Oeffnungen auf derselben Seite eines geraden Stuecks
+## ueberlappen nicht (1 m Abstand), Tore mindestens 4.5 m auseinander (links/rechts gegenueber geht),
+## Steg + Flug mindestens 4 m von Steg + Flug der anderen entfernt.
 static func _shortcut_fits(cd: Dictionary, chosen: Array[Dictionary]) -> bool:
 	for o in chosen:
 		if int(o["straight"]) == int(cd["straight"]):
-			return false
+			var oo: Dictionary = o["opening"]
+			var co: Dictionary = cd["opening"]
+			if int(oo["side"]) == int(co["side"]) and float(co["d0"]) < float(oo["d1"]) + 1.0 and float(co["d1"]) > float(oo["d0"]) - 1.0:
+				return false
 		var g1: Vector3 = cd["gate"]
 		var g2: Vector3 = o["gate"]
-		if Vector2(g1.x - g2.x, g1.z - g2.z).length() < 6.0:
+		if Vector2(g1.x - g2.x, g1.z - g2.z).length() < 4.5:
 			return false
 		var segs1: Array = [[cd["gate"], cd["lip"]], [cd["lip"], cd["land_mid"]]]
 		var segs2: Array = [[o["gate"], o["lip"]], [o["lip"], o["land_mid"]]]
@@ -475,7 +480,9 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	k.kicker(KICK_LEN, kick_deg)
 	k.arc_step_deg = 3.0
 	var lip: Vector3 = k.xf.origin
+	k.cap_without_collision = true
 	k.end_run()
+	k.cap_without_collision = false
 	k.branch = false
 	k.pop_state(saved)
 	var n_sup: int = int((lane_len + KICK_LEN) / 2.5)
@@ -496,7 +503,9 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var land_y: float = (plan["land_mid"] as Vector3).y
 	var flat_lip := Vector3(lip.x, land_y, lip.z)
-	c.shortcuts.append({"gate": g, "gate_d": float(plan["gate_d"]), "dir": dir, "normal": nrm, "lane_start": g + dir * 0.6, "lip": lip,
+	# Bereitstellung: Punkt auf der Hauptbahn in Verlaengerung des Stegs - von dort geht es geradeaus ueber Steg und Rampe
+	var stage: Vector3 = g - dir * 2.0 + Vector3.UP * TrackKit.BALL_R
+	c.shortcuts.append({"gate": g, "gate_d": float(plan["gate_d"]), "dir": dir, "normal": nrm, "lane_start": g + dir * 0.6, "lip": lip, "stage": stage,
 		"landing": flat_lip + dir * d_mid, "land_near": plan["land_near"], "land_far": plan["land_far"], "kick_deg": kick_deg,
 		"v_gate": float(plan["v_mid"]), "v_gate_min": float(plan["v_near"]), "power": power, "need_power": power_needed(float(plan["v_near"])),
 		"remaining": float(plan["remaining"]), "direct": float(plan["direct"]), "green": bool(plan["green"]), "target_d": float(plan["target_d"])})

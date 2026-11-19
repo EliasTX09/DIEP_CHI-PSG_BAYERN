@@ -291,19 +291,28 @@ func _build_candidates(replan: bool = false) -> void:
 		if dists[i] > 9.0 and i < 4:
 			for cp: float in [0.55, 0.8, 1.0]:
 				_candidates.append({"dir": dirs[i], "power": cp, "chip": true})
-	# Abkuerzungs-Rampen vor dem Ball: geradeaus auf die Rampenkante zielen, mit kraeftigen Putts (die Simulation
-	# zeigt, ob der Ball durch die Oeffnung, ueber den Steg und weit genug fliegt - sonst ist es ein Aus)
+	# Abkuerzungs-Rampen vor dem Ball (die Simulation entscheidet, ob es klappt - sonst ist es ein Aus):
+	# - geradeaus auf die Rampenkante, mit dem Tempo, das die Rampe braucht (plus Rollverlust bis zum Tor)
+	# - oder erst auf den Bereitstellungspunkt in Verlaengerung des Stegs legen (von dort geht es geradeaus hinauf)
 	if _allow_shortcut and shortcut_chance > 0.0:
+		var vmax: float = Ball3D.MAX_SPEED * float(ball.profile.get("power", 1.0))
 		for sc: Dictionary in course.shortcuts:
 			var gate: Vector3 = sc["gate"]
 			if pos.distance_to(gate) > 32.0 or _start_progress > float(sc.get("gate_d", 0.0)) + 1.0:
 				continue
 			var lip: Vector3 = sc["lip"]
 			var to_lip := Vector3(lip.x - pos.x, 0.0, lip.z - pos.z)
-			if to_lip.length() < 2.0:
-				continue
-			for sp: float in [0.72, 0.84, 0.94, 1.0]:
-				_candidates.append({"dir": to_lip.normalized(), "power": sp, "chip": false})
+			if to_lip.length() > 2.0:
+				var need: float = (float(sc.get("v_gate", 25.0)) + 0.55 * pos.distance_to(gate)) / vmax
+				for f: float in [0.95, 1.0, 1.05]:
+					if need * f <= 1.0:
+						_candidates.append({"dir": to_lip.normalized(), "power": need * f, "chip": false})
+			var stage: Vector3 = sc.get("stage", gate)
+			var to_stage := Vector3(stage.x - pos.x, 0.0, stage.z - pos.z)
+			if to_stage.length() > 1.5:
+				var ps: float = power_for_distance(to_stage.length())
+				for f: float in [0.95, 1.05]:
+					_candidates.append({"dir": to_stage.normalized(), "power": clampf(ps * f, 0.05, 1.0), "chip": false})
 
 ## Merkt sich den letzten Schlag als Fehlschlag, wenn der Ball wieder (fast) am Ausgangspunkt liegt
 ## oder nicht vorangekommen ist - beim naechsten Mal waehlt der Bot dann etwas anderes.
@@ -351,6 +360,15 @@ func _score(res: Dictionary, cand: Dictionary) -> float:
 	var score: float = -(total - progress) - 0.35 * minf(to_hole, 40.0) - 0.5 * maxf(0.0, off_path - 2.0)
 	if not bool(res.get("stopped", false)):
 		score -= 6.0
+	# Liegt der Ball danach bereit fuer eine Abkuerzungs-Rampe (und darf der Bot sie nehmen)? Dann zaehlt ein Teil
+	# der Ersparnis schon jetzt - so legt sich der Bot den Ball zurecht, statt nur den langen Weg zu sehen.
+	if _allow_shortcut and shortcut_chance > 0.0 and ball.profile.get("power", 1.0) != null:
+		var vmax: float = Ball3D.MAX_SPEED * float(ball.profile.get("power", 1.0))
+		for sc: Dictionary in course.shortcuts:
+			if not sc.has("stage") or float(sc.get("v_gate", 99.0)) + 1.5 > vmax:
+				continue
+			if end_pos.distance_to(sc["stage"]) < 1.0:
+				score += 0.7 * maxf(0.0, float(sc.get("remaining", 0.0)) - float(sc.get("direct", 0.0)))
 	return score - penalty
 
 func _shoot() -> void:

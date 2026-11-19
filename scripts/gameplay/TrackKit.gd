@@ -247,16 +247,22 @@ func _emit_ribbon(frames: Array[Transform3D], dists: PackedFloat32Array, widths:
 			quad(surface, col, va0, vb0, vb1, va1, (na + nb) * 0.5, ua0, ub0, ub1, ua1, na, nb, nb, na)
 	_edge_inv = 0.0
 
+## Abschlussflaeche am Strang-Ende ohne Kollision (nur Optik). Gesetzt fuer Abkuerzungs-Rampen: An der Kante
+## zwischen Rampe und senkrechter Stirnflaeche erzeugte Jolt einen "Geister-Kontakt", der den Ball an der Kante
+## senkrecht nach oben lenkte - die Vorhersage kannte das nicht. Von vorn trifft niemand die Rampenstirn.
+var cap_without_collision: bool = false
+
 func _emit_cap(f: Transform3D, half: float, facing_back: bool) -> void:
 	var prof: Array = _profile(half)
 	var pts: PackedVector2Array = prof[0]
 	var idx: PackedInt32Array = Geometry2D.triangulate_polygon(pts)
 	var nrm: Vector3 = f.basis.z if facing_back else -f.basis.z
+	var col: int = C_NONE if cap_without_collision and not facing_back else C_WALL
 	for i in range(0, idx.size() - 2, 3):
 		var p0: Vector2 = pts[idx[i]]
 		var p1: Vector2 = pts[idx[i + 1]]
 		var p2: Vector2 = pts[idx[i + 2]]
-		tri(S_TRIM, C_WALL, f * Vector3(p0.x, p0.y, 0.0), f * Vector3(p1.x, p1.y, 0.0), f * Vector3(p2.x, p2.y, 0.0), nrm, p0, p1, p2)
+		tri(S_TRIM, col, f * Vector3(p0.x, p0.y, 0.0), f * Vector3(p1.x, p1.y, 0.0), f * Vector3(p2.x, p2.y, 0.0), nrm, p0, p1, p2)
 
 func _begin_run() -> void:
 	if not _in_run:
@@ -338,29 +344,46 @@ func tee_box(length: float = 5.0) -> TrackKit:
 func straight(length: float) -> TrackKit:
 	if length <= 0.0:
 		return self
-	# Abkuerzungs-Oeffnung in diesem Stueck? Dann in drei Teile zerlegen, der mittlere ohne Bande auf der Seite.
+	# Abkuerzungs-Oeffnungen in diesem Stueck (auch mehrere, links und rechts)? Dann an allen Grenzen zerlegen;
+	# jedes Teilstueck bekommt auf der Seite einer Oeffnung keine Bande.
+	var mine: Array[Dictionary] = []
 	for o in openings:
 		var d0: float = float(o["d0"])
 		var d1: float = float(o["d1"])
 		if d0 >= dist - 0.001 and d1 <= dist + length + 0.001 and not bool(o.get("done", false)):
 			o["done"] = true
-			var before: float = d0 - dist
-			var after: float = dist + length - d1
-			_straight_piece(before)
-			var was_l: bool = wall_l
-			var was_r: bool = wall_r
-			if int(o["side"]) < 0:
-				set_walls(false, was_r)
-			else:
-				set_walls(was_l, false)
-			built_openings.append({"xf": xf, "length": d1 - d0, "side": int(o["side"]), "width": width, "d0": d0})
-			_straight_piece(d1 - d0)
-			set_walls(was_l, was_r)
-			_straight_piece(after)
-			return self
-	if not branch:
-		straights.append({"xf": xf, "length": length, "dist": dist, "width": width, "wall_l": wall_l, "wall_r": wall_r})
-	_straight_piece(length)
+			mine.append(o)
+	if mine.is_empty():
+		if not branch:
+			straights.append({"xf": xf, "length": length, "dist": dist, "width": width, "wall_l": wall_l, "wall_r": wall_r})
+		_straight_piece(length)
+		return self
+	var cuts: Array[float] = [dist, dist + length]
+	for o in mine:
+		cuts.append(float(o["d0"]))
+		cuts.append(float(o["d1"]))
+	cuts.sort()
+	var was_l: bool = wall_l
+	var was_r: bool = wall_r
+	for i in cuts.size() - 1:
+		var a: float = cuts[i]
+		var b: float = cuts[i + 1]
+		var open_l := false
+		var open_r := false
+		for o in mine:
+			if not bool(o.get("_built", false)) and absf(dist - float(o["d0"])) < 0.002:
+				o["_built"] = true
+				built_openings.append({"xf": xf, "length": float(o["d1"]) - float(o["d0"]), "side": int(o["side"]), "width": width, "d0": float(o["d0"])})
+			if a >= float(o["d0"]) - 0.001 and b <= float(o["d1"]) + 0.001:
+				if int(o["side"]) < 0:
+					open_l = true
+				else:
+					open_r = true
+		if b - a <= 0.001:
+			continue
+		set_walls(was_l and not open_l, was_r and not open_r)
+		_straight_piece(b - a)
+	set_walls(was_l, was_r)
 	return self
 
 func _straight_piece(length: float) -> void:
