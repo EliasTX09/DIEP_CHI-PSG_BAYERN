@@ -458,6 +458,7 @@ func _stage_shortcuts() -> void:
 			c.queue_free()
 			await _frames(2)
 			continue
+		print("[SMOKE] %s Planer: %s" % [id, str(CourseBuilder3D.plan_stats)])
 		found += 1
 		total += c.shortcuts.size()
 		if c.shortcuts.size() >= 2:
@@ -533,7 +534,7 @@ func _stage_shortcuts() -> void:
 						if ball.state != Ball3D.State.MOVING and ball.state != Ball3D.State.OUT and fr > 10:
 							break
 					var real := {"holed": ball.state == Ball3D.State.HOLED, "out": ball.state != Ball3D.State.IDLE and ball.state != Ball3D.State.HOLED,
-						"end_pos": ball.global_position}
+						"end_pos": ball.global_position, "launched": ball.shortcut_launches > 0}
 					var pred_res: Dictionary = ShotSim.run(c, space, start, dir * order[k], {"max_time": 12.0, "profile": strong})
 					real_txt.append("%.1f m/s: echt %s (Scheitel %.1f m, Absprung %d x), Vorhersage %s (Scheitel %.1f m)" % [order[k], _shot_txt(c, real), apex,
 						ball.shortcut_launches, _shot_txt(c, pred_res), _apex_of(pred_res)])
@@ -556,6 +557,9 @@ func _stage_shortcuts() -> void:
 ## Ist der Ball (Ergebnis von ShotSim.run oder echter Ball) im Ziel der Abkuerzung gelandet? Gruen: liegt auf dem Gruen
 ## bzw. im Loch; Fairway: liegt auf der Hauptbahn ab kurz vor dem Ziel-Stueck, auf dessen Hoehe.
 func _in_target(c: Course3D, sc: Dictionary, res: Dictionary) -> bool:
+	# nur ein Ball, der wirklich von der Rampe abgesprungen ist (sonst zaehlt "zurueckgerollt auf die Hauptbahn" mit)
+	if not bool(res.get("launched", false)):
+		return false
 	if bool(res.get("holed", false)):
 		return true
 	if bool(res.get("out", false)):

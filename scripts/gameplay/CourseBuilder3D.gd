@@ -42,7 +42,8 @@ const LANE_LEN := 7.0
 const LANE_WIDTH := 2.4
 const OPENING_LEN := 5.4
 ## Rampe am Steg-Ende (TrackKit.kicker): Bogenlaenge und moegliche Absprungwinkel in Grad.
-const KICK_LEN := 4.0
+## (6 m statt 4 m: bei starker Kruemmung gab Jolt schnellen Baellen etwas Tempo dazu - sie flogen hoeher als vorhergesagt)
+const KICK_LEN := 6.0
 ## (nicht zu steil: wer steil landet, springt beim Aufprall ueber die Bande des Ziels)
 const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0, 40.0]
 ## Tempo-Klassen, gemessen am Tor (Einfahrt in den Steg), fuer den vorderen Rand des Landefensters, in m/s.
@@ -208,6 +209,11 @@ static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 							cands.append(cnd)
 				u += 1.1
 	plan_stats["kandidaten"] = cands.size()
+	var n_power := 0
+	for cd in cands:
+		if str(cd["cls"]) == "power":
+			n_power += 1
+	plan_stats["kandidaten_power"] = n_power
 	cands.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return float(x["score"]) > float(y["score"]))
 	var out: Array[Dictionary] = []
 	for want: String in ["easy", "power", ""]:
