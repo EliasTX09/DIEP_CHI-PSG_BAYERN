@@ -270,7 +270,7 @@ static func gate_speed(v_lip: float, lane_len: float, th: float) -> float:
 		return INF
 	var g: float = Gadgets.gravity()
 	var v: float = v_lip
-	var n := 40
+	var n := 16
 	var ds: float = KICK_LEN / float(n)
 	for i in n:
 		var phi: float = th * (1.0 - (float(i) + 0.5) / float(n))

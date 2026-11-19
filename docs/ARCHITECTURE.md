@@ -35,6 +35,7 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
 ### Match-Konfiguration (`GameManager.match_config`)
 ```
 { mode: "quick"|"private"|"daily"|"practice", world, rounds, courses: [ids], seed, online: bool,
+  fee: Einsatz der Arena (nur quick/private), stake: tatsaechlich eingezahlt (setzt GameManager.pay_stake beim Start),
   players: [ {id, name, kind: "local"|"bot"|"remote", color, ball, trail, explosion, frame, skill, trophies} ] }
 ```
 
@@ -43,7 +44,7 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Feld-Effekte werden in `_integrate_forces` berechnet – identisch zur Vorhersage in `ShotSim`.
 - Abprallen: Boden 0,45 · Banden 0,75 (zwei getrennte StaticBodies: `floor_body`, `wall_body`).
 - **Gadgets** (Boost, Wind, Sand, Rough, Bach, Teleporter, Looping-Schiene, Kanone, Laser, Kill-Zonen,
-  Abkürzungs-Schanze + Landezone, Gelände-Grenze) sind analytische Volumen mit `affect(state, dt)`.
+  Abkürzungs-Rampen-Markierung `RampTag`, Gelände-Grenze) sind analytische Volumen mit `affect(state, dt)`.
   Der echte Ball und die Simulation rufen dieselbe Funktion auf.
 - **Aus (Out of Bounds):** `Gadgets.TerrainBounds` prüft gegen das Höhenfeld des Geländes: berührt der Ball den
   Randstreifen, einen Hang oder eine Schlucht neben der Bahn, ist er „aus“ (Strafschlag, zurück zur letzten Ruhelage).
@@ -61,12 +62,19 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Flug-Korridore unter Sprüngen, alle geraden Stücke und kann Banden-Öffnungen aussparen. Im `branch`-Modus baut er
   Nebenstränge (Abkürzungs-Steg), ohne Mittellinie, Stützen oder Bounds der Bahn zu verändern.
 - `CourseBuilder3D` – definiert die 15 Bahnen + Daily-Parcours und liefert ein `Course3D`. Baut jede Bahn zweimal:
-  ein Probelauf sucht die Stelle für die **Abkürzung** (gerades Stück mit Bande, Steg 5–9,5 m, Flug auf das Grün oder
-  ein späteres Fairway-Stück, kreuzt keine anderen Bahnteile, hält Abstand zu Hindernissen), der zweite Lauf baut sie:
-  Banden-Öffnung, schmaler Steg ohne Banden über einer Schlucht, Felsentor mit Kollision, Schanze
-  (`Gadgets.Launcher`: fester ballistischer Flug inkl. Luftwiderstands-Ausgleich, nur mit Schwung und mittig auf dem
-  Steg) und Landezone (`Gadgets.LandingZone`: fängt den Ball weich ab). Ohne Abkürzung: e1 (gerade Einsteiger-Bahn) und
-  der Golden Shot. Hindernisse auf der Bahn: Bach mit Holzsteg (`Gadgets.Creek`), Rough (`Gadgets.RoughZone`),
+  ein Probelauf sucht Stellen für bis zu drei **Abkürzungs-Rampen** (`_plan_shortcuts`), der zweite Lauf baut sie.
+  Eine Abkürzung = Banden-Öffnung in einem geraden Stück, schmaler Steg ohne Banden (5–9,5 m), Felsentor mit
+  Kollision, am Ende eine echte Rampe (`TrackKit.kicker`, 4 m Bogen, 20/26/32° Absprung) und eine Schlucht unter dem
+  Flug. Kein Boost, keine Landezone: Der Ball fliegt rein physikalisch geradeaus in Steg-Richtung weiter, also muss das
+  Ziel (Grün oder ein späteres, beidseitig umbandetes Fairway-Stück) genau in dieser Richtung liegen. Der Planer
+  berechnet das Landefenster entlang der Fluglinie, das nötige Absprung-Tempo (`takeoff_speed`, Wurfparabel + Aufschlag
+  für Luftwiderstand) und rechnet es rückwärts über Rampe und Steg auf das Tempo am Tor zurück (`gate_speed`, gleicher
+  Rollwiderstand wie `Ball3D`). Klassen: normal (Landemitte mit ≤ 28 m/s am Tor) und **Power** (schon der vordere
+  Landerand braucht 31,5–37 m/s – mehr als der Startschläger mit ~31 m/s; `need_power` = nötige Schlagkraft direkt am
+  Tor). Gewählt wird die beste normale, die beste Power-Rampe, dann weitere, jede an einem eigenen geraden Stück und
+  mit Abstand zu den anderen. Power-Tore tragen rot glühende Bänder, Schrift gibt es keine. `Gadgets.RampTag` an der
+  Rampenkante verändert den Ball nicht, sondern meldet nur „launch“ (Style-Punkte, Statistik, Bot-Planung). Ohne
+  Abkürzung: e1 (gerade Einsteiger-Bahn) und der Golden Shot. Hindernisse auf der Bahn: Bach mit Holzsteg (`Gadgets.Creek`), Rough (`Gadgets.RoughZone`),
   Baumstämme und Felsbrocken (`Obstacles.log_obstacle/boulder`), Lianen-Bögen (Deko).
   **Natur am Bahnrand** (`CourseBuilder3D._edge_nature`, nach dem Gelände, immer gebaut, Seed nur aus der Bahn-ID →
   in jedem Match und im Test identisch): entlang aller ebenen Querschnitte der Hauptbahn mit Bande stehen Randbäume (`Obstacles.edge_tree`), mindestens 40 % davon mit einem dicken Ast quer
@@ -77,7 +85,7 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   Shot haben keine Rand-Natur, Par-4-Bahnen nur Bäume (keine Wurzeln/Felsen auf der Bahn). Der Smoke-Test prüft Quote,
   Höhe (Ball-Kugel passt drunter durch), Kollision der Äste und dass unter jeder Astspitze Bahnbelag liegt.
 - `Course3D` – Tee-Transform, Loch-Position, Par, Mittellinie (`path_points`), Gadgets, Kill-Höhe, Kollisions-Körper,
-  Belag-Proben, Flug-Korridore, Gelände (`terrain`) und Abkürzung (`shortcut`).
+  Belag-Proben, Flug-Korridore, Gelände (`terrain`) und Abkürzungen (`shortcuts`, `shortcut` = die erste).
 - `Terrain3D` – Höhenfeld (2,5-m-Raster, 80 m Rand) um die Bahn: Abstandsfeld zur Bahn (Chamfer), flacher Randstreifen
   knapp unter dem Belag, Böschungen, Felsterrassen (Klippen), Bergrücken, Schluchten unter Korridoren und Stücken ohne
   Bande, Küstenseite (Piratenbucht). Hängt nur von der Bahn-Geometrie und einem festen Seed ab (für alle Spieler gleich).
@@ -190,11 +198,30 @@ Ende:    GameManager.finish_match(summary) -> Belohnungen -> GameManager.goto_me
   wieder sperrt und bestehende Spielstände nichts verlieren. Gesperrt ist nur das Starten (Bots, Schnellspiel, eigene
   Lobby); Einladungen in Lobbys anderer bleiben möglich. Die Welttour bei vielen Runden läuft offline nur durch offene
   Arenen.
-- Keine Bot-Auswahl mehr: `GameManager.auto_bot_count()` (2–4 je nach Trophäen). `SmartBotController` ist eine dünne
-  Steuerschicht über `BotBrain`: Bahn-Trophäen des Spielers → Können-Bonus (bis +0,15) und Wahrscheinlichkeit, mit
-  der ein Bot pro Schlag die Abkürzung in Betracht zieht (0 unter 20, 1 ab 160 Bahn-Trophäen). Ist sie für einen
-  Schlag nicht erlaubt, wertet `BotBrain._score` jede Vorhersage mit Schanzen-Flug (`ShotSim.result.launched`) wie
-  einen Fehlschlag.
+- Keine Bot-Auswahl mehr: `GameManager.auto_bot_count()` = 4 (jedes Match hat `Catalog.MAX_PLAYERS` = 5 Spieler).
+  `SmartBotController` ist eine dünne Steuerschicht über `BotBrain`: Bahn-Trophäen des Spielers → Können-Bonus (bis
+  +0,15 ab 100) und Wahrscheinlichkeit, mit der ein Bot pro Schlag eine Abkürzung in Betracht zieht (0 unter 6, 1 ab 50
+  Bahn-Trophäen). Erlaubt: zusätzliche Kandidaten geradeaus auf die Kante jeder Rampe vor dem Ball (4 Kräfte); nicht
+  erlaubt: `BotBrain._score` wertet jede Vorhersage mit Rampen-Absprung (`ShotSim.result.launched`) wie einen
+  Fehlschlag. Bedenkzeit 0,3–1,2 s; alle rechnenden Bots teilen sich ein Budget von 4 ms pro Bild (`Match3D`
+  reicht den Rest weiter, wenn einer fertig ist).
+
+## Einsatz, Auszahlung, Lochende
+- Jede Arena hat einen Einsatz (`Catalog.WORLDS[].fee`: 100 / 250 / 500 / 1000). `GameManager.make_match_config`
+  setzt `fee` für „quick“ und „private“, `start_match` → `pay_stake` zieht ihn genau einmal ab (wer online nach einem
+  Arena-Wechsel zu wenig hat, zahlt, was er hat; `stake` = tatsächlich eingezahlt). Die Menüs starten nur, wenn das Geld
+  reicht (`can_pay_fee`).
+- `finish_match`: Auszahlung `Catalog.payout_for_rank(rank, stake)` = Einsatz × 2 / 1,5 / 1,25 / 1 / 0 (plus Ball-Bonus
+  „+x % Coins“), Trophäen `Catalog.RANK_TROPHIES` = +9 / +5 / +3 / 0 / −3 – im Modus „private“ (Freunde-Lobby) keine.
+  Style-Punkte geben Pass-XP, aber keine Match-Coins mehr.
+- Freunde-Lobby: `NetworkManager.common_worlds()` = Arenen, die alle im Raum offen haben (Presence trägt `best`, die
+  beste Trophäenzahl); der Host kann nur diese wählen, beim Beitritt eines Spielers ohne die Arena wechselt er
+  automatisch auf die höchste gemeinsame. Freie Plätze füllen immer Bots auf 5.
+- Lochende (`Match3D`): Alle Bälle starten auf demselben Abschlag-Punkt (Bälle kollidieren nicht miteinander). Locht
+  der Erste ein (`_on_holed_first`, auch für Online-Gegner), sinkt die Restzeit auf `FOLLOW_UP_TIME` = 20 s. Wer bis
+  zum Bahn-Ende nicht eingelocht hat, bekommt `_missed_strokes` = Schläge des schlechtesten Eingelochten + 2 (nie
+  weniger als die eigenen); hat niemand eingelocht, gilt weiter Par + 3. Online sendet „done“ zusätzlich die
+  tatsächlich gespielten Schläge („r“), damit jeder Client gleich rechnet.
 
 ## Battle Pass
 - Kostenlos, Saisons zu 28 Tagen ab 05.01.2026 (`Catalog.pass_season_at`), 30 Stufen à 150 XP (`Catalog.PASS_TIERS`).

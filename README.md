@@ -1,8 +1,8 @@
 # ⛳ Golf Battle 3D – Arcade-Multiplayer-Minigolf für Android (Godot 4)
 
 Echtes 3D-Arcade-Minigolf: 15 Bahnen in 4 Welten, eingebettet in Täler mit Bergen, Klippen, Wäldern und Schluchten,
-riskante Abkürzungen, Loopings, Kanonen, Teleporter, Hämmer, Bäche, Lava und Wasser,
-bis zu 6 Spieler gleichzeitig, Bots für den Offline-Modus, Schlägertasche mit Upgrades, Truhen, Ligen
+Abkürzungs-Rampen, Loopings, Kanonen, Teleporter, Hämmer, Bäche, Lava und Wasser,
+immer 5 Spieler pro Match (freie Plätze füllen Bots), Einsatz pro Welt, Schlägertasche mit Upgrades, Truhen, Ligen
 und ein täglicher „Golden Shot“. **Alles** – Bahnen, Modelle, Effekte, Shader und Sounds – wird per Code erzeugt.
 Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 
@@ -13,7 +13,7 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 
 > **Umbau-Stand:** Hochformat-Hauptmenü (Arena-Auswahl mit 3D-Hintergrund, Tab-Leiste Spielen · Tasche · Pass ·
 > Freunde · Shop, Account-Knopf), Hochformat-HUD, kostenloser Battle Pass (28-Tage-Saisons, 30 Stufen), Bahnen in
-> Berg-Tälern, eine riskante Abkürzung pro Bahn, Hindernisse auf der Bahn, Randbäume mit Ästen über der Bahn,
+> Berg-Tälern, Abkürzungs-Rampen (mehrere pro Bahn, teils nur mit starkem Schläger), Hindernisse auf der Bahn, Randbäume mit Ästen über der Bahn,
 > Wurzeln und Felsen, neue Bäume (Stamm + Kronen-Cluster), Ruinen, Golfball mit Dellen, Squash & Stretch,
 > federndes Gummiband, Trophäen pro Bahn, Arena-Sperren, adaptive Bots und Mehrfach-Einladungen sind fertig.
 > Ziel-Kamera mit Tiefenunschärfe und Feder-Führung, leuchtende Punkt-Kette entlang des Flugbogens und
@@ -163,12 +163,14 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
   Bergrücken mit Schnee, ein Bergkranz im Nebel, Tannen-/Laub-/Palmenwälder bzw. tote Bäume und Hochhäuser (Neon),
   Wasserfall-Kaskade oder Lavastrom, Piratenbucht mit Meer und Schiff. Unter Sprüngen und Stücken ohne Bande klafft
   eine Schlucht. Wer das Gelände neben der Bahn berührt, ist **aus** (+1 Strafschlag).
-- **Abkürzungen:** Auf jeder Bahn außer der geraden Einsteiger-Bahn e1 (und dem Golden Shot) gibt es eine Öffnung in
-  der Bande: ein schmaler Steg ohne Banden führt über eine Schlucht durch ein Felsentor zu einem Sprungpad, das den
-  Ball mit Schwung aufs Grün (bzw. ein späteres Fairway-Stück) schießt. Vom Steg gerollt = Schlucht = Aus, zu
-  langsam = der Ball bleibt auf dem Steg; wer seitlich versetzt oder mit falschem Tempo aufs Pad kommt, landet versetzt.
+- **Abkürzungen (Rampen):** Bis zu drei pro Bahn (nicht auf der geraden Einsteiger-Bahn e1 und im Golden Shot), jede
+  an einer eigenen Öffnung in der Bande: ein schmaler Steg ohne Banden führt durch ein Felsentor zu einer **Rampe**.
+  Es gibt keinen Boost und kein Zielflug – wie weit der Ball fliegt, ergibt sich nur aus dem Tempo, mit dem er die
+  Rampe hinauffährt, und geflogen wird geradeaus in Rampen-Richtung. Zu langsam = zu kurz (Schlucht = Aus), zu
+  schnell = zu weit, schräg angespielt = vom Steg gerollt. **Power-Rampen** (rot glühende Bänder am Tor) brauchen mehr
+  Tempo, als der Startschläger hergibt – die schafft man nur mit einem Schläger mit hoher Schlagkraft.
 - **Hindernisse:** Bäche quer über die Bahn mit schmalem Holzsteg, tiefes Rough am Rand, Baumstämme und Felsbrocken,
-  Lianen-Bögen, Sandbunker. Am Bahnrand stehen Bäume, von denen mindestens 40 % einen dicken Ast quer über die Bahn
+  Lianen-Bögen, Sandbunker (geschwungener Umriss, gerechte Rillen, dunklerer Rand). Am Bahnrand stehen Bäume, von denen mindestens 40 % einen dicken Ast quer über die Bahn
   strecken (2,55 m hoch: gerollte Bälle passen drunter durch, hohe Chips prallen ab), knorrige Wurzeln und Felsen
   ragen in die Bahn (echte Kollision, der Ball hüpft drüber oder prallt ab). Laub, Lianen, Grasbüschel und lose Steine
   sind nur Optik.
@@ -179,21 +181,28 @@ einen eigenen Android-Build mit Intent-Filter. Der Code wird deshalb abgetippt.
   Gerstner-Wellen, Golfball mit ~330 Dellen und Klarlack, Squash & Stretch, Staubwolke + Kamerawackeln bei harten
   Abprallern, weiche Schatten („Soft High“), Kantenglättung SMAA. SSAO und volumetrischer Nebel gibt es im Mobile-Renderer
   nicht (siehe Ehrlicher Status).
+- **Spielen & Einsatz:** SPIELEN öffnet das Lobby-Menü mit allen Welten. Jede Welt hat ihren eigenen Einsatz
+  (Emerald 100 · Volcano 250 · Neon 500 · Pirate 1000 Coins), der beim Start eingezahlt wird. Es spielen immer
+  5 Spieler. Auszahlung nach Platz: 1. doppelter Einsatz · 2. 1,5-fach · 3. 1,25-fach · 4. Einsatz zurück ·
+  5. nichts. Trophäen: +9 / +5 / +3 / 0 / −3. **Mit Freunden** (Lobby mit Raum-Code) geht es nur um Coins, nicht um
+  Trophäen, und spielbar sind nur Welten, die alle im Raum freigeschaltet haben.
+- **Lochende:** Alle starten an derselben Stelle. Sobald der Erste eingelocht hat, haben alle anderen noch
+  20 Sekunden. Wer dann nicht im Loch ist, bekommt die Schläge des schlechtesten Eingelochten + 2.
 - **Arenen & Trophäen:** Arena 1 ist offen, die weiteren ab 150 / 400 / 800 Trophäen (beste erreichte Zahl).
   Jede Bahn führt eigene Trophäen (Aufteilung der Match-Trophäen nach deiner Platzierung auf der Bahn).
-- **Bots:** keine manuelle Auswahl – 2 bis 4 Bots je nach Trophäen. Sie planen jeden Schlag mit der echten
-  Physik-Simulation; je mehr Trophäen du auf einer Bahn hast, desto genauer spielen sie dort und desto öfter
-  wagen sie die Abkürzung (unter 20 Bahn-Trophäen nie).
+- **Bots:** keine manuelle Auswahl – immer so viele, dass 5 Spieler am Start sind. Sie planen jeden Schlag mit der
+  echten Physik-Simulation (kurze Bedenkzeit); je mehr Trophäen du auf einer Bahn hast, desto genauer spielen sie
+  dort und desto öfter nehmen sie eine Abkürzungs-Rampe (unter 6 Bahn-Trophäen nie).
 - **Bahn-Baukasten:** Rampen, Steilkurven, Spiralen, Loopings, Brücken, Lücken, Boost-Pads, Windzonen, Teleporter,
   Kanonen, Laser-Tore, Sandbunker, Windmühlen, Pendel-Hämmer, Schiebeblöcke, fahrende Plattformen.
 - **Multiplayer:** Gast-Login per Geräte-ID, Verknüpfen mit E-Mail/Passwort, Spielername, Avatar-Farbe und -Rahmen,
-  bis zu 6 Spieler gleichzeitig (alle schlagen parallel), Live-Rangliste, Emotes, Freunde (Suche per Name oder
+  5 Spieler pro Match (alle schlagen parallel, freie Plätze füllen Bots), Live-Rangliste, Emotes, Freunde (Suche per Name oder
   Freundes-Code, Anfragen, Online-Status), private Lobby mit 4-stelligem Raum-Code oder Einladung (mehrere Freunde
   auf einmal ankreuzen), Welt und 3/5/9 Runden.
 - **Progression:** 16 Schläger (4 Kategorien × 4 Seltenheiten, Werte Power/Accuracy/Spin/Guide, Upgrades mit Coins + Karten),
   6 Bälle mit kleinen Boni, 6 Trails, 5 Loch-Explosionen mit Screen-Shake und Bass, 4 Truhen-Slots mit Timern
   (oder sofort per Gems), Trophäen, 5 Ligen und Trophäen-Pfad.
-- **Extras:** Style-Punkte („Air Time!“, „Bank Shot!“, „Close Call!“, Hole-in-One) mit Bonus-Coins,
+- **Extras:** Style-Punkte („Air Time!“, „Bank Shot!“, „Close Call!“, Hole-in-One) für Pass-XP,
   Golden Shot (ein Schlag pro Tag, Belohnung nach Abstand zur Fahne), Replay des besten Schlags in Zeitlupe.
 - **Sound:** prozeduraler Synthesizer (`AudioStreamGenerator`) – Abschlag je nach Kraft, Abpraller auf Holz/Stein/Metall,
   Wind bei hohen Sprüngen, Wasser-/Lava-Platscher, Loch-Sound + Fanfare, UI-Klicks, Truhen-Jingle.
