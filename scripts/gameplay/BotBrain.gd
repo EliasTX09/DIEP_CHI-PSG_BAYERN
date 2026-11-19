@@ -8,8 +8,8 @@ extends RefCounted
 
 enum Phase { WAIT, DELAY, SEARCH, AIMED }
 
-## Rechenzeit pro Aufruf von think() in Mikrosekunden (Tests setzen das hoch).
-static var time_budget_usec: int = 2500
+## Rechenzeit pro Bild in Mikrosekunden, die sich alle rechnenden Bots teilen (Tests setzen das hoch).
+static var time_budget_usec: int = 4000
 ## Vorlauf (s) zwischen Planung und geplantem Abschlag auf Bahnen mit beweglichen Teilen.
 const PLAN_LEAD := 0.8
 ## Unterhalb dieses Koennens spielt ein Bot mit Anfaenger-Fehlern (weakness() > 0); ab hier aendert sich nichts.
@@ -103,7 +103,8 @@ func update(delta: float) -> void:
 		Phase.WAIT:
 			_learn_from_last_shot()
 			phase = Phase.DELAY
-			_timer = lerpf(2.2, 0.8, skill) + _rng.randf_range(0.0, 1.2) + 1.6 * weakness()
+			# kurze Bedenkzeit: Bots sollen zuegig spielen (Anfaenger nur etwas laenger)
+			_timer = lerpf(0.8, 0.3, skill) + _rng.randf_range(0.0, 0.4) + 0.4 * weakness()
 		Phase.DELAY:
 			_timer -= delta
 			if _timer <= 0.0:
@@ -126,11 +127,12 @@ func update(delta: float) -> void:
 					return
 			_shoot()
 
-## Rechnet an den Kandidaten weiter (hoechstens time_budget_usec lang).
-func think(space: PhysicsDirectSpaceState3D) -> void:
+## Rechnet an den Kandidaten weiter (hoechstens budget_usec lang, Standard: time_budget_usec).
+func think(space: PhysicsDirectSpaceState3D, budget_usec: int = -1) -> void:
 	if phase != Phase.SEARCH or space == null:
 		return
 	var t_start: int = Time.get_ticks_usec()
+	var budget: int = budget_usec if budget_usec > 0 else time_budget_usec
 	while phase == Phase.SEARCH:
 		if _sim == null:
 			if _index >= _candidates.size():
@@ -140,7 +142,7 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 					continue
 				_pick_like_a_beginner()
 				phase = Phase.AIMED
-				_timer = 0.25
+				_timer = 0.15
 				_shoot_at = _plan_time + float(_best.get("dt", 0.0))
 				# Vorlauf an die tatsaechliche Rechendauer anpassen (gemessen in Bahn-Zeit)
 				last_search_time = course.time - _search_started
@@ -165,7 +167,7 @@ func think(space: PhysicsDirectSpaceState3D) -> void:
 				_best_pred = pred
 			_sim = null
 			_index += 1
-		if Time.get_ticks_usec() - t_start > time_budget_usec:
+		if Time.get_ticks_usec() - t_start > budget:
 			return
 
 ## Anfaenger (weakness() > 0) nehmen nicht den besten Schlag, sondern zufaellig einen der "auch ganz guten":

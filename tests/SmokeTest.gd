@@ -137,7 +137,12 @@ func _stage_catalog() -> void:
 			check(list.size() == rounds and uniq.size() == rounds, "Bahnliste %s/%d eindeutig" % [w, rounds])
 			check(Catalog.world_of_course(list[0]) == w, "Bahnliste startet in gewaehlter Welt: " + w)
 	check(Catalog.build_course_list("neon", 9, 5) == Catalog.build_course_list("neon", 9, 5), "Bahnliste deterministisch per Seed")
-	check(Catalog.trophies_for_rank(1, 6) > 0 and Catalog.trophies_for_rank(6, 6) < 0, "Trophaeen: Sieg plus, Letzter minus")
+	check([1, 2, 3, 4, 5].map(func(r: int) -> int: return Catalog.trophies_for_rank(r, 5)) == [9, 5, 3, 0, -3], "Trophaeen nach Platz: 9 / 5 / 3 / 0 / -3")
+	check(Catalog.MAX_PLAYERS == 5 and [1, 2, 3, 4, 5].map(func(r: int) -> int: return Catalog.payout_for_rank(r, 100)) == [200, 150, 125, 100, 0],
+		"Auszahlung: doppelt / 1,5-fach / 1,25-fach / Einsatz zurueck / nichts (5 Spieler)")
+	var fees: Array = Catalog.world_ids().map(func(w: String) -> int: return Catalog.world_fee(w))
+	check(fees.size() == 4 and int(fees[0]) > 0 and int(fees[0]) < int(fees[1]) and int(fees[1]) < int(fees[2]) and int(fees[2]) < int(fees[3]),
+		"Jede Welt hat ihren eigenen Einsatz (%s)" % str(fees))
 	check(Catalog.league_for(0)["id"] == "bronze" and Catalog.league_for(2500)["id"] == "champion", "Ligen-Grenzen")
 
 # ---------------------------------------------------------------- GameManager
@@ -902,7 +907,7 @@ func _stage_match() -> void:
 	cfg["courses"] = ["e1", "n1"]
 	cfg["rounds"] = 2
 	var trophies_before := GameManager.trophies()
-	BotBrain.time_budget_usec = 2500   # Produktions-Rechenbudget
+	BotBrain.time_budget_usec = 4000   # Produktions-Rechenbudget
 	# Beobachtung waehrend der Partie: Ist der eigene Ball fertig, darf nie die Vogelperspektive kommen
 	var seen := {"top": 0, "watching": 0, "wrong": 0}
 	var m: Match3D = await _run_match(cfg, true, 420.0, func(mm: Match3D) -> void:
@@ -1537,6 +1542,28 @@ func _stage_battle_pass() -> void:
 	check(GameManager.describe_rewards(mr).has("+112 Pass-XP"), "Pass-XP in der Belohnungsliste")
 	GameManager.match_config = {"mode": "practice"}
 	check(int(GameManager.finish_match({"rank": 1, "players": 1}).get("pass_xp", 0)) == Catalog.PASS_XP_PRACTICE, "Training gibt wenig Pass-XP")
+	# Einsatz: wird beim Start eingezahlt, ausgezahlt nach Platz; mit Freunden gibt es keine Trophaeen
+	GameManager.reset_progress()
+	var bm: Dictionary = GameManager.make_bot_match("emerald", 3)
+	var fee_e: int = Catalog.world_fee("emerald")
+	check((bm["players"] as Array).size() == 5 and int(bm["fee"]) == fee_e, "Bot-Match: immer 5 Spieler, Einsatz der Arena (%d)" % fee_e)
+	GameManager.pay_stake(bm)
+	GameManager.pay_stake(bm)
+	check(GameManager.coins() == 500 - fee_e and int(bm["stake"]) == fee_e, "Einsatz wird genau einmal eingezahlt (Coins %d)" % GameManager.coins())
+	GameManager.match_config = bm
+	var r2: Dictionary = GameManager.finish_match({"rank": 2, "players": 5, "style_points": 300, "holes_in_one": 0, "strokes": 9, "holes": 3})
+	check(int(r2.get("coins", 0)) == Catalog.payout_for_rank(2, fee_e) and GameManager.coins() == 500 - fee_e + Catalog.payout_for_rank(2, fee_e) and int(r2.get("trophies", 0)) == 5,
+		"Platz 2: 1,5-facher Einsatz zurueck und +5 Trophaeen (Coins %d, %s)" % [GameManager.coins(), str(r2)])
+	var pm: Dictionary = GameManager.make_match_config("private", "emerald", 3, [GameManager.local_player_entry()], 7, true)
+	GameManager.pay_stake(pm)
+	GameManager.match_config = pm
+	var t_before: int = GameManager.trophies()
+	var r5: Dictionary = GameManager.finish_match({"rank": 1, "players": 5, "style_points": 0, "holes_in_one": 0, "strokes": 7, "holes": 3})
+	check(int(r5.get("coins", 0)) == fee_e * 2 and not r5.has("trophies") and GameManager.trophies() == t_before,
+		"Freunde-Lobby: Sieg verdoppelt den Einsatz, keine Trophaeen (%s)" % str(r5))
+	GameManager.data["coins"] = 10
+	var poor: Dictionary = GameManager.make_bot_match("pirate", 3)
+	check(not GameManager.can_pay_fee("pirate") and GameManager.pay_stake(poor) == 10 and GameManager.coins() == 0, "Zu wenig Coins: es wird nur eingezahlt, was da ist")
 	GameManager.last_match_rewards = {}
 	# Kaputter Speicherstand wird repariert
 	GameManager.data["pass"] = "kaputt"

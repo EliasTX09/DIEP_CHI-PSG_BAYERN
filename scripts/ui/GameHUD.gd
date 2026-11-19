@@ -682,10 +682,14 @@ func show_match_results(rows: Array, rewards: Dictionary, headline: String) -> v
 func _reward_lines(box: VBoxContainer, rewards: Dictionary) -> void:
 	if rewards.has("trophies") and int(rewards["trophies"]) != 0:
 		box.add_child(_reward_line("trophy", "%+d Trophäen" % int(rewards["trophies"]), UIKit.GOLD if int(rewards["trophies"]) > 0 else UIKit.RED))
-	if int(rewards.get("coins", 0)) > 0:
+	if rewards.has("stake"):
+		# Einsatz-Match: eingezahlt -> ausgezahlt (Platz 5 bekommt nichts zurueck)
+		var paid_in: int = int(rewards["stake"])
+		var paid_out: int = int(rewards.get("coins", 0))
+		box.add_child(_reward_line("coin", "Einsatz %d → %d Coins (%+d)" % [paid_in, paid_out, paid_out - paid_in],
+			UIKit.GOLD if paid_out > paid_in else (UIKit.TEXT if paid_out == paid_in else UIKit.RED)))
+	elif int(rewards.get("coins", 0)) > 0:
 		box.add_child(_reward_line("coin", "+%d Coins" % int(rewards["coins"]), UIKit.TEXT))
-	if int(rewards.get("style_coins", 0)) > 0:
-		box.add_child(_reward_line("star", "davon %d Style-Bonus" % int(rewards["style_coins"]), Color(0.4, 1.0, 0.9)))
 	if int(rewards.get("gems", 0)) > 0:
 		box.add_child(_reward_line("gem", "+%d Gems" % int(rewards["gems"]), UIKit.TEXT))
 	if str(rewards.get("chest", "")) != "":

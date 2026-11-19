@@ -362,30 +362,39 @@ static func pass_reward_icon(tier_index: int) -> String:
 	return "coin"
 
 # ---------------------------------------------------------------- Match-Belohnungen
-const RANK_COINS: Array[int] = [120, 80, 55, 40, 30, 20]
+## Jedes Match hat 5 Spieler. Jeder zahlt beim Start den Einsatz der Arena ein (WORLDS[].fee);
+## ausgezahlt wird ein Vielfaches davon nach dem Platz: 1. doppelt, 2. 1,5-fach, 3. 1,25-fach, 4. zurueck, 5. nichts.
+const PAYOUT_MULT: Array[float] = [2.0, 1.5, 1.25, 1.0, 0.0]
+## Trophaeen nach Platz (in der Freunde-Lobby gibt es keine - dort geht es nur um Coins).
+const RANK_TROPHIES: Array[int] = [9, 5, 3, 0, -3]
 
 static func trophies_for_rank(rank: int, player_count: int) -> int:
 	if player_count <= 1:
 		return 0
-	var p: float = float(rank - 1) / float(player_count - 1)
-	return int(round(lerpf(30.0, -16.0, p)))
+	return RANK_TROPHIES[clampi(rank - 1, 0, RANK_TROPHIES.size() - 1)]
 
-static func coins_for_rank(rank: int) -> int:
-	return RANK_COINS[clampi(rank - 1, 0, RANK_COINS.size() - 1)]
+## Auszahlung fuer einen Platz bei einem eingezahlten Einsatz.
+static func payout_for_rank(rank: int, stake: int) -> int:
+	return int(round(float(maxi(0, stake)) * PAYOUT_MULT[clampi(rank - 1, 0, PAYOUT_MULT.size() - 1)]))
+
+## Einsatz (Coins) fuer ein Match in dieser Arena.
+static func world_fee(id: String) -> int:
+	return int(world_by_id(id).get("fee", 0))
 
 # ---------------------------------------------------------------- Welten & Bahnen
 const WORLDS: Array[Dictionary] = [
-	{"id": "emerald", "name": "Emerald Valley", "courses": ["e1", "e2", "e3", "e4", "e5"], "unlock": 0,
+	{"id": "emerald", "name": "Emerald Valley", "courses": ["e1", "e2", "e3", "e4", "e5"], "unlock": 0, "fee": 100,
 		"desc": "Grüne Hügel, Holzbrücken, Windmühlen", "color": Color(0.25, 0.75, 0.35)},
-	{"id": "volcano", "name": "Volcano Canyon", "courses": ["v1", "v2", "v3", "v4"], "unlock": 150,
+	{"id": "volcano", "name": "Volcano Canyon", "courses": ["v1", "v2", "v3", "v4"], "unlock": 150, "fee": 250,
 		"desc": "Lava, Sprungschanzen, Speed-Booster", "color": Color(0.95, 0.4, 0.15)},
-	{"id": "neon", "name": "Cyber Neon City", "courses": ["n1", "n2", "n3"], "unlock": 400,
+	{"id": "neon", "name": "Cyber Neon City", "courses": ["n1", "n2", "n3"], "unlock": 400, "fee": 500,
 		"desc": "Loopings, Laser, Teleporter", "color": Color(0.2, 0.9, 1.0)},
-	{"id": "pirate", "name": "Pirate Cove", "courses": ["p1", "p2", "p3"], "unlock": 800,
+	{"id": "pirate", "name": "Pirate Cove", "courses": ["p1", "p2", "p3"], "unlock": 800, "fee": 1000,
 		"desc": "Planken, Kanonen, Plattformen", "color": Color(0.95, 0.75, 0.35)},
 ]
 const ROUND_OPTIONS: Array[int] = [3, 5, 9]
-const MAX_PLAYERS := 6
+## Jedes Match hat genau so viele Spieler (fehlende Plaetze fuellen Bots auf).
+const MAX_PLAYERS := 5
 
 static func world_ids() -> Array[String]:
 	var out: Array[String] = []

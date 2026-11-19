@@ -4,7 +4,7 @@ extends Node
 ##
 ##  - Profil: Spielstand, Schlaeger und Inventar werden mit dem angemeldeten Account abgeglichen.
 ##  - Freunde: Suche per Name oder Freundes-Code, Anfragen, Online-Status, Lobby-Einladungen.
-##  - Lobbys: private Raeume mit 4-stelligem Code oder oeffentliches Schnellspiel, bis zu 6 Spieler,
+##  - Lobbys: private Raeume mit 4-stelligem Code oder oeffentliches Schnellspiel, immer 5 Spieler (Rest Bots),
 ##    Welt + Rundenzahl waehlbar, Echtzeit-Sync ueber Supabase Realtime (Broadcast + Presence).
 ##  - Ohne Internet/Backend: alles laeuft offline gegen Bots weiter.
 ##
@@ -54,7 +54,7 @@ var leaderboard: Array = []
 var lobby: Dictionary = {}
 ## Spieler in der Lobby (inkl. mir): [{id, name, frame, color, trophies, ball, trail, explosion}]
 var roster: Array = []
-## Freie Plaetze beim Start mit Bots auffuellen (bis 4 Spieler).
+## Freie Plaetze beim Start mit Bots auffuellen (jedes Match hat Catalog.MAX_PLAYERS = 5 Spieler).
 var fill_bots: bool = true
 
 var _push_timer: float = -1.0
@@ -435,7 +435,11 @@ func join_lobby(code_in: String) -> void:
 		lobby_error.emit("Diese Lobby spielt bereits.")
 		return
 	if int(row.get("player_count", 0)) >= Catalog.MAX_PLAYERS:
-		lobby_error.emit("Die Lobby ist voll (6 Spieler).")
+		lobby_error.emit("Die Lobby ist voll (%d Spieler)." % Catalog.MAX_PLAYERS)
+		return
+	var row_world: String = str(row.get("world", "emerald"))
+	if not GameManager.can_pay_fee(row_world):
+		lobby_error.emit("Für %s brauchst du %d Coins Einsatz." % [str(Catalog.world_by_id(row_world)["name"]), Catalog.world_fee(row_world)])
 		return
 	lobby = {"code": code, "host_id": str(row.get("host_id", "")), "world": str(row.get("world", "emerald")),
 		"rounds": int(row.get("rounds", 3)), "is_public": bool(row.get("is_public", false))}
@@ -470,9 +474,34 @@ func start_bot_match(world_id: String, rounds: int, bots: int = 3) -> void:
 	match_starting.emit(config)
 	GameManager.start_match(config)
 
-## Host: Welt/Runden aendern.
+## Arenen, die ALLE Spieler im Raum freigeschaltet haben (massgeblich ist jeweils die beste Trophaeenzahl).
+func common_worlds() -> Array[String]:
+	var lowest: int = int(GameManager.data.get("best_trophies", 0))
+	for p in roster:
+		var d: Dictionary = p
+		lowest = mini(lowest, int(d.get("best", d.get("trophies", 0))))
+	var out: Array[String] = []
+	for wid in Catalog.world_ids():
+		if lowest >= Catalog.world_unlock(wid):
+			out.append(wid)
+	return out
+
+## Host: Ist die eingestellte Arena nicht bei allen offen (z.B. weil gerade jemand beigetreten ist), auf die
+## hoechste gemeinsam offene Arena wechseln.
+func _enforce_common_world() -> void:
+	if not in_lobby() or not is_host():
+		return
+	var allowed: Array[String] = common_worlds()
+	if allowed.is_empty() or allowed.has(str(lobby.get("world", ""))):
+		return
+	set_lobby_settings(allowed[allowed.size() - 1], int(lobby.get("rounds", 3)))
+
+## Host: Welt/Runden aendern (nur Arenen, die alle Spieler im Raum offen haben).
 func set_lobby_settings(world_id: String, rounds: int) -> void:
 	if not in_lobby() or not is_host():
+		return
+	if not common_worlds().has(world_id):
+		lobby_error.emit("%s haben nicht alle im Raum freigeschaltet." % str(Catalog.world_by_id(world_id)["name"]))
 		return
 	lobby["world"] = world_id
 	lobby["rounds"] = rounds
@@ -484,6 +513,7 @@ func set_lobby_settings(world_id: String, rounds: int) -> void:
 func start_lobby_match() -> void:
 	if not in_lobby() or not is_host():
 		return
+	_enforce_common_world()
 	var entries: Array = []
 	var sorted_roster: Array = roster.duplicate()
 	sorted_roster.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return str(a["id"]) < str(b["id"]))
@@ -497,7 +527,7 @@ func start_lobby_match() -> void:
 		names.shuffle()
 		var tier: float = clampf(float(GameManager.trophies()) / 1500.0, 0.0, 1.0)
 		var n := 0
-		while entries.size() < 4:
+		while entries.size() < Catalog.MAX_PLAYERS:
 			var bot: Dictionary = GameManager.make_bot_entry("bot_%s_%d" % [str(lobby["code"]), n], str(names[n % names.size()]), entries.size(), tier)
 			entries.append(bot)
 			n += 1
@@ -686,6 +716,7 @@ func _rebuild_roster() -> void:
 	if is_host() and is_online() and in_lobby():
 		_api_patch("/rest/v1/lobbies?code=eq.%s" % str(lobby["code"]), {"player_count": roster.size(), "host_id": user_id})
 		lobby["host_id"] = user_id
+		_enforce_common_world()
 	lobby_updated.emit()
 
 func _on_broadcast(event: String, data: Dictionary) -> void:

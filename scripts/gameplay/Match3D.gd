@@ -16,6 +16,10 @@ const INTRO_TIME := 2.6
 const HOLE_END_TIME := 5.5
 const NET_INTERVAL := 0.1
 const PREVIEW_DOTS := 64
+## Hat der Erste eingelocht, bleiben allen anderen noch so viele Sekunden zum Nachziehen.
+const FOLLOW_UP_TIME := 20.0
+## Wer dann nicht im Loch ist, bekommt die Schlaege des schlechtesten Eingelochten plus so viele.
+const FOLLOW_UP_PENALTY := 2
 
 ## Laufzeit-Daten eines Spielers.
 class PlayerRec:
@@ -29,6 +33,8 @@ class PlayerRec:
 	var brain: BotBrain = null
 	var tag: BallTag = null
 	var strokes: int = 0
+	## Tatsaechlich gespielte Schlaege, falls der Spieler ohne Einlochen fertig wurde (vor der Wertung)
+	var raw_strokes: int = 0
 	var total: int = 0
 	var holed: bool = false
 	var done: bool = false
@@ -125,6 +131,8 @@ var _intro_follow_done: bool = false
 var _hole_start_received: int = -1
 ## true, sobald die Schlaege der laufenden Bahn in rec.total verbucht sind (zwischen Bahn-Ende und naechster Bahn)
 var _hole_scored: bool = false
+## Hat auf dieser Bahn schon jemand eingelocht? (startet die 20-Sekunden-Frist fuer alle anderen)
+var _first_holed: bool = false
 ## Bahn-Zeit (phase_time), zu der der lokale Spieler fertig wurde (-1 = spielt noch)
 var _local_done_at: float = -1.0
 ## Zuschauen (der lokale Spieler ist fertig): aktiv?, wem die Kamera folgt, Sekunden seit dem letzten Wechsel,
@@ -208,6 +216,7 @@ func _start_hole(index: int) -> void:
 	hole_index = index
 	phase = Phase.LOADING
 	_hole_scored = false
+	_first_holed = false
 	_local_done_at = -1.0
 	_end_spectate()
 	_cancel_aim()
@@ -226,6 +235,7 @@ func _start_hole(index: int) -> void:
 			rec.tag = null
 		rec.brain = null
 		rec.strokes = 0
+		rec.raw_strokes = 0
 		rec.holed = false
 		rec.done = false
 		rec.hole_time = 0.0
@@ -241,11 +251,10 @@ func _start_hole(index: int) -> void:
 	add_child(course)
 	rig.course = course
 	time_left = course.time_limit
-	var n: int = players.size()
-	for i in n:
+	# Alle Spieler starten an genau derselben Stelle (Baelle kollidieren nicht miteinander)
+	var tee: Transform3D = course.tee
+	for i in players.size():
 		var rec: PlayerRec = players[i]
-		var offset: float = clampf((float(i) - float(n - 1) * 0.5) * 0.62, -1.9, 1.9)
-		var tee: Transform3D = course.tee.translated_local(Vector3(offset, 0.0, 0.0))
 		if rec.kind == "remote":
 			rec.remote = RemoteBall3D.new()
 			course.add_child(rec.remote)
@@ -305,8 +314,6 @@ func _begin_play() -> void:
 	hud.show_banner("LOS!", "", 0.7, UIKit.GREEN)
 	hud.set_hint("Ziehe am Ball, um zu zielen" if not auto_play else "")
 	SoundManager.play("go")
-	if not course.shortcut.is_empty() and not auto_play and not course.one_shot:
-		hud.toast("Abkürzung: durchs Felsentor auf die Schanze – spart Schläge, daneben ist Aus!")
 
 # ================================================================ Frame-Logik
 
@@ -355,8 +362,16 @@ func _update_play(delta: float, real_dt: float) -> void:
 		if _local_brain.wants_cpu():
 			thinkers.append(_local_brain)
 	if thinkers.size() > 0:
+		# Ein gemeinsames Rechenbudget pro Bild: reihum, und wer fertig ist, gibt den Rest an den Naechsten weiter
+		# (vorher bekam pro Bild nur ein Bot Rechenzeit - mit vier Bots dauerte jede Planung viermal so lang)
+		var space := get_world_3d().direct_space_state
+		var t0: int = Time.get_ticks_usec()
 		_bot_turn = (_bot_turn + 1) % thinkers.size()
-		thinkers[_bot_turn].think(get_world_3d().direct_space_state)
+		for k in thinkers.size():
+			var left: int = BotBrain.time_budget_usec - (Time.get_ticks_usec() - t0)
+			if left < 300:
+				break
+			thinkers[(_bot_turn + k) % thinkers.size()].think(space, left)
 	# Zielen: Vorschau aktualisieren (auch wenn Spin oder Schlagart waehrend des Zielens geaendert werden)
 	if _aiming and (hud.spin != _preview_spin or hud.chip_mode != _preview_chip):
 		_preview_dirty = true
@@ -1075,9 +1090,13 @@ func _finish_player(rec: PlayerRec, in_hole: bool) -> void:
 	rec.done = true
 	rec.holed = in_hole
 	rec.hole_time = course.time_limit - time_left
-	if not in_hole:
+	if in_hole:
+		_on_holed_first(rec)
+	else:
+		rec.raw_strokes = rec.strokes
 		if not course.one_shot:
-			rec.strokes = mini(maxi(rec.strokes, course.par) + 3, Ball3D.MAX_STROKES + 2)
+			# vorlaeufig; die endgueltige Wertung kommt am Bahn-Ende (_missed_strokes)
+			rec.strokes = _missed_strokes(rec.strokes)
 		if rec.ball != null:
 			rec.ball.give_up()
 	if rec == local:
@@ -1089,9 +1108,32 @@ func _finish_player(rec: PlayerRec, in_hole: bool) -> void:
 			# kein Replay -> sofort den anderen zuschauen (nach dem Einlochen erst nach dem Replay)
 			_begin_spectate()
 	if online and rec.ball != null:
-		NetworkManager.send_game_event("done", {"id": rec.id, "n": rec.strokes, "h": in_hole, "t": rec.hole_time})
+		NetworkManager.send_game_event("done", {"id": rec.id, "n": rec.strokes, "r": rec.raw_strokes if not in_hole else rec.strokes, "h": in_hole, "t": rec.hole_time})
 	_refresh_board()
 	_check_hole_end()
+
+## Der erste Spieler ist im Loch: alle anderen haben ab jetzt nur noch FOLLOW_UP_TIME Sekunden.
+func _on_holed_first(rec: PlayerRec) -> void:
+	if _first_holed or course == null or course.one_shot:
+		return
+	_first_holed = true
+	if time_left > FOLLOW_UP_TIME:
+		time_left = FOLLOW_UP_TIME
+		hud.set_time(time_left)
+	if local != null and rec != local and not local.done:
+		hud.toast("%s hat eingelocht – noch %d Sekunden zum Nachziehen!" % [rec.name, int(FOLLOW_UP_TIME)])
+
+## Schlaege fuer jemanden, der nicht eingelocht hat: Hat schon jemand eingelocht, die Schlaege des schlechtesten
+## Eingelochten + FOLLOW_UP_PENALTY (nie weniger als die eigenen - nicht einlochen soll sich nie lohnen),
+## sonst wie bisher Par + 3 (hoechstens Schlag-Limit + 2).
+func _missed_strokes(own: int) -> int:
+	var worst := -1
+	for r in players:
+		if r.holed:
+			worst = maxi(worst, r.strokes)
+	if worst >= 0:
+		return maxi(own, worst + FOLLOW_UP_PENALTY)
+	return mini(maxi(own, course.par) + 3, Ball3D.MAX_STROKES + 2)
 
 func _check_hole_end() -> void:
 	if phase != Phase.PLAY:
@@ -1136,8 +1178,9 @@ func _end_hole() -> void:
 			rec.done = true
 			rec.holed = false
 			rec.hole_time = course.time_limit
-			if not course.one_shot:
-				rec.strokes = mini(maxi(rec.strokes, course.par) + 3, Ball3D.MAX_STROKES + 2)
+			rec.raw_strokes = rec.strokes
+		if not rec.holed and not course.one_shot:
+			rec.strokes = _missed_strokes(rec.raw_strokes)
 		if rec.ball != null and not rec.holed:
 			rec.ball.freeze_ball()
 		rec.total += rec.strokes
@@ -1489,8 +1532,10 @@ func _on_game_event(event: String, data: Dictionary) -> void:
 			rec.done = true
 			rec.holed = bool(data.get("h", false))
 			rec.strokes = int(data.get("n", rec.strokes))
+			rec.raw_strokes = int(data.get("r", rec.strokes))
 			rec.hole_time = float(data.get("t", course.time_limit - time_left))
 			if rec.holed:
+				_on_holed_first(rec)
 				rec.remote.push_position(course.hole_pos + Vector3(0.0, -0.25, 0.0))
 				rec.remote.set_holed()
 				rig.shake(BallFX.hole_explosion(course, str(rec.entry.get("explosion", "confetti")), course.hole_pos) * 0.3)

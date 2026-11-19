@@ -9,8 +9,8 @@ extends RefCounted
 signal page_changed(page_id: String)
 
 const PAGES := {
-	"play": {"title": "Spielen", "tab": "", "size": Vector2(680, 980)},
-	"lobby": {"title": "Private Lobby", "tab": "", "size": Vector2(680, 1100)},
+	"play": {"title": "Spielen – Welt & Einsatz", "tab": "", "size": Vector2(680, 1020)},
+	"lobby": {"title": "Lobby mit Freunden", "tab": "", "size": Vector2(680, 1100)},
 	"settings": {"title": "Profil & Einstellungen", "tab": "", "size": Vector2(680, 1180)},
 	"trophies": {"title": "Trophäen & Ligen", "tab": "", "size": Vector2(680, 1100)},
 	"clubs": {"title": "Schläger & Tasche", "tab": "bag"},
@@ -357,13 +357,14 @@ static func _days_text(seconds: float) -> String:
 # ================================================================ Overlay: Spielen
 
 func _page_play(body: VBoxContainer) -> void:
-	_section(body, "Arena (danach geht es auf Welttour durch deine offenen Arenen)")
+	_section(body, "Welt wählen – jede Welt hat ihren eigenen Einsatz")
 	var worlds := _grid(body, 2)
 	for w in Catalog.WORLDS:
 		var id: String = w["id"]
 		var col: Color = w["color"]
 		var open_w: bool = GameManager.world_unlocked(id)
-		var sub: String = ("%d Bahnen · %d Bahn-Trophäen" % [(w["courses"] as Array).size(), GameManager.world_trophies(id)]) if open_w \
+		var fee: int = Catalog.world_fee(id)
+		var sub: String = ("Einsatz %d · Sieg %d" % [fee, Catalog.payout_for_rank(1, fee)]) if open_w \
 			else "GESPERRT · ab %d Trophäen" % Catalog.world_unlock(id)
 		if not open_w:
 			col = col.lerp(UIKit.GREY, 0.6)
@@ -373,7 +374,7 @@ func _page_play(body: VBoxContainer) -> void:
 					menu.call("select_world", id)
 				else:
 					sel_world = id
-				refresh(), Vector2(0, 92), 22)
+				refresh(), Vector2(0, 92), 21)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if id == sel_world:
 			b.add_theme_stylebox_override("normal", UIKit.box(col.darkened(0.2), 16, Color.WHITE, 4))
@@ -388,30 +389,50 @@ func _page_play(body: VBoxContainer) -> void:
 		sel_rounds = int(v)
 		_sync_menu()
 		refresh(), Vector2(0, 58), 24, true))
-	# Keine manuelle Bot-Auswahl: Anzahl und Staerke passen sich an (SmartBotController)
-	body.add_child(UIKit.wrap_label("Bots passen sich an: %d Gegner, und je mehr Trophäen du auf einer Bahn hast, desto genauer spielen sie dort und desto öfter wagen sie die Abkürzung." % GameManager.auto_bot_count(), 18, UIKit.TEXT_DIM))
+	# Gewinn-Tabelle fuer die gewaehlte Welt: 5 Spieler, Auszahlung als Vielfaches des Einsatzes + Trophaeen
+	var fee_sel: int = Catalog.world_fee(sel_world)
+	_section(body, "Gewinn nach Platz (Einsatz %d Coins, immer 5 Spieler)" % fee_sel)
+	var table := _grid(body, 5, 6)
+	table.name = "PayoutTable"
+	for i in Catalog.MAX_PLAYERS:
+		var cell := UIKit.vbox(2)
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var pay: int = Catalog.payout_for_rank(i + 1, fee_sel)
+		var tr: int = Catalog.trophies_for_rank(i + 1, Catalog.MAX_PLAYERS)
+		cell.add_child(UIKit.label("%d." % (i + 1), 20, UIKit.GOLD, true))
+		cell.add_child(UIKit.label(str(pay), 20, UIKit.GREEN if pay > fee_sel else (UIKit.TEXT if pay == fee_sel else UIKit.RED), true))
+		cell.add_child(UIKit.label("%+d" % tr if tr != 0 else "±0", 18, UIKit.GOLD if tr > 0 else (UIKit.TEXT_DIM if tr == 0 else UIKit.RED), true))
+		var panel := UIKit.panel(Color(0.05, 0.08, 0.16, 0.85), 12, Color(1, 1, 1, 0.12), 1)
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_child(UIKit.margin(cell, 4, 6, 4, 6))
+		table.add_child(panel)
+	body.add_child(UIKit.wrap_label("Obere Zahl: Coins zurück · untere Zahl: Trophäen. Mit Freunden gibt es keine Trophäen, nur Coins.", 17, UIKit.TEXT_DIM))
 	body.add_child(UIKit.spacer(true))
-	var bots := UIKit.button("GEGEN BOTS", UIKit.GREEN, func() -> void:
-		if not world_playable(sel_world, self):
+	var start := UIKit.button("SPIELEN · Einsatz %d" % fee_sel, UIKit.GREEN, func() -> void:
+		if not world_playable(sel_world, self) or not _fee_ok(sel_world):
+			return
+		if NetworkManager.is_online():
+			NetworkManager.quick_match(sel_world, sel_rounds)
+			open("lobby")
 			return
 		close_all()
-		NetworkManager.start_bot_match(sel_world, sel_rounds, 0), Vector2(0, 84), 30)
-	bots.name = "StartBots"
-	body.add_child(bots)
-	body.add_child(UIKit.button("ONLINE-SCHNELLSPIEL", UIKit.BLUE, func() -> void:
-		if not world_playable(sel_world, self):
-			return
-		if not NetworkManager.is_online():
-			_toast("Offline – du spielst gegen Bots.")
-			close_all()
-			NetworkManager.start_bot_match(sel_world, sel_rounds, 0)
-			return
-		NetworkManager.quick_match(sel_world, sel_rounds)
-		open("lobby"), Vector2(0, 76), 26))
-	body.add_child(UIKit.button("PRIVATE LOBBY", UIKit.PURPLE, func() -> void: open("lobby"), Vector2(0, 76), 26))
-	var hint: String = "Online: bis zu 6 Spieler gleichzeitig, freie Plätze werden mit Bots aufgefüllt." if NetworkManager.is_online() \
-		else "Ohne Server-Verbindung spielst du gegen Bots – Fortschritt und Belohnungen zählen trotzdem."
+		NetworkManager.start_bot_match(sel_world, sel_rounds, 0), Vector2(0, 88), 30)
+	start.name = "StartBots"
+	body.add_child(start)
+	var friends := UIKit.button("MIT FREUNDEN SPIELEN", UIKit.PURPLE, func() -> void: open("lobby"), Vector2(0, 72), 24)
+	friends.name = "PlayWithFriends"
+	body.add_child(friends)
+	var hint: String = "Online triffst du echte Gegner, freie Plätze füllen Bots – es sind immer 5 Spieler." if NetworkManager.is_online() \
+		else "Ohne Server-Verbindung spielst du gegen 4 Bots – Einsatz, Gewinn und Trophäen zählen trotzdem."
 	body.add_child(UIKit.wrap_label(hint, 18, UIKit.TEXT_DIM, true))
+
+## Genug Coins fuer den Einsatz? Sonst Hinweis.
+func _fee_ok(world_id: String) -> bool:
+	if GameManager.can_pay_fee(world_id):
+		return true
+	_toast("Nicht genug Coins: %s kostet %d Einsatz, du hast %d." % [str(Catalog.world_by_id(world_id)["name"]),
+		Catalog.world_fee(world_id), GameManager.coins()], UIKit.RED.darkened(0.3))
+	return false
 
 ## Arena spielbar? Sonst Hinweis, ab wie vielen Trophaeen sie aufgeht. (Beitreten zu Lobbys anderer bleibt erlaubt.)
 static func world_playable(world_id: String, notify_on: Object) -> bool:
@@ -436,15 +457,17 @@ func _page_lobby(body: VBoxContainer) -> void:
 		_offline_note(body, "Private Lobbys")
 		body.add_child(UIKit.spacer(true))
 		body.add_child(UIKit.button("Stattdessen gegen Bots spielen", UIKit.GREEN, func() -> void:
-			close_all()
-			if world_playable(sel_world, self):
+			if world_playable(sel_world, self) and _fee_ok(sel_world):
+				close_all()
 				NetworkManager.start_bot_match(sel_world, sel_rounds, 0), Vector2(0, 76), 24))
 		return
 	if not NetworkManager.in_lobby():
-		_section(body, "Neue Lobby mit Raum-Code (%s, %d Runden)" % [str(Catalog.world_by_id(sel_world)["name"]), sel_rounds])
+		_section(body, "Neue Lobby mit Raum-Code (%s, Einsatz %d, %d Runden)" % [str(Catalog.world_by_id(sel_world)["name"]),
+			Catalog.world_fee(sel_world), sel_rounds])
 		body.add_child(UIKit.button("LOBBY ERSTELLEN", UIKit.GREEN, func() -> void:
-			if world_playable(sel_world, self):
+			if world_playable(sel_world, self) and _fee_ok(sel_world):
 				NetworkManager.create_lobby(sel_world, sel_rounds, false), Vector2(0, 76), 26))
+		body.add_child(UIKit.wrap_label("Mit Freunden geht es nur um Coins, nicht um Trophäen. Spielbar sind nur Welten, die alle im Raum freigeschaltet haben; freie Plätze füllen Bots (immer 5 Spieler).", 18, UIKit.TEXT_DIM))
 		_section(body, "Oder mit 4-stelligem Code beitreten")
 		var row := UIKit.hbox(10)
 		body.add_child(row)
@@ -497,29 +520,33 @@ func _page_lobby(body: VBoxContainer) -> void:
 			h.add_child(UIKit.label("HOST", 18, UIKit.GOLD))
 		h.add_child(UIIcon.new("trophy", 22.0))
 		h.add_child(UIKit.label(str(int(p.get("trophies", 0))), 20, UIKit.GOLD))
-	if host_me:
-		_section(body, "Arena")
+	var lw: String = str(lobby.get("world", "emerald"))
+	var public_room: bool = bool(lobby.get("is_public", false))
+	if host_me and not public_room:
+		# Nur Welten, die ALLE im Raum freigeschaltet haben
+		_section(body, "Welt (nur gemeinsam freigeschaltete)")
 		var wopts: Array = []
-		for w in Catalog.WORLDS:
-			wopts.append([str(w["id"]), str(w["name"]).get_slice(" ", 0)])
-		body.add_child(_choice_row(wopts, str(lobby.get("world", "emerald")), func(v: Variant) -> void:
-			NetworkManager.set_lobby_settings(str(v), int(lobby.get("rounds", 3))), Vector2(0, 52), 19, true))
+		for wid in NetworkManager.common_worlds():
+			wopts.append([wid, "%s\n%d" % [str(Catalog.world_by_id(wid)["name"]).get_slice(" ", 0), Catalog.world_fee(wid)]])
+		var wrow := _choice_row(wopts, lw, func(v: Variant) -> void:
+			NetworkManager.set_lobby_settings(str(v), int(lobby.get("rounds", 3))), Vector2(0, 64), 18, true)
+		wrow.name = "LobbyWorlds"
+		body.add_child(wrow)
 		_section(body, "Runden")
 		var ropts: Array = []
 		for r in Catalog.ROUND_OPTIONS:
 			ropts.append([r, str(r)])
 		body.add_child(_choice_row(ropts, int(lobby.get("rounds", 3)), func(v: Variant) -> void:
-			NetworkManager.set_lobby_settings(str(lobby.get("world", "emerald")), int(v)), Vector2(0, 52), 21, true))
-		var fill := CheckBox.new()
-		fill.text = "Freie Plätze mit Bots auffüllen (bis 4)"
-		fill.button_pressed = NetworkManager.fill_bots
-		fill.focus_mode = Control.FOCUS_NONE
-		fill.add_theme_font_size_override("font_size", 20)
-		fill.toggled.connect(func(on: bool) -> void: NetworkManager.fill_bots = on)
-		body.add_child(fill)
+			NetworkManager.set_lobby_settings(lw, int(v)), Vector2(0, 52), 21, true))
+	var stake_line: String = "%s · Einsatz %d · %d Runden · Sieg %d Coins" % [str(Catalog.world_by_id(lw)["name"]), Catalog.world_fee(lw),
+		int(lobby.get("rounds", 3)), Catalog.payout_for_rank(1, Catalog.world_fee(lw))]
+	if public_room:
+		stake_line += "\nSchnellspiel: Start, sobald %d Spieler da sind – sonst füllen Bots auf." % Catalog.MAX_PLAYERS
 	else:
-		body.add_child(UIKit.wrap_label("Arena: %s · %d Runden\nWarte, bis der Host das Match startet ..." % [
-			str(Catalog.world_by_id(str(lobby.get("world", "emerald")))["name"]), int(lobby.get("rounds", 3))], 21, UIKit.TEXT))
+		stake_line += "\nNur Coins, keine Trophäen · freie Plätze füllen Bots (immer %d Spieler)" % Catalog.MAX_PLAYERS
+	if not host_me:
+		stake_line += "\nWarte, bis der Host das Match startet ..."
+	body.add_child(UIKit.wrap_label(stake_line, 20, UIKit.TEXT))
 	# Mehrere Freunde gleichzeitig einladen: ankreuzen, dann eine Einladung an alle
 	var in_room: Array[String] = []
 	for p in NetworkManager.roster:
@@ -577,6 +604,8 @@ func _page_lobby(body: VBoxContainer) -> void:
 	body.add_child(actions)
 	if host_me:
 		var start := UIKit.button("MATCH STARTEN", UIKit.GREEN, func() -> void:
+			if not _fee_ok(str(NetworkManager.lobby.get("world", "emerald"))):
+				return
 			close_all()
 			NetworkManager.start_lobby_match(), Vector2(0, 74), 26)
 		start.size_flags_horizontal = Control.SIZE_EXPAND_FILL

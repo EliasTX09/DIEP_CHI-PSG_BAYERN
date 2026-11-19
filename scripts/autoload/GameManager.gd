@@ -356,6 +356,8 @@ func public_profile() -> Dictionary:
 		"frame": avatar_frame(),
 		"color": int(data.get("avatar_color", 0)),
 		"trophies": trophies(),
+		# beste Trophaeenzahl: daran haengen die offenen Arenen (Freunde-Lobby: nur gemeinsam offene Arenen)
+		"best": int(data.get("best_trophies", 0)),
 		"ball": str(eq.get("ball", "standard")),
 		"trail": str(eq.get("trail", "none")),
 		"explosion": str(eq.get("explosion", "confetti")),
@@ -1063,11 +1065,17 @@ func make_match_config(mode: String, world_id: String, rounds: int, players: Arr
 		"players": players,
 		"seed": rng_seed,
 		"online": online,
+		# Einsatz: Schnellspiel und Freunde-Lobby kosten die Gebuehr der Arena (Golden Shot/Training nicht)
+		"fee": Catalog.world_fee(world_id) if mode == "quick" or mode == "private" else 0,
 	}
 
-## Anzahl Bots im Offline-Match (keine manuelle Auswahl): waechst mit den Trophaeen von 2 auf 4.
+## Anzahl Bots im Offline-Match: immer so viele, dass 5 Spieler am Start sind.
 func auto_bot_count() -> int:
-	return clampi(2 + int(trophies() / 300), 2, 4)
+	return Catalog.MAX_PLAYERS - 1
+
+## Reicht das Geld fuer den Einsatz dieser Arena?
+func can_pay_fee(world_id: String) -> bool:
+	return coins() >= Catalog.world_fee(world_id)
 
 ## Offline-Match gegen Bots. bot_count <= 0 = automatisch. Die Welt-Tour bei vielen Runden fuehrt nur
 ## durch freigeschaltete Arenen.
@@ -1125,6 +1133,7 @@ func local_player_entry() -> Dictionary:
 	}
 
 func start_match(config: Dictionary) -> void:
+	pay_stake(config)
 	match_config = config
 	last_match_rewards = {}
 	Engine.time_scale = 1.0
@@ -1134,6 +1143,19 @@ func goto_menu() -> void:
 	Engine.time_scale = 1.0
 	get_tree().paused = false
 	get_tree().change_scene_to_file(MENU_SCENE)
+
+## Zahlt den Einsatz des Matches ein (einmal pro Match, vermerkt als config.stake). Wer online nach einem
+## Arena-Wechsel des Hosts nicht genug hat, zahlt, was er hat - ausgezahlt wird immer ein Vielfaches des
+## tatsaechlich eingezahlten Betrags.
+func pay_stake(config: Dictionary) -> int:
+	var fee: int = int(config.get("fee", 0))
+	if fee <= 0 or config.has("stake"):
+		return int(config.get("stake", 0))
+	var stake: int = mini(fee, coins())
+	if stake > 0:
+		add_coins(-stake)
+	config["stake"] = stake
+	return stake
 
 ## Verbucht ein beendetes Match.
 ## summary: {rank, players, style_points, holes_in_one, strokes, holes}
@@ -1147,20 +1169,21 @@ func finish_match(summary: Dictionary) -> Dictionary:
 	if mode == "practice" or count <= 1:
 		rewards["coins"] = 20 + int(float(style) * Catalog.STYLE_TO_COINS)
 	else:
-		var delta: int = Catalog.trophies_for_rank(rank, count)
-		if trophies() + delta < 0:
-			delta = -trophies()
-		rewards["trophies"] = delta
-		var split: Dictionary = split_course_trophies(delta, summary.get("course_ranks", []), count)
-		if not split.is_empty():
-			rewards["course_trophies"] = split
-			_apply_course_trophies(split)
-		var base: int = Catalog.coins_for_rank(rank)
-		var style_coins: int = int(float(style) * Catalog.STYLE_TO_COINS)
+		# Freunde-Lobby ("private"): keine Trophaeen, es geht nur um den Einsatz
+		if mode != "private":
+			var delta: int = Catalog.trophies_for_rank(rank, count)
+			if trophies() + delta < 0:
+				delta = -trophies()
+			rewards["trophies"] = delta
+			var split: Dictionary = split_course_trophies(delta, summary.get("course_ranks", []), count)
+			if not split.is_empty():
+				rewards["course_trophies"] = split
+				_apply_course_trophies(split)
+		# Auszahlung: Vielfaches des eingezahlten Einsatzes (Ball-Bonus "+x% Coins" kommt obendrauf)
+		var stake: int = int(match_config.get("stake", 0))
 		var bonus: Dictionary = Catalog.BALLS[equipped("ball")]["bonus"] if Catalog.BALLS.has(equipped("ball")) else {}
-		var total: int = int(round(float(base + style_coins) * (1.0 + float(bonus.get("coins", 0.0)))))
-		rewards["coins"] = total
-		rewards["style_coins"] = style_coins
+		rewards["stake"] = stake
+		rewards["coins"] = int(round(float(Catalog.payout_for_rank(rank, stake)) * (1.0 + float(bonus.get("coins", 0.0)))))
 		var chest := ""
 		if free_chest_slot() >= 0:
 			var roll := _rng.randf()

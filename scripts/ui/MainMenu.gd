@@ -815,10 +815,11 @@ func refresh_play_info() -> void:
 	if _mode_button == null:
 		return
 	var w: String = str(Catalog.world_by_id(MenuPages.sel_world)["name"])
+	var fee: int = Catalog.world_fee(MenuPages.sel_world)
 	if NetworkManager.is_online():
-		_mode_button.text = "Online · %s · %d Runden · ändern" % [w, MenuPages.sel_rounds]
+		_mode_button.text = "Online · %s · Einsatz %d · %d Runden" % [w, fee, MenuPages.sel_rounds]
 	else:
-		_mode_button.text = "%d Bots · %s · %d Runden · ändern" % [GameManager.auto_bot_count(), w, MenuPages.sel_rounds]
+		_mode_button.text = "%d Bots · %s · Einsatz %d · %d Runden" % [GameManager.auto_bot_count(), w, fee, MenuPages.sel_rounds]
 
 func _refresh_badges() -> void:
 	if _nav_badges.is_empty():
@@ -897,15 +898,9 @@ func _on_inventory_changed() -> void:
 
 # ================================================================ Aktionen
 
-## SPIELEN: online ein Schnellspiel, sonst sofort ein Bot-Match mit den gewaehlten Einstellungen.
+## SPIELEN: oeffnet das Lobby-Menue - dort jede Welt mit Einsatz und Gewinn waehlen und starten.
 func _quick_play() -> void:
-	if not MenuPages.world_playable(MenuPages.sel_world, ui):
-		return
-	if NetworkManager.is_online():
-		NetworkManager.quick_match(MenuPages.sel_world, MenuPages.sel_rounds)
-		pages.open("lobby")
-		return
-	NetworkManager.start_bot_match(MenuPages.sel_world, MenuPages.sel_rounds, 0)
+	pages.open("play")
 
 func _on_chest_pressed(slot: int) -> void:
 	match GameManager.chest_state(slot):
