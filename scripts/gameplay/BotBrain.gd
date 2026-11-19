@@ -58,6 +58,9 @@ var _shot_from: Vector3 = Vector3.INF
 var _shot_progress: float = 0.0
 ## Schlaege, die nichts gebracht haben (Out oder kein Fortschritt): [{pos, dir, power, chip}]
 var _failed: Array[Dictionary] = []
+## Ein Rampen-Versuch ist schiefgegangen (geplant mit Absprung, Ball danach nicht weiter): auf dieser Bahn keine
+## Rampen mehr - die Vorhersage trifft an Rampen nicht immer genau, und wiederholte Versuche kosten nur Strafschlaege.
+var _ramp_blocked: bool = false
 ## Timing auf Bahnen mit Hammer/Windmuehle/Faehre
 var _moving: bool = false
 var _plan_time: float = 0.0
@@ -294,7 +297,7 @@ func _build_candidates(replan: bool = false) -> void:
 	# Abkuerzungs-Rampen vor dem Ball (die Simulation entscheidet, ob es klappt - sonst ist es ein Aus):
 	# - geradeaus auf die Rampenkante, mit dem Tempo, das die Rampe braucht (plus Rollverlust bis zum Tor)
 	# - oder erst auf den Bereitstellungspunkt in Verlaengerung des Stegs legen (von dort geht es geradeaus hinauf)
-	if _allow_shortcut and shortcut_chance > 0.0:
+	if _allow_shortcut and shortcut_chance > 0.0 and not _ramp_blocked:
 		var vmax: float = Ball3D.MAX_SPEED * float(ball.profile.get("power", 1.0))
 		for sc: Dictionary in course.shortcuts:
 			var gate: Vector3 = sc["gate"]
@@ -322,6 +325,8 @@ func _learn_from_last_shot() -> void:
 	var now: Vector3 = ball.global_position
 	var gained: float = course.progress_at(now) - _shot_progress
 	if now.distance_to(_shot_from) < 1.5 or gained < 0.5:
+		if bool(last_choice.get("pred_launched", false)):
+			_ramp_blocked = true
 		_failed.append({"pos": _shot_from, "dir": last_choice["dir"], "power": float(last_choice["power"]), "chip": bool(last_choice["chip"])})
 		if _failed.size() > 24:
 			_failed.pop_front()
@@ -362,7 +367,7 @@ func _score(res: Dictionary, cand: Dictionary) -> float:
 		score -= 6.0
 	# Liegt der Ball danach bereit fuer eine Abkuerzungs-Rampe (und darf der Bot sie nehmen)? Dann zaehlt ein Teil
 	# der Ersparnis schon jetzt - so legt sich der Bot den Ball zurecht, statt nur den langen Weg zu sehen.
-	if _allow_shortcut and shortcut_chance > 0.0 and ball.profile.get("power", 1.0) != null:
+	if _allow_shortcut and shortcut_chance > 0.0 and not _ramp_blocked:
 		var vmax: float = Ball3D.MAX_SPEED * float(ball.profile.get("power", 1.0))
 		for sc: Dictionary in course.shortcuts:
 			if not sc.has("stage") or float(sc.get("v_gate", 99.0)) + 1.5 > vmax:

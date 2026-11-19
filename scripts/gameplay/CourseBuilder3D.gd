@@ -197,7 +197,8 @@ static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 				continue
 			var u: float = OPENING_LEN * 0.5 + 0.2
 			while u <= length - OPENING_LEN * 0.5 - 0.2:
-				for lane_len: float in [4.0, 6.0, 8.5]:
+				# lange Stege kosten unterwegs viel Tempo -> dort reicht oft nur ein starker Schlaeger (Power-Rampe)
+				for lane_len: float in [4.0, 6.0, 8.5, 14.0, 20.0]:
 					for tg in targets:
 						for cnd in _eval_ramp(c, grid, xf0, half, u, side, lane_len, tg):
 							cnd["straight"] = si

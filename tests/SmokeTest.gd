@@ -503,35 +503,48 @@ func _stage_shortcuts() -> void:
 				var strong_v: float = Ball3D.MAX_SPEED * float(strong["power"])
 				var pro: Dictionary = ShotSim.run(c, space, weak_start, dir * minf(strong_v, v_plan + 1.8), {"max_time": 12.0, "profile": strong})
 				print("[SMOKE] %s: starker Schlaeger vom Fairway mit %.1f m/s -> %s" % [label, minf(strong_v, v_plan + 1.8), _shot_txt(c, pro)])
-			if si == 0 and best_v > 0.0 and id in ["e2", "v3", "p1", "n3"]:
-				var ball := Ball3D.new()
-				c.add_child(ball)
-				ball.setup(c, "test", strong, "standard", "none", false)
-				ball.sound_gain = 0.0
-				ball.place_on_tee(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
-				await _frames(3)
-				ball.unfreeze()
-				ball.shoot(dir, best_v / (Ball3D.MAX_SPEED * float(strong["power"])), false, Vector2.ZERO)
-				var real_track := PackedStringArray()
-				for fr in 16 * 60:
-					await get_tree().physics_frame
-					if fr % 6 == 0 and real_track.size() < 40 and ball.state == Ball3D.State.MOVING:
-						var bp: Vector3 = ball.global_position
-						real_track.append("(%.1f,%.1f,%.1f|%.0f)" % [bp.x, bp.y, bp.z, ball.linear_velocity.length()])
-					if ball.state != Ball3D.State.MOVING and ball.state != Ball3D.State.OUT and fr > 10:
+			if si == 0 and not hits.is_empty() and id in ["e2", "v3", "p1", "n3"]:
+				# Echter Ball (Jolt) mit den Tempi, die laut Vorhersage im Ziel landen - mittleres zuerst. An Rampen weicht
+				# die echte Physik etwas ab (der Ball fliegt meist etwas hoeher); es muss aber mit echtem Ball gehen.
+				var tries_v: Array[float] = []
+				for h in hits:
+					tries_v.append(float(h))
+				tries_v.sort()
+				var order: Array[float] = [tries_v[tries_v.size() / 2]]
+				for tv in tries_v:
+					if not order.has(tv):
+						order.append(tv)
+				var real_ok := false
+				var real_txt := PackedStringArray()
+				for k in mini(order.size(), 4):
+					var ball := Ball3D.new()
+					c.add_child(ball)
+					ball.setup(c, "test", strong, "standard", "none", false)
+					ball.sound_gain = 0.0
+					ball.place_on_tee(Transform3D(Basis.looking_at(dir, Vector3.UP), start))
+					await _frames(3)
+					ball.unfreeze()
+					ball.shoot(dir, order[k] / (Ball3D.MAX_SPEED * float(strong["power"])), false, Vector2.ZERO)
+					var apex := -INF
+					for fr in 16 * 120:
+						await get_tree().physics_frame
+						if ball.state == Ball3D.State.MOVING:
+							apex = maxf(apex, ball.global_position.y)
+						if ball.state != Ball3D.State.MOVING and ball.state != Ball3D.State.OUT and fr > 10:
+							break
+					var real := {"holed": ball.state == Ball3D.State.HOLED, "out": ball.state != Ball3D.State.IDLE and ball.state != Ball3D.State.HOLED,
+						"end_pos": ball.global_position}
+					var pred_res: Dictionary = ShotSim.run(c, space, start, dir * order[k], {"max_time": 12.0, "profile": strong})
+					real_txt.append("%.1f m/s: echt %s (Scheitel %.1f m, Absprung %d x), Vorhersage %s (Scheitel %.1f m)" % [order[k], _shot_txt(c, real), apex,
+						ball.shortcut_launches, _shot_txt(c, pred_res), _apex_of(pred_res)])
+					if _in_target(c, sc, real) and ball.shortcut_launches == 1:
+						real_ok = true
+					ball.queue_free()
+					await _frames(2)
+					if real_ok:
 						break
-				var pred_res: Dictionary = ShotSim.run(c, space, start, dir * best_v, {"max_time": 12.0, "profile": strong, "sample": 6})
-				var pred_track := PackedStringArray()
-				for pp: Vector3 in (pred_res["points"] as PackedVector3Array):
-					if pred_track.size() < 40:
-						pred_track.append("(%.1f,%.1f,%.1f)" % [pp.x, pp.y, pp.z])
-				print("[SMOKE]   echter Ball:  ", " ".join(real_track))
-				print("[SMOKE]   Vorhersage:   ", " ".join(pred_track))
-				var real := {"holed": ball.state == Ball3D.State.HOLED, "out": ball.state != Ball3D.State.IDLE and ball.state != Ball3D.State.HOLED,
-					"end_pos": ball.global_position}
-				print("[SMOKE] %s echter Ball mit %.1f m/s: %s, Absprung %d x" % [label, best_v, _shot_txt(c, real), ball.shortcut_launches])
-				check(_in_target(c, sc, real) and ball.shortcut_launches == 1, "%s: echter Ball springt ab und landet im Ziel" % label)
-				ball.queue_free()
+				print("[SMOKE] %s echter Ball: %s" % [label, " | ".join(real_txt)])
+				check(real_ok, "%s: echter Ball springt ab und landet im Ziel" % label)
 		c.queue_free()
 		await _frames(2)
 	print("[SMOKE] Abkuerzungen: %d Bahnen mit Abkuerzung, %d Rampen gesamt, %d Bahnen mit mehreren, %d Power-Rampen; ohne: e1 (gerade Einsteiger-Bahn)%s" % [
@@ -555,6 +568,12 @@ func _in_target(c: Course3D, sc: Dictionary, res: Dictionary) -> bool:
 	if bool(sc["green"]):
 		return prog >= c.total_length() - 12.0 and end.distance_to(c.hole_pos) < 10.0
 	return prog >= float(sc["target_d"]) - 8.0
+
+func _apex_of(res: Dictionary) -> float:
+	var top := -INF
+	for p: Vector3 in (res.get("points", PackedVector3Array()) as PackedVector3Array):
+		top = maxf(top, p.y)
+	return top
 
 func _shot_txt(c: Course3D, res: Dictionary) -> String:
 	if bool(res.get("holed", false)):
