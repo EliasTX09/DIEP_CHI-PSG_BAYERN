@@ -205,7 +205,9 @@ static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 					for tg in targets:
 						for cnd in _eval_ramp(c, grid, xf0, half, u, side, lane_len, tg):
 							cnd["straight"] = si
-							cnd["opening"] = {"d0": float(st["dist"]) + u - OPENING_LEN * 0.5, "d1": float(st["dist"]) + u + OPENING_LEN * 0.5, "side": side}
+							# Oeffnung nur so lang wie der (schraege) Steg an der Bande braucht - sonst faellt man daneben in die Schlucht
+							var olen: float = minf(OPENING_LEN, LANE_WIDTH / maxf(0.48, float(cnd["dn"])) + 0.5)
+							cnd["opening"] = {"d0": float(st["dist"]) + u - olen * 0.5, "d1": float(st["dist"]) + u + olen * 0.5, "side": side}
 							cands.append(cnd)
 				u += 1.1
 	plan_stats["kandidaten"] = cands.size()
@@ -242,8 +244,9 @@ static func _shortcut_fits(cd: Dictionary, chosen: Array[Dictionary]) -> bool:
 		var g2: Vector3 = o["gate"]
 		if Vector2(g1.x - g2.x, g1.z - g2.z).length() < 4.5:
 			return false
-		var segs1: Array = [[cd["gate"], cd["lip"]], [cd["lip"], cd["land_mid"]]]
-		var segs2: Array = [[o["gate"], o["lip"]], [o["lip"], o["land_mid"]]]
+		# Fluglinien nur bis 6 m vor der Landung vergleichen: Zwei Rampen duerfen aufs selbe Gruen zielen
+		var segs1: Array = [[cd["gate"], cd["lip"]], [cd["lip"], _flight_head(cd)]]
+		var segs2: Array = [[o["gate"], o["lip"]], [o["lip"], _flight_head(o)]]
 		for s1: Array in segs1:
 			for s2: Array in segs2:
 				var a1: Vector3 = s1[0]
@@ -255,6 +258,16 @@ static func _shortcut_fits(cd: Dictionary, chosen: Array[Dictionary]) -> bool:
 				if pts[0].distance_to(pts[1]) < 4.0:
 					return false
 	return true
+
+## Fluglinie einer geplanten Abkuerzung bis 6 m vor der Landemitte (mindestens die Kante selbst).
+static func _flight_head(cd: Dictionary) -> Vector3:
+	var lip: Vector3 = cd["lip"]
+	var land: Vector3 = cd["land_mid"]
+	var flat := Vector3(land.x - lip.x, 0.0, land.z - lip.z)
+	var len_f: float = flat.length()
+	if len_f <= 6.0:
+		return lip
+	return lip + flat / len_f * (len_f - 6.0)
 
 const GRID_CELL := 4.0
 
@@ -385,6 +398,12 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 			var v_lip_mid: float = takeoff_speed(d_mid, dh, th)
 			var v_near: float = gate_speed(takeoff_speed(d_near, dh, th), lane_len, th)
 			var v_mid: float = gate_speed(v_lip_mid, lane_len, th)
+			var v_far: float = gate_speed(takeoff_speed(s_out - 0.5, dh, th), lane_len, th)
+			# Spielraum: Das Ziel muss einen Tempo-Bereich von mind. 12 % abdecken (echter Ball und Vorhersage weichen an
+			# Rampen um einige Prozent ab, und wer nur mit genau einem Tempo trifft, trifft nie)
+			if v_far == INF or (v_far - v_near) < 0.12 * v_mid:
+				_stat("spielraum")
+				continue
 			# Gruen ist klein und rundum umbandet: Der Ball darf entweder nicht zu schnell ankommen oder muss so flach
 			# landen, dass er niedrig abprallt (dann haelt ihn die Bande; flache, schnelle Spruenge = Power-Rampen)
 			if green and v_lip_mid * cos(th) > GREEN_MAX_VH and v_lip_mid * sin(th) > GREEN_MAX_VY:
@@ -412,7 +431,7 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 			if by_cls.has(cls) and float((by_cls[cls] as Dictionary)["score"]) >= score:
 				continue
 			var land_y: float = rect_xf.origin.y
-			by_cls[cls] = {"score": score, "cls": cls, "gate": g, "lip": lip, "lane": lane_len, "lane_dir": dir, "kick_deg": kick_deg,
+			by_cls[cls] = {"score": score, "cls": cls, "gate": g, "lip": lip, "lane": lane_len, "lane_dir": dir, "kick_deg": kick_deg, "dn": dir.dot(nrm),
 				"land_mid": Vector3(lip.x, land_y, lip.z) + dir * d_mid, "land_near": Vector3(lip.x, land_y, lip.z) + dir * d_near,
 				"land_far": Vector3(lip.x, land_y, lip.z) + dir * (s_out - 0.5), "d_mid": d_mid, "v_near": v_near, "v_mid": v_mid,
 				"remaining": remaining, "direct": direct, "green": green, "target_d": float(tg["d"]), "gate_d": gate_d}
@@ -473,7 +492,7 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	var xf0: Transform3D = o["xf"]
 	var side: int = int(o["side"])
 	var half: float = float(o["width"]) * 0.5
-	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -OPENING_LEN * 0.5)
+	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -float(o["length"]) * 0.5)
 	var dir: Vector3 = plan["lane_dir"]
 	var perp: Vector3 = dir.cross(Vector3.UP).normalized()
 	var back_off: float = 2.6
