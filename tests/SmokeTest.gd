@@ -1380,8 +1380,7 @@ func _stage_input() -> void:
 			break
 	check(m._aim_power > 0.02 and m._aim_power < 0.2 and m._preview_settled and (m._target_ring.visible or m._dots_out),
 		"Sanfter Putt: Vorschau reicht bis zum Liegepunkt -> Zielkreis" + soft_info)
-	if not (m._preview_settled and m._target_ring.visible):
-		print("[SMOKE] Sanfter Putt:" + soft_info)
+	print("[SMOKE] Sanfter Putt:" + soft_info)
 	_drag(0, screen + Vector2(0.0, 320.0), Vector2(0.0, 320.0 - pull))
 	for i in 240:
 		await _process_frames(1)

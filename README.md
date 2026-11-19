@@ -37,9 +37,11 @@ Es gibt keine `.glb`-, `.fbx`- oder `.wav`-Dateien im Projekt.
 3. **Authentication → Sign In / Providers**:
    - **„Allow anonymous sign-ins“ einschalten** (für den Sofort-Gast-Login per Geräte-ID).
    - **Email** aktiviert lassen (zum Verknüpfen des Gast-Accounts mit E-Mail + Passwort).
-   - **„Confirm email“ ausschalten**, solange kein eigener Mail-Server (SMTP) eingetragen ist: Ohne eigenen
-     Mail-Server verschickt Supabase Bestätigungs-Mails nur sehr eingeschränkt (wenige pro Stunde, nur an
-     Mitglieder deines Supabase-Teams) – deine Freunde kämen sonst bei der Registrierung im Portal nicht weiter.
+   - **„Confirm email“:** Ohne eigenen Mail-Server (SMTP) verschickt Supabase Bestätigungs-Mails nur
+     eingeschränkt (Mengenlimit; je nach Projekt evtl. nur an Mitglieder deines Supabase-Teams). Kommen bei
+     der Registrierung im Portal keine Mails an, entweder unter **Authentication → Emails → SMTP Settings**
+     einen eigenen Mail-Server eintragen oder „Confirm email“ ausschalten (dann sind Konten ohne Bestätigung
+     sofort aktiv). Der Gast-Login im Spiel braucht keine Mail.
 4. **Authentication → URL Configuration**: als **Site URL** und unter **Redirect URLs** die Adresse deines
    Web-Portals eintragen (z.B. `https://<dein-name>.github.io/<repo>/`), damit Bestätigungs- und
    Passwort-Mails zurück aufs Portal führen.
