@@ -43,14 +43,15 @@ const LANE_WIDTH := 2.4
 const OPENING_LEN := 4.8
 ## Rampe am Steg-Ende (TrackKit.kicker): Bogenlaenge und moegliche Absprungwinkel in Grad.
 const KICK_LEN := 4.0
-const KICK_ANGLES: Array[float] = [20.0, 26.0, 32.0]
-## Tempo-Klassen, gemessen am Tor (Einfahrt in den Steg), in m/s. Zum Vergleich: der Startschlaeger schafft bei voller
-## Kraft rund 31 m/s, Schlaeger mit Schlagkraft 70 rund 35, die staerksten knapp 39 (Ball3D.MAX_SPEED * power_factor).
-## Normale Abkuerzung: die Landemitte braucht hoechstens V_EASY - mit jedem Schlaeger machbar, wenn man nah genug ist.
-## Power-Abkuerzung: schon der vordere Landerand braucht V_POWER_MIN..V_POWER_MAX - nur mit starkem Schlaeger.
-const V_EASY := 28.0
-const V_POWER_MIN := 31.5
-const V_POWER_MAX := 37.0
+const KICK_ANGLES: Array[float] = [20.0, 28.0, 36.0]
+## Tempo-Klassen, gemessen am Tor (Einfahrt in den Steg), fuer den vorderen Rand des Landefensters, in m/s.
+## Zum Vergleich: der Startschlaeger schafft bei voller Kraft rund 31 m/s, Schlaeger mit Schlagkraft 70 rund 35,
+## die staerksten knapp 39 (Ball3D.MAX_SPEED * power_factor).
+## Normale Abkuerzung: hoechstens V_EASY - mit jedem Schlaeger machbar (je knapper, desto naeher muss man ran).
+## Power-Abkuerzung: V_POWER_MIN..V_POWER_MAX - selbst direkt am Tor reicht der Startschlaeger nicht.
+const V_EASY := 30.5
+const V_POWER_MIN := 31.8
+const V_POWER_MAX := 38.5
 ## Diagnose der letzten Abkuerzungs-Suche: Anzahl verworfener Kandidaten je Grund (fuer den Smoke-Test).
 static var plan_stats: Dictionary = {}
 
@@ -157,13 +158,18 @@ static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 	var total: float = c.total_length()
 	plan_stats = {"straights": k.straights.size()}
 	# Landeziele: das Gruen und spaetere, beidseitig umbandete, waagerechte Fairway-Stuecke
-	var targets: Array[Dictionary] = [{"green": true, "xf": k.green_xf, "size": k.green_size, "d": total, "aim": c.hole_pos}]
+	# Je Ziel mehrere Zielpunkte (der Steg zeigt genau auf einen davon): Gruen = Loch, Mitte, vorderes Drittel;
+	# Fairway-Stueck = Anfang, Mitte, Ende der Mittellinie
+	var gxf: Transform3D = k.green_xf
+	var targets: Array[Dictionary] = [{"green": true, "xf": gxf, "size": k.green_size, "d": total,
+		"aims": [c.hole_pos, gxf * Vector3(0.0, 0.0, -k.green_size.y * 0.5), gxf * Vector3(0.0, 0.0, -k.green_size.y * 0.3)]}]
 	for t in k.straights:
 		var txf: Transform3D = t["xf"]
 		if float(t["dist"]) < 8.0 or float(t["length"]) < 6.0 or not bool(t["wall_l"]) or not bool(t["wall_r"]) or float(t["width"]) < 4.5 or txf.basis.y.y < 0.98:
 			continue
-		targets.append({"green": false, "xf": txf, "size": Vector2(float(t["width"]), float(t["length"])),
-			"d": float(t["dist"]) + float(t["length"]) * 0.5, "aim": txf * Vector3(0.0, 0.0, -float(t["length"]) * 0.5)})
+		var tl: float = float(t["length"])
+		targets.append({"green": false, "xf": txf, "size": Vector2(float(t["width"]), tl), "d": float(t["dist"]) + tl * 0.5,
+			"aims": [txf * Vector3(0.0, 0.0, -minf(2.5, tl * 0.3)), txf * Vector3(0.0, 0.0, -tl * 0.5), txf * Vector3(0.0, 0.0, -maxf(tl - 2.5, tl * 0.7))]})
 	# Belag-Proben in ein 4-m-Raster sortieren (schnelle Nachbarschafts-Abfragen)
 	var grid: Dictionary = {}
 	for i in c.surface_pts.size():
@@ -187,7 +193,7 @@ static func _plan_shortcuts(c: Course3D, k: TrackKit) -> Array[Dictionary]:
 				continue
 			var u: float = OPENING_LEN * 0.5 + 0.2
 			while u <= length - OPENING_LEN * 0.5 - 0.2:
-				for lane_len: float in [5.0, 7.0, 9.5]:
+				for lane_len: float in [4.0, 6.0, 8.5]:
 					for tg in targets:
 						for cnd in _eval_ramp(c, grid, xf0, half, u, side, lane_len, tg):
 							cnd["straight"] = si
@@ -291,14 +297,6 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 	var g: Vector3 = xf0 * Vector3(float(side) * half, 0.0, -u)
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var green: bool = bool(tg["green"])
-	var aim: Vector3 = tg["aim"]
-	var flat := Vector3(aim.x - g.x, 0.0, aim.z - g.z)
-	if flat.length() < 8.0:
-		return _reject("nah")
-	var dir: Vector3 = flat.normalized()
-	# Steg muss deutlich von der Hauptbahn weg zeigen (und schraeg noch durch die Oeffnung passen)
-	if dir.dot(nrm) < 0.55:
-		return _reject("winkel")
 	for bl in c.blockers:
 		if Vector2(bl.x - g.x, bl.z - g.z).length() < 4.5:
 			return _reject("hindernis")
@@ -307,75 +305,93 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 	if remaining < lane_len + KICK_LEN + 10.0:
 		return _reject("ersparnis")
 	var g2 := Vector2(g.x, g.z)
-	var lane_end: Vector3 = g + dir * lane_len
-	# Steg + Rampe: kein anderer Bahnteil daneben
-	var ramp_end2 := Vector2(lane_end.x, lane_end.z) + Vector2(dir.x, dir.z) * KICK_LEN
-	for i in _near_samples(grid, g2, ramp_end2, LANE_WIDTH * 0.5 + 1.4):
-		var q: Vector3 = c.surface_pts[i]
-		var q2 := Vector2(q.x, q.z)
-		if q2.distance_to(g2) < 3.8:
-			continue
-		if _seg_dist(q2, g2, ramp_end2) < LANE_WIDTH * 0.5 + 1.2:
-			return _reject("steg")
 	var rect_xf: Transform3D = tg["xf"]
 	var rect_size: Vector2 = tg["size"]
 	var inv: Transform3D = rect_xf.affine_inverse()
-	var out: Array[Dictionary] = []
 	var by_cls: Dictionary = {}
-	for kick_deg: float in KICK_ANGLES:
-		var th: float = deg_to_rad(kick_deg)
-		var rr: float = KICK_LEN / th
-		var lip: Vector3 = lane_end + dir * (rr * sin(th)) + Vector3.UP * (rr * (1.0 - cos(th)))
-		# Landefenster: Abschnitt der Fluglinie, der im Ziel liegt (1 m Abstand zu den Banden)
-		var s_in := -1.0
-		var s_out := -1.0
-		var sd := 2.0
-		while sd <= 46.0:
-			var pt: Vector3 = lip + dir * sd
-			var ql: Vector3 = inv * Vector3(pt.x, rect_xf.origin.y, pt.z)
-			var inside: bool = absf(ql.x) <= rect_size.x * 0.5 - 1.0 and ql.z <= -1.0 and ql.z >= -rect_size.y + 1.0
-			if inside:
-				if s_in < 0.0:
-					s_in = sd
-				s_out = sd
-			elif s_in >= 0.0:
+	for aim: Vector3 in tg["aims"]:
+		var flat := Vector3(aim.x - g.x, 0.0, aim.z - g.z)
+		if flat.length() < 8.0:
+			_stat("nah")
+			continue
+		var dir: Vector3 = flat.normalized()
+		# Steg muss deutlich von der Hauptbahn weg zeigen (und schraeg noch durch die Oeffnung passen)
+		if dir.dot(nrm) < 0.55:
+			_stat("winkel")
+			continue
+		var lane_end: Vector3 = g + dir * lane_len
+		# Steg + Rampe: kein anderer Bahnteil daneben
+		var ramp_end2 := Vector2(lane_end.x, lane_end.z) + Vector2(dir.x, dir.z) * KICK_LEN
+		var lane_free := true
+		for i in _near_samples(grid, g2, ramp_end2, LANE_WIDTH * 0.5 + 1.4):
+			var q: Vector3 = c.surface_pts[i]
+			var q2 := Vector2(q.x, q.z)
+			if q2.distance_to(g2) < 3.8:
+				continue
+			if _seg_dist(q2, g2, ramp_end2) < LANE_WIDTH * 0.5 + 1.2:
+				lane_free = false
 				break
-			sd += 0.5
-		if s_in < 0.0 or s_out - s_in < 2.0:
-			plan_stats["ziel"] = int(plan_stats.get("ziel", 0)) + 1
+		if not lane_free:
+			_stat("steg")
 			continue
-		var d_near: float = s_in + 0.5
-		var d_mid: float = (s_in + s_out) * 0.5
-		var dh: float = rect_xf.origin.y - lip.y
-		var v_near: float = gate_speed(takeoff_speed(d_near, dh, th), lane_len, th)
-		var v_mid: float = gate_speed(takeoff_speed(d_mid, dh, th), lane_len, th)
-		var cls := ""
-		if v_mid <= V_EASY:
-			cls = "easy"
-		elif v_near >= V_POWER_MIN and v_near <= V_POWER_MAX:
-			cls = "power"
-		else:
-			plan_stats["tempo"] = int(plan_stats.get("tempo", 0)) + 1
-			continue
-		if not _flight_clear(c, grid, lip, dir, d_near, dh, th, inv, rect_size) or not _flight_clear(c, grid, lip, dir, d_mid, dh, th, inv, rect_size):
-			plan_stats["flugbahn"] = int(plan_stats.get("flugbahn", 0)) + 1
-			continue
-		var direct: float = lane_len + KICK_LEN + d_mid
-		var saving: float = remaining - direct
-		if saving < (8.0 if green else 10.0):
-			plan_stats["ersparnis"] = int(plan_stats.get("ersparnis", 0)) + 1
-			continue
-		var score: float = saving + dir.dot(nrm) * 3.0 - absf(lane_len - 7.0) * 0.5 + (4.0 if green else 0.0)
-		if by_cls.has(cls) and float((by_cls[cls] as Dictionary)["score"]) >= score:
-			continue
-		var land_y: float = rect_xf.origin.y
-		by_cls[cls] = {"score": score, "cls": cls, "gate": g, "lip": lip, "lane": lane_len, "lane_dir": dir, "kick_deg": kick_deg,
-			"land_mid": Vector3(lip.x, land_y, lip.z) + dir * d_mid, "land_near": Vector3(lip.x, land_y, lip.z) + dir * d_near,
-			"land_far": Vector3(lip.x, land_y, lip.z) + dir * (s_out - 0.5), "d_mid": d_mid, "v_near": v_near, "v_mid": v_mid,
-			"remaining": remaining, "direct": direct, "green": green, "target_d": float(tg["d"]), "gate_d": gate_d}
+		for kick_deg: float in KICK_ANGLES:
+			var th: float = deg_to_rad(kick_deg)
+			var rr: float = KICK_LEN / th
+			var lip: Vector3 = lane_end + dir * (rr * sin(th)) + Vector3.UP * (rr * (1.0 - cos(th)))
+			# Landefenster: Abschnitt der Fluglinie, der im Ziel liegt (1 m Abstand zu den Banden)
+			var s_in := -1.0
+			var s_out := -1.0
+			var sd := 2.0
+			while sd <= 46.0:
+				var pt: Vector3 = lip + dir * sd
+				var ql: Vector3 = inv * Vector3(pt.x, rect_xf.origin.y, pt.z)
+				var inside: bool = absf(ql.x) <= rect_size.x * 0.5 - 1.0 and ql.z <= -1.0 and ql.z >= -rect_size.y + 1.0
+				if inside:
+					if s_in < 0.0:
+						s_in = sd
+					s_out = sd
+				elif s_in >= 0.0:
+					break
+				sd += 0.5
+			if s_in < 0.0 or s_out - s_in < 2.0:
+				_stat("ziel")
+				continue
+			var d_near: float = s_in + 0.5
+			var d_mid: float = (s_in + s_out) * 0.5
+			var dh: float = rect_xf.origin.y - lip.y
+			var v_near: float = gate_speed(takeoff_speed(d_near, dh, th), lane_len, th)
+			var v_mid: float = gate_speed(takeoff_speed(d_mid, dh, th), lane_len, th)
+			var cls := ""
+			if v_near <= V_EASY:
+				cls = "easy"
+			elif v_near >= V_POWER_MIN and v_near <= V_POWER_MAX:
+				cls = "power"
+			else:
+				_stat("tempo")
+				continue
+			if not _flight_clear(c, grid, lip, dir, d_near, dh, th, inv, rect_size) or not _flight_clear(c, grid, lip, dir, d_mid, dh, th, inv, rect_size):
+				_stat("flugbahn")
+				continue
+			var direct: float = lane_len + KICK_LEN + d_mid
+			var saving: float = remaining - direct
+			if saving < (8.0 if green else 10.0):
+				_stat("ersparnis")
+				continue
+			var score: float = saving + dir.dot(nrm) * 3.0 - absf(lane_len - 6.0) * 0.5 + (4.0 if green else 0.0)
+			if by_cls.has(cls) and float((by_cls[cls] as Dictionary)["score"]) >= score:
+				continue
+			var land_y: float = rect_xf.origin.y
+			by_cls[cls] = {"score": score, "cls": cls, "gate": g, "lip": lip, "lane": lane_len, "lane_dir": dir, "kick_deg": kick_deg,
+				"land_mid": Vector3(lip.x, land_y, lip.z) + dir * d_mid, "land_near": Vector3(lip.x, land_y, lip.z) + dir * d_near,
+				"land_far": Vector3(lip.x, land_y, lip.z) + dir * (s_out - 0.5), "d_mid": d_mid, "v_near": v_near, "v_mid": v_mid,
+				"remaining": remaining, "direct": direct, "green": green, "target_d": float(tg["d"]), "gate_d": gate_d}
+	var out: Array[Dictionary] = []
 	for key in by_cls.keys():
 		out.append(by_cls[key])
 	return out
+
+static func _stat(reason: String) -> void:
+	plan_stats[reason] = int(plan_stats.get(reason, 0)) + 1
 
 ## Fliegt der Ball (Abschuss unter th von der Kante lip, Landung nach d Metern dh tiefer/hoeher) frei? Ueber anderen
 ## Bahnteilen braucht er Abstand zu den Banden, im Ziel nur ueber den Rand-Banden.

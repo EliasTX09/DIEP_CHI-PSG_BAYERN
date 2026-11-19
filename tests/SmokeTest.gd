@@ -195,12 +195,13 @@ func _stage_game_manager() -> void:
 	# Match-Belohnungen
 	var cfg := gm.make_bot_match("emerald", 3, 3)
 	check((cfg["players"] as Array).size() == 4 and (cfg["courses"] as Array).size() == 3, "Bot-Match-Konfiguration")
+	gm.pay_stake(cfg)
 	gm.match_config = cfg
 	var t0 := gm.trophies()
-	var rew := gm.finish_match({"rank": 1, "players": 4, "style_points": 250, "holes_in_one": 1, "strokes": 7, "holes": 3})
-	check(gm.trophies() == t0 + 30 and int(rew["coins"]) >= 120, "Sieg: +30 Trophaeen, Coins")
-	var rew2 := gm.finish_match({"rank": 4, "players": 4, "style_points": 0, "strokes": 12, "holes": 3})
-	check(int(rew2["trophies"]) < 0 and gm.trophies() >= 0, "Letzter Platz: Trophaeen-Abzug, nie negativ")
+	var rew := gm.finish_match({"rank": 1, "players": 5, "style_points": 250, "holes_in_one": 1, "strokes": 7, "holes": 3})
+	check(gm.trophies() == t0 + 9 and int(rew["coins"]) == 2 * Catalog.world_fee("emerald"), "Sieg: +9 Trophaeen, doppelter Einsatz (%s)" % str(rew))
+	var rew2 := gm.finish_match({"rank": 5, "players": 5, "style_points": 0, "strokes": 12, "holes": 3})
+	check(int(rew2["trophies"]) < 0 and int(rew2["coins"]) == 0 and gm.trophies() >= 0, "Letzter Platz: Trophaeen-Abzug, kein Geld zurueck, nie negativ")
 	# Trophaeen-Pfad
 	gm.add_trophies(120)
 	var claim := gm.claimable_road()
@@ -936,6 +937,7 @@ func _stage_match() -> void:
 	cfg["courses"] = ["e1", "n1"]
 	cfg["rounds"] = 2
 	var trophies_before := GameManager.trophies()
+	GameManager.pay_stake(cfg)
 	BotBrain.time_budget_usec = 4000   # Produktions-Rechenbudget
 	# Beobachtung waehrend der Partie: Ist der eigene Ball fertig, darf nie die Vogelperspektive kommen
 	var seen := {"top": 0, "watching": 0, "wrong": 0}
@@ -952,7 +954,12 @@ func _stage_match() -> void:
 	check(int(seen["top"]) == 0 and int(seen["wrong"]) == 0, "Nach dem eigenen Einlochen keine Vogelperspektive (%d Bilder), Kamera am beobachteten Ball (%d Bilder zugeschaut, %d falsch)" % [
 		int(seen["top"]), int(seen["watching"]), int(seen["wrong"])])
 	check(m.final_ranking.size() == 3, "Endrangliste mit 3 Spielern")
-	check(m.result_rewards.has("coins") and int(m.result_rewards["coins"]) > 0, "Match-Belohnung (Coins) vergeben")
+	var my_rank: int = 1
+	for i in m.final_ranking.size():
+		if bool(m.final_ranking[i]["local"]):
+			my_rank = i + 1
+	check(int(m.result_rewards.get("stake", -1)) == Catalog.world_fee("emerald") and int(m.result_rewards.get("coins", -1)) == Catalog.payout_for_rank(my_rank, Catalog.world_fee("emerald")),
+		"Match-Auszahlung nach Platz %d (%s)" % [my_rank, str(m.result_rewards)])
 	check(GameManager.trophies() != trophies_before or int(m.result_rewards.get("trophies", 0)) == 0, "Trophaeen verbucht")
 	var totals := PackedStringArray()
 	for row in m.final_ranking:
