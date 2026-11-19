@@ -353,8 +353,15 @@ func _check_edge_nature(c: Course3D, id: String) -> void:
 					if not fh.is_empty() and fh["collider"] == c.floor_body and absf((fh["position"] as Vector3).y - float(it["floor_y"])) < 0.3:
 						over_floor += 1
 					else:
-						print("[SMOKE] %s Astspitze ohne Belag darunter: Spitze %s, Belag-Hoehe %.2f, Treffer %s" % [id, str(tip), float(it["floor_y"]),
-							"nichts" if fh.is_empty() else "%s bei %s" % [str((fh["collider"] as Node).name), str(fh["position"])]])
+						var all_q := PhysicsRayQueryParameters3D.create(tip + Vector3.UP * 3.0, tip + Vector3.DOWN * 12.0, 0xFFFFFFFF)
+						var ah: Dictionary = space.intersect_ray(all_q)
+						var mid_q := PhysicsRayQueryParameters3D.create(Vector3(0.0, 3.0, tip.z), Vector3(0.0, -6.0, tip.z), 1)
+						var mh: Dictionary = space.intersect_ray(mid_q)
+						print("[SMOKE] %s Astspitze ohne Belag darunter: Spitze %s, Belag-Hoehe %.2f, Treffer %s | alle Ebenen: %s | Bahnmitte x=0: %s | Boden-Formen %d" % [
+							id, str(tip), float(it["floor_y"]), "nichts" if fh.is_empty() else "%s bei %s" % [str((fh["collider"] as Node).name), str(fh["position"])],
+							"nichts" if ah.is_empty() else "%s bei %s" % [str((ah["collider"] as Node).name), str(ah["position"])],
+							"nichts" if mh.is_empty() else "%s bei %s" % [str((mh["collider"] as Node).name), str(mh["position"])],
+							c.floor_body.get_shape_owners().size()])
 			"root":
 				roots += 1
 			"rock":
@@ -481,7 +488,9 @@ func _stage_shortcuts() -> void:
 			var perp: Vector3 = dir.cross(Vector3.UP).normalized()
 			if perp.dot(sc["normal"]) < 0.0:
 				perp = -perp
-			var miss: Dictionary = ShotSim.run(c, space, start + dir * 2.0, dir * 1.5 + perp * 6.0, {"max_time": 8.0, "profile": strong})
+			# seitlich von der Rampe (hinter dem Felsentor, damit keine Saeule den Ball zurueckwirft)
+			var miss_from: Vector3 = (sc["lip"] as Vector3) - dir * (CourseBuilder3D.KICK_LEN * 0.6) + Vector3.UP * 0.8
+			var miss: Dictionary = ShotSim.run(c, space, miss_from, dir * 1.0 + perp * 6.0, {"max_time": 8.0, "profile": strong})
 			check(bool(miss["out"]), "%s: seitlich vom Steg = aus" % label)
 			if bool(sc["power"]):
 				powers += 1

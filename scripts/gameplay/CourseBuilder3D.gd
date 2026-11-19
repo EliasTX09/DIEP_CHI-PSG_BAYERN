@@ -51,6 +51,8 @@ const KICK_ANGLES: Array[float] = [20.0, 27.0, 34.0]
 ## Normale Abkuerzung: hoechstens V_EASY - mit jedem Schlaeger machbar (je knapper, desto naeher muss man ran).
 ## Power-Abkuerzung: V_POWER_MIN..V_POWER_MAX - selbst direkt am Tor reicht der Startschlaeger nicht.
 const V_EASY := 30.5
+## Hoechstes waagerechtes Lande-Tempo (m/s) fuer Rampen aufs Gruen.
+const GREEN_MAX_VH := 17.0
 const V_POWER_MIN := 31.8
 const V_POWER_MAX := 38.5
 ## Diagnose der letzten Abkuerzungs-Suche: Anzahl verworfener Kandidaten je Grund (fuer den Smoke-Test).
@@ -299,7 +301,7 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 	var nrm: Vector3 = Vector3(xf0.basis.x.x, 0.0, xf0.basis.x.z).normalized() * float(side)
 	var green: bool = bool(tg["green"])
 	for bl in c.blockers:
-		if Vector2(bl.x - g.x, bl.z - g.z).length() < 3.5:
+		if Vector2(bl.x - g.x, bl.z - g.z).length() < 3.0:
 			return _reject("hindernis")
 	var gate_d: float = c.path_dist[c.nearest_path_index(g)]
 	var remaining: float = float(tg["d"]) - gate_d
@@ -365,8 +367,13 @@ static func _eval_ramp(c: Course3D, grid: Dictionary, xf0: Transform3D, half: fl
 			var d_near: float = s_in + 0.5
 			var d_mid: float = (s_in + s_out) * 0.5
 			var dh: float = rect_xf.origin.y - lip.y
+			var v_lip_mid: float = takeoff_speed(d_mid, dh, th)
 			var v_near: float = gate_speed(takeoff_speed(d_near, dh, th), lane_len, th)
-			var v_mid: float = gate_speed(takeoff_speed(d_mid, dh, th), lane_len, th)
+			var v_mid: float = gate_speed(v_lip_mid, lane_len, th)
+			# Gruen ist klein und rundum umbandet: wer zu flach und schnell ankommt, springt wieder hinaus
+			if green and v_lip_mid * cos(th) > GREEN_MAX_VH:
+				_stat("landung")
+				continue
 			var cls := ""
 			if v_near <= V_EASY:
 				cls = "easy"
@@ -464,7 +471,9 @@ static func _build_shortcut(c: Course3D, k: TrackKit, th: WorldTheme, plan: Dict
 	k.set_walls(false, false)
 	k.set_surface(TrackKit.S_ALT)
 	k.straight(back_off + lane_len)
+	k.arc_step_deg = 1.0
 	k.kicker(KICK_LEN, kick_deg)
+	k.arc_step_deg = 3.0
 	var lip: Vector3 = k.xf.origin
 	k.end_run()
 	k.branch = false

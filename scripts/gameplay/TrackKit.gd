@@ -436,10 +436,14 @@ func _advance(ds: float, dyaw: float, dpitch: float) -> void:
 	xf.origin += xf.basis * Vector3(0.0, 0.0, -chord)
 	xf.basis = (xf.basis * half).orthonormalized()
 
+## Winkel-Aufloesung von Kurven und Schanzen in Grad pro Stueck (Abkuerzungs-Rampen bauen feiner: an groben
+## Knicken springt ein schneller Ball in Jolt hoch, die Vorhersage aber nicht).
+var arc_step_deg: float = 3.0
+
 func _arc(length: float, yaw: float, pitch: float, bank: float) -> void:
 	_begin_run()
 	var total: float = maxf(absf(yaw), absf(pitch))
-	var n: int = maxi(2, int(ceil(maxf(rad_to_deg(total) / 3.0, length / 1.0))))
+	var n: int = maxi(2, int(ceil(maxf(rad_to_deg(total) / arc_step_deg, length / 1.0))))
 	var frames: Array[Transform3D] = [xf]
 	var dists := PackedFloat32Array([dist])
 	for i in range(1, n + 1):
